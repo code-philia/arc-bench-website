@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.api.routes import health, requirements, submissions
 from app.core.config import get_settings
@@ -9,6 +12,7 @@ from app.services.requirement_catalog import RequirementCatalogService
 
 
 settings = get_settings()
+api_path_prefix = settings.api_prefix.strip("/")
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
@@ -34,3 +38,40 @@ def on_startup() -> None:
         RequirementCatalogService(db).sync()
     finally:
         db.close()
+
+
+def _frontend_index() -> Path:
+    return settings.frontend_dist / "index.html"
+
+
+def _resolve_frontend_path(full_path: str) -> Path | None:
+    candidate = (settings.frontend_dist / full_path).resolve()
+    try:
+        candidate.relative_to(settings.frontend_dist.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+@app.get("/", include_in_schema=False)
+def serve_frontend_index() -> FileResponse:
+    index_file = _frontend_index()
+    if not index_file.is_file():
+        raise HTTPException(status_code=404, detail="Frontend build not found")
+    return FileResponse(index_file)
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend(full_path: str) -> FileResponse:
+    if api_path_prefix and (full_path == api_path_prefix or full_path.startswith(f"{api_path_prefix}/")):
+        raise HTTPException(status_code=404, detail="API route not found")
+
+    requested_file = _resolve_frontend_path(full_path)
+    if requested_file and requested_file.is_file():
+        return FileResponse(requested_file)
+
+    index_file = _frontend_index()
+    if index_file.is_file():
+        return FileResponse(index_file)
+
+    raise HTTPException(status_code=404, detail="Frontend build not found")
