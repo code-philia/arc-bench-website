@@ -168,7 +168,7 @@ export default function RequirementDetailPage() {
             <div className="env-selector">
               {[
                 { label: "Python", value: "python" },
-                { label: "Node.js", value: "nodejs" },
+                { label: "Node.js", value: "nodejs", disabled: true },
                 { label: "Go", value: "go", disabled: true },
                 { label: "Java", value: "java", disabled: true },
                 { label: "Docker", value: "docker", disabled: true },
@@ -195,7 +195,7 @@ export default function RequirementDetailPage() {
                 <UploadOutlined />
               </div>
               <div className="upload-text">Drop your agent code here</div>
-              <div className="upload-hint">.zip only in v1</div>
+              <div className="upload-hint">Python only · root main.py/app.py · optional requirements.txt</div>
             </label>
             {file ? (
               <div className="uploaded-file">

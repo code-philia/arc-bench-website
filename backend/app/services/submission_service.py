@@ -30,6 +30,8 @@ class SubmissionService:
     def create_submission(self, requirement_id: str, runtime: RuntimeType, upload: UploadFile) -> Submission:
         if not upload.filename or not upload.filename.lower().endswith(".zip"):
             raise ValueError("Only .zip uploads are supported")
+        if runtime != RuntimeType.PYTHON:
+            raise ValueError("Only Python submissions are supported in v1")
 
         requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
@@ -147,7 +149,7 @@ class SubmissionService:
                 status = "completed"
                 step_description = "Done"
             elif active_key == step.key:
-                status = "active"
+                status = "running"
                 step_description = description or "Running"
             steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description))
         return steps

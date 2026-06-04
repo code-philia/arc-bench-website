@@ -2,7 +2,6 @@ import json
 import os
 import signal
 import subprocess
-import sys
 import time
 from pathlib import Path
 from urllib.error import URLError
@@ -25,37 +24,33 @@ def read_config() -> dict:
     return {}
 
 
-def detect_runtime() -> str:
-    if (AGENT_DIR / "package.json").exists():
-        return "nodejs"
-    if (AGENT_DIR / "requirements.txt").exists() or (AGENT_DIR / "main.py").exists() or (AGENT_DIR / "app.py").exists():
-        return "python"
-    raise RuntimeError("unsupported project entrypoint")
+def resolve_python_entrypoint() -> Path:
+    for candidate in ("main.py", "app.py"):
+        entrypoint = AGENT_DIR / candidate
+        if entrypoint.exists():
+            return entrypoint
+    raise RuntimeError("unsupported python entrypoint: expected main.py or app.py at the archive root")
 
 
-def get_commands(config: dict, runtime: str) -> tuple[list[str], list[str]]:
-    if config.get("install") and config.get("start"):
-        return config["install"], config["start"]
-    if runtime == "python":
-        install = ["python3", "-m", "pip", "install", "-r", "requirements.txt"] if (AGENT_DIR / "requirements.txt").exists() else []
-        if (AGENT_DIR / "main.py").exists():
-            return install, ["python3", "main.py"]
-        if (AGENT_DIR / "app.py").exists():
-            return install, ["python3", "app.py"]
-    if runtime == "nodejs":
-        install = ["npm", "ci"] if (AGENT_DIR / "package-lock.json").exists() else ["npm", "install"]
-        if (AGENT_DIR / "package.json").exists():
-            package = json.loads((AGENT_DIR / "package.json").read_text(encoding="utf-8"))
-            scripts = package.get("scripts", {})
-            if "dev" in scripts:
-                return install, ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
-            if "start" in scripts:
-                return install, ["npm", "run", "start"]
-    raise RuntimeError("unsupported project entrypoint")
-
-
-def run_command(command: list[str], cwd: Path, stdout_file, stderr_file) -> None:
-    subprocess.run(command, cwd=str(cwd), stdout=stdout_file, stderr=stderr_file, check=True)
+def install_python_dependencies(stdout_file, stderr_file) -> None:
+    requirements_path = AGENT_DIR / "requirements.txt"
+    if not requirements_path.exists():
+        return
+    subprocess.run(
+        [
+            "python3",
+            "-m",
+            "pip",
+            "install",
+            "--no-cache-dir",
+            "-r",
+            "requirements.txt",
+        ],
+        cwd=str(AGENT_DIR),
+        stdout=stdout_file,
+        stderr=stderr_file,
+        check=True,
+    )
 
 
 def wait_for_healthcheck(url: str, timeout_seconds: int) -> None:
@@ -160,21 +155,23 @@ def main() -> int:
     config = read_config()
     health_url = config.get("healthcheck_url", "http://127.0.0.1:3000")
     timeout_seconds = int(os.environ.get("AGENT_HEALTH_TIMEOUT_SECONDS", "90"))
-    runtime = detect_runtime()
-    install_cmd, start_cmd = get_commands(config, runtime)
+    entrypoint = resolve_python_entrypoint()
 
     with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file, STDERR_PATH.open("w", encoding="utf-8") as stderr_file:
         agent_process = None
         try:
-            if install_cmd:
-                run_command(install_cmd, AGENT_DIR, stdout_file, stderr_file)
+            install_python_dependencies(stdout_file, stderr_file)
 
             agent_process = subprocess.Popen(
-                start_cmd,
+                ["python3", entrypoint.name],
                 cwd=str(AGENT_DIR),
                 stdout=stdout_file,
                 stderr=stderr_file,
-                env={**os.environ, "HOST": "0.0.0.0", "PORT": "3000"},
+                env={
+                    **os.environ,
+                    "HOST": "0.0.0.0",
+                    "PORT": "3000",
+                },
             )
             wait_for_healthcheck(health_url, timeout_seconds)
 
@@ -218,4 +215,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

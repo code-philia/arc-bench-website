@@ -34,20 +34,25 @@ class ExecutionService:
 
     def _run(self, db: Session, submission_service: SubmissionService, submission_id: str, requirement: Requirement) -> None:
         submission = submission_service.get_submission(submission_id)
-        workspace_path = self.assembler.assemble(submission, requirement)
-        submission_service.mark_running(submission, workspace_path)
-        submission_service.update_steps(
-            submission,
-            submission_service.build_step_states(active_key="deploy_agent", description="Preparing workspace"),
-        )
-
-        manager = DockerManager()
+        workspace_path = self.settings.workspaces_root / submission_id
         stdout_path = workspace_path / "artifacts" / "stdout.log"
         stderr_path = workspace_path / "artifacts" / "stderr.log"
         result_path = workspace_path / "artifacts" / "result.json"
 
         container = None
+        manager = None
         try:
+            workspace_path = self.assembler.assemble(submission, requirement)
+            stdout_path = workspace_path / "artifacts" / "stdout.log"
+            stderr_path = workspace_path / "artifacts" / "stderr.log"
+            result_path = workspace_path / "artifacts" / "result.json"
+            submission_service.mark_running(submission, workspace_path)
+            submission_service.update_steps(
+                submission,
+                submission_service.build_step_states(active_key="deploy_agent", description="Preparing workspace"),
+            )
+
+            manager = DockerManager()
             submission = submission_service.get_submission(submission_id)
             submission_service.update_steps(
                 submission,
@@ -99,8 +104,9 @@ class ExecutionService:
                 result_path=result_path if result_path.exists() else None,
                 failure_reason=failure_reason,
             )
-        except (RuntimeError, DockerException, FileNotFoundError, TimeoutError) as exc:
+        except Exception as exc:  # noqa: BLE001
             submission = submission_service.get_submission(submission_id)
+            stdout_path.parent.mkdir(parents=True, exist_ok=True)
             if stdout_path.exists() is False:
                 stdout_path.write_text("", encoding="utf-8")
             if stderr_path.exists() is False:
@@ -117,7 +123,7 @@ class ExecutionService:
                 failure_reason=str(exc),
             )
         finally:
-            if container is not None:
+            if manager is not None and container is not None:
                 try:
                     manager.remove_container(container)
                 except DockerException:

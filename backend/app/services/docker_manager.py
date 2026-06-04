@@ -9,7 +9,12 @@ from app.core.config import get_settings
 class DockerManager:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.client = docker.from_env()
+        try:
+            self.client = docker.from_env()
+        except DockerException as exc:
+            raise RuntimeError(
+                "Docker daemon is unavailable. Check access to /var/run/docker.sock and ensure the current user can talk to Docker."
+            ) from exc
 
     def ensure_image(self) -> None:
         try:
