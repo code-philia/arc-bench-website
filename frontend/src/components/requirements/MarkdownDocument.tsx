@@ -47,7 +47,7 @@ export default function MarkdownDocument({
     .replaceAll("(assets/", `(${assetsBaseUrl}/`);
 
   return (
-    <div className="markdown-body">
+    <div className="readme-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -59,7 +59,9 @@ export default function MarkdownDocument({
             const text = String(children).replaceAll(",", "");
             return <h3 id={slugify(text)}>{children}</h3>;
           },
-          img: ({ src = "", alt = "" }) => <img src={src} alt={alt} className="ref-img" loading="lazy" />,
+          img: ({ src = "", alt = "" }) => (
+            <img src={src} alt={alt} className="ref-img" loading="lazy" />
+          ),
         }}
       >
         {rewrittenMarkdown}

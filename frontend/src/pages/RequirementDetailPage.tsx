@@ -1,14 +1,4 @@
 import {
-  Alert,
-  Button,
-  Empty,
-  List,
-  Segmented,
-  Spin,
-  Table,
-  Tabs,
-  Tag,
-  Upload,
   message,
 } from "antd";
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
@@ -20,6 +10,12 @@ import SubmissionResultCard from "../components/submissions/SubmissionResultCard
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
 import type { RequirementDetail, SubmissionDetail, SubmissionSummary } from "../lib/types";
+
+function submissionBadgeClass(status: string) {
+  if (status === "PASSED") return "pass";
+  if (status === "FAILED") return "fail";
+  return "pending";
+}
 
 export default function RequirementDetailPage() {
   const { requirementId = "12306" } = useParams();
@@ -95,7 +91,7 @@ export default function RequirementDetailPage() {
   if (loading) {
     return (
       <div className="page centered">
-        <Spin size="large" />
+        <div className="loading-state">Loading requirement...</div>
       </div>
     );
   }
@@ -103,7 +99,7 @@ export default function RequirementDetailPage() {
   if (!requirement) {
     return (
       <div className="page centered">
-        <Empty description="Requirement not available" />
+        <div className="empty-state">Requirement not available.</div>
       </div>
     );
   }
@@ -127,12 +123,14 @@ export default function RequirementDetailPage() {
           </div>
           <div className="doc-tabs">
             <button
+              type="button"
               className={`doc-tab${activeDoc === "readme" ? " active" : ""}`}
               onClick={() => setActiveDoc("readme")}
             >
               README.md
             </button>
             <button
+              type="button"
               className={`doc-tab${activeDoc === "prerequisites" ? " active" : ""}`}
               onClick={() => setActiveDoc("prerequisites")}
             >
@@ -142,14 +140,19 @@ export default function RequirementDetailPage() {
           <div className="readme-body">
             <aside className="toc">
               <div className="toc-title">Contents</div>
-              <List
-                dataSource={headings}
-                renderItem={(heading) => (
-                  <List.Item className={`toc-item level-${heading.level}`}>
-                    <a href={`#${heading.id}`}>{heading.text}</a>
-                  </List.Item>
-                )}
-              />
+              {headings.length === 0 ? (
+                <div className="empty-state compact">No sections found.</div>
+              ) : (
+                headings.map((heading, index) => (
+                  <a
+                    key={heading.id}
+                    className={`toc-item${index === 0 ? " active" : ""}${heading.level === 3 ? " sub" : ""}`}
+                    href={`#${heading.id}`}
+                  >
+                    {heading.text}
+                  </a>
+                ))
+              )}
             </aside>
             <MarkdownDocument
               markdown={currentMarkdown}
@@ -162,46 +165,53 @@ export default function RequirementDetailPage() {
         <aside className="action-panel">
           <div className="action-section">
             <div className="action-section-title">Upload Agent</div>
-            <Segmented
-              className="env-selector"
-              value={runtime}
-              onChange={(value) => setRuntime(String(value))}
-              options={[
+            <div className="env-selector">
+              {[
                 { label: "Python", value: "python" },
                 { label: "Node.js", value: "nodejs" },
                 { label: "Go", value: "go", disabled: true },
                 { label: "Java", value: "java", disabled: true },
                 { label: "Docker", value: "docker", disabled: true },
-              ]}
-            />
-            <Upload.Dragger
-              accept=".zip"
-              multiple={false}
-              beforeUpload={(candidate) => {
-                setFile(candidate);
-                return false;
-              }}
-              showUploadList={false}
-              className="upload-zone"
-            >
-              <p className="upload-icon">
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  className={`env-option${runtime === option.value ? " active" : ""}`}
+                  type="button"
+                  disabled={option.disabled}
+                  onClick={() => setRuntime(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <label className="upload-zone">
+              <input
+                className="visually-hidden"
+                type="file"
+                accept=".zip"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+              <div className="upload-icon">
                 <UploadOutlined />
-              </p>
-              <p className="upload-text">Drop your agent code here</p>
-              <p className="upload-hint">.zip only in v1</p>
-            </Upload.Dragger>
+              </div>
+              <div className="upload-text">Drop your agent code here</div>
+              <div className="upload-hint">.zip only in v1</div>
+            </label>
             {file ? (
               <div className="uploaded-file">
+                <div className="file-icon">.zip</div>
                 <div className="file-info">
                   <div className="file-name">{file.name}</div>
                   <div className="file-size">{(file.size / 1024).toFixed(1)} KB</div>
                 </div>
-                <Button type="text" icon={<DeleteOutlined />} onClick={() => setFile(null)} />
+                <button className="file-remove" type="button" onClick={() => setFile(null)}>
+                  <DeleteOutlined />
+                </button>
               </div>
             ) : null}
-            <Button type="primary" block disabled={!file} onClick={handleUpload}>
+            <button className="btn-primary" type="button" disabled={!file} onClick={handleUpload}>
               Start Test
-            </Button>
+            </button>
           </div>
 
           <div className="action-section">
@@ -209,7 +219,7 @@ export default function RequirementDetailPage() {
             {activeSubmission ? (
               <SubmissionStepList steps={activeSubmission.steps} />
             ) : (
-              <Empty description="No active submission" />
+              <div className="empty-state compact">No active submission.</div>
             )}
           </div>
 
@@ -218,56 +228,49 @@ export default function RequirementDetailPage() {
             {activeSubmission ? (
               <>
                 {activeSubmission.failure_reason ? (
-                  <Alert
-                    style={{ marginBottom: 12 }}
-                    type="error"
-                    showIcon
-                    message={activeSubmission.failure_reason}
-                  />
+                  <div className="inline-alert error">{activeSubmission.failure_reason}</div>
                 ) : null}
                 <SubmissionResultCard submission={activeSubmission} />
               </>
             ) : (
-              <Empty description="Run a submission to see results." />
+              <div className="empty-state compact">Run a submission to see results.</div>
             )}
           </div>
 
           <div className="action-section">
             <div className="action-section-title">Submission History</div>
-            <Table
-              rowKey="id"
-              size="small"
-              pagination={{ pageSize: 5 }}
-              dataSource={submissions}
-              columns={[
-                {
-                  title: "Submission ID",
-                  render: (_, record) => <Link to={`/submissions/${record.id}`}>{record.id}</Link>,
-                },
-                {
-                  title: "Status",
-                  dataIndex: "status",
-                  width: 100,
-                  render: (value: string) => (
-                    <Tag color={value === "PASSED" ? "success" : value === "FAILED" ? "error" : "processing"}>
-                      {value}
-                    </Tag>
-                  ),
-                },
-                {
-                  title: "Score",
-                  dataIndex: "score",
-                  width: 80,
-                  render: (value: number | null) => (value == null ? "-" : value.toFixed(1)),
-                },
-                {
-                  title: "Created",
-                  dataIndex: "created_at",
-                  width: 170,
-                  render: (value: string) => new Date(value).toLocaleString(),
-                },
-              ]}
-            />
+            {submissions.length === 0 ? (
+              <div className="empty-state compact">No submissions yet.</div>
+            ) : (
+              <table className="task-table compact">
+                <thead>
+                  <tr>
+                    <th>Submission ID</th>
+                    <th style={{ width: "100px" }}>Status</th>
+                    <th style={{ width: "80px" }}>Score</th>
+                    <th style={{ width: "170px" }}>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {submissions.slice(0, 5).map((record) => (
+                    <tr key={record.id}>
+                      <td>
+                        <Link className="inline-link" to={`/submissions/${record.id}`}>
+                          {record.id}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className={`test-badge ${submissionBadgeClass(record.status)}`}>
+                          {record.status}
+                        </span>
+                      </td>
+                      <td>{record.score == null ? "-" : record.score.toFixed(1)}</td>
+                      <td>{new Date(record.created_at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </aside>
       </div>

@@ -1,7 +1,6 @@
-import { BulbOutlined, CodeOutlined, PlayCircleOutlined, TrophyOutlined } from "@ant-design/icons";
-import { Button } from "antd";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { BulbOutlined, CodeOutlined, PlayCircleOutlined, TrophyOutlined } from "@ant-design/icons";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "Home", icon: <TrophyOutlined /> },
@@ -42,13 +41,14 @@ export default function AppShell() {
           ))}
         </div>
         <div className="nav-right">
-          <Button
+          <button
             className="theme-toggle"
-            type="text"
+            type="button"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            aria-label="Toggle theme"
           >
             {theme === "dark" ? "☀" : "☾"}
-          </Button>
+          </button>
           <div className="nav-avatar">U</div>
         </div>
       </nav>

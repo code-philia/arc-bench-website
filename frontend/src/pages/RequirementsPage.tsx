@@ -1,13 +1,31 @@
-import { Button, Card, Segmented, Table } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../lib/api";
 import type { RequirementSummary } from "../lib/types";
 
-const placeholderTasks = [
-  { id: "W-001", title: "E-Commerce Dashboard", summary: "Multimodal spec with wireframes.", total_tests: 42, module_count: 4 },
-  { id: "A-001", title: "Notes App", summary: "Jetpack Compose CRUD benchmark.", total_tests: 28, module_count: 3 },
+type PublicPlaceholderTask = Pick<
+  RequirementSummary,
+  "id" | "title" | "summary" | "total_tests" | "module_count"
+> & {
+  category?: string;
+};
+
+const placeholderTasks: PublicPlaceholderTask[] = [
+  {
+    id: "W-001",
+    title: "E-Commerce Dashboard",
+    summary: "Multimodal spec with wireframes.",
+    total_tests: 42,
+    module_count: 4,
+  },
+  {
+    id: "A-001",
+    title: "Notes App",
+    summary: "Jetpack Compose CRUD benchmark.",
+    total_tests: 28,
+    module_count: 3,
+  },
 ];
 
 export default function RequirementsPage() {
@@ -24,46 +42,56 @@ export default function RequirementsPage() {
   return (
     <div className="page library-page">
       <div className="library-header">
-        <div>
-          <h2>Task Library</h2>
-          <p className="muted">Real requirements are discovered from `arc-bench/webapp` on backend startup.</p>
-        </div>
-        <Segmented
-          options={[
+        <h2>Task Library</h2>
+        <div className="tabs">
+          {[
             { label: "🌐 Web Apps", value: "web" },
             { label: "📱 Android Apps", value: "android" },
-          ]}
-          value={category}
-          onChange={(value) => setCategory(String(value))}
-        />
+          ].map((option) => (
+            <button
+              key={option.value}
+              className={`tab${category === option.value ? " active" : ""}`}
+              type="button"
+              onClick={() => setCategory(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="task-table-wrap">
-        <Table
-          rowKey="id"
-          dataSource={rows}
-          pagination={false}
-          onRow={(record) => ({
-            onClick: () => navigate(`/requirements/${record.id}`),
-          })}
-          columns={[
-            { title: "#", dataIndex: "id", width: 90 },
-            {
-              title: "Task",
-              render: (_, record) => (
-                <div>
-                  <div>{record.title}</div>
-                  <div className="table-sub">
-                    {record.test_runner} · {record.total_tests} tests
+        <table className="task-table">
+          <thead>
+            <tr>
+              <th style={{ width: "76px" }}>#</th>
+              <th>Task</th>
+              <th style={{ width: "100px" }}>Modules</th>
+              <th style={{ width: "100px" }}>Tests</th>
+              <th style={{ width: "120px" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((record) => (
+              <tr key={record.id} onClick={() => navigate(`/requirements/${record.id}`)}>
+                <td className="task-id">{record.id}</td>
+                <td>
+                  <div className="task-name">
+                    {record.title}
+                    <span className="sub">
+                      {record.test_runner} · {record.category}
+                    </span>
                   </div>
-                </div>
-              ),
-            },
-            { title: "Modules", dataIndex: "module_count", width: 100 },
-            { title: "Tests", dataIndex: "total_tests", width: 100 },
-            { title: "Category", dataIndex: "category", width: 120 },
-          ]}
-        />
+                </td>
+                <td>{record.module_count}</td>
+                <td>{record.total_tests}</td>
+                <td>
+                  <span className="status-dot completed">Ready</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <section className="public-tasks-section">
@@ -71,7 +99,7 @@ export default function RequirementsPage() {
         {[...requirements, ...placeholderTasks].map((task) => {
           const realTask = "category" in task;
           return (
-            <Card key={task.id} className="public-task-card">
+            <div key={task.id} className="public-task-card">
               <div className="public-task-header">
                 <h4>{task.title}</h4>
                 <span className="task-id-badge">{task.id}</span>
@@ -90,14 +118,20 @@ export default function RequirementsPage() {
               </div>
               <div className="public-task-downloads">
                 {realTask ? (
-                  <Button type="default" onClick={() => navigate(`/requirements/${task.id}`)}>
+                  <button
+                    className="btn-download"
+                    type="button"
+                    onClick={() => navigate(`/requirements/${task.id}`)}
+                  >
                     Open Requirement
-                  </Button>
+                  </button>
                 ) : (
-                  <Button disabled>Coming Soon</Button>
+                  <button className="btn-download" type="button" disabled>
+                    Coming Soon
+                  </button>
                 )}
               </div>
-            </Card>
+            </div>
           );
         })}
       </section>

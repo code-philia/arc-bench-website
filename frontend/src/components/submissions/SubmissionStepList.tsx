@@ -4,7 +4,7 @@ export default function SubmissionStepList({ steps }: { steps: SubmissionStep[] 
   return (
     <div className="stepper">
       {steps.map((step, index) => (
-        <div key={step.key} className={`step ${step.status}`}>
+        <div key={step.key} className={`step ${step.status.toLowerCase()}`}>
           <div className="step-indicator">
             <div className="step-node">{index + 1}</div>
             {index < steps.length - 1 ? <div className="step-line" /> : null}

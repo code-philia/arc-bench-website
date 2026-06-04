@@ -1,4 +1,3 @@
-import { Alert, Empty, Spin, Tabs } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -12,6 +11,7 @@ export default function SubmissionDetailPage() {
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"results" | "stdout" | "stderr">("results");
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export default function SubmissionDetailPage() {
   if (loading) {
     return (
       <div className="page centered">
-        <Spin size="large" />
+        <div className="loading-state">Loading submission...</div>
       </div>
     );
   }
@@ -56,7 +56,7 @@ export default function SubmissionDetailPage() {
   if (!submission) {
     return (
       <div className="page centered">
-        <Empty description="Submission not found" />
+        <div className="empty-state">Submission not found.</div>
       </div>
     );
   }
@@ -75,7 +75,9 @@ export default function SubmissionDetailPage() {
       </div>
 
       {submission.failure_reason ? (
-        <Alert style={{ marginBottom: 16 }} type="error" showIcon message={submission.failure_reason} />
+        <div className="inline-alert error" style={{ marginBottom: 16 }}>
+          {submission.failure_reason}
+        </div>
       ) : null}
 
       <div className="submission-grid">
@@ -86,25 +88,31 @@ export default function SubmissionDetailPage() {
 
         <section className="action-section">
           <div className="action-section-title">Execution Detail</div>
-          <Tabs
-            items={[
-              {
-                key: "results",
-                label: "Results",
-                children: <SubmissionResultCard submission={submission} />,
-              },
-              {
-                key: "stdout",
-                label: "stdout",
-                children: <pre className="log-panel">{logs?.stdout || "No stdout yet."}</pre>,
-              },
-              {
-                key: "stderr",
-                label: "stderr",
-                children: <pre className="log-panel">{logs?.stderr || "No stderr yet."}</pre>,
-              },
-            ]}
-          />
+          <div className="doc-tabs detail-tabs">
+            {[
+              { key: "results", label: "Results" },
+              { key: "stdout", label: "stdout" },
+              { key: "stderr", label: "stderr" },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
+                type="button"
+                onClick={() => setActiveTab(tab.key as "results" | "stdout" | "stderr")}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="detail-tab-panel">
+            {activeTab === "results" ? (
+              <SubmissionResultCard submission={submission} />
+            ) : activeTab === "stdout" ? (
+              <pre className="log-panel">{logs?.stdout || "No stdout yet."}</pre>
+            ) : (
+              <pre className="log-panel">{logs?.stderr || "No stderr yet."}</pre>
+            )}
+          </div>
         </section>
       </div>
     </div>
