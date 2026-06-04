@@ -1,15 +1,32 @@
 import { useEffect, useState } from "react";
 import { BulbOutlined, CodeOutlined, PlayCircleOutlined, TrophyOutlined } from "@ant-design/icons";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
-const navItems = [
-  { to: "/", label: "Home", icon: <TrophyOutlined /> },
-  { to: "/requirements", label: "Competition", icon: <CodeOutlined /> },
-  { to: "/requirements/12306", label: "Task Detail", icon: <BulbOutlined /> },
-  { to: "/playground", label: "Playground", icon: <PlayCircleOutlined /> },
+type NavItem = {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  matches?: string[];
+};
+
+const navItems: NavItem[] = [
+  { to: "/", label: "Home", icon: <TrophyOutlined />, matches: ["/"] },
+  { to: "/requirements", label: "Competition", icon: <CodeOutlined />, matches: ["/requirements"] },
+  {
+    to: "/requirements/12306",
+    label: "Task Detail",
+    icon: <BulbOutlined />,
+    matches: ["/requirements/:requirementId"],
+  },
+  { to: "/playground", label: "Playground", icon: <PlayCircleOutlined />, matches: ["/playground"] },
 ];
 
+function isNavItemActive(pathname: string, item: NavItem) {
+  return item.matches?.some((pattern) => matchPath({ path: pattern, end: true }, pathname)) ?? false;
+}
+
 export default function AppShell() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = window.localStorage.getItem("theme");
@@ -33,7 +50,7 @@ export default function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
-              className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+              className={() => `nav-link${isNavItemActive(location.pathname, item) ? " active" : ""}`}
             >
               {item.icon}
               <span>{item.label}</span>
