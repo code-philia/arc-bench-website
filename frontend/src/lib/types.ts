@@ -1,0 +1,58 @@
+export type RequirementSummary = {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  test_runner: string;
+  total_tests: number;
+  module_count: number;
+};
+
+export type RequirementDetail = RequirementSummary & {
+  requirements_markdown: string;
+  prerequisites_markdown: string;
+  assets_base_url: string;
+  references_base_url: string;
+};
+
+export type SubmissionStep = {
+  key: string;
+  title: string;
+  status: string;
+  description: string;
+};
+
+export type SubmissionSummary = {
+  id: string;
+  requirement_id: string;
+  runtime: string;
+  original_filename: string;
+  status: string;
+  score: number | null;
+  passed_count: number;
+  failed_count: number;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  failure_reason: string | null;
+};
+
+export type SubmissionDetail = SubmissionSummary & {
+  steps: SubmissionStep[];
+  stdout_path: string | null;
+  stderr_path: string | null;
+  result_path: string | null;
+  workspace_path: string | null;
+  logs_available: boolean;
+  tests: Array<{
+    name: string;
+    status: string;
+    duration_ms: number;
+    error: string | null;
+  }>;
+};
+
+export type SubmissionLogs = {
+  stdout: string;
+  stderr: string;
+};

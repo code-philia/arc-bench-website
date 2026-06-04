@@ -1,0 +1,6 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+sqlalchemy==2.0.41
+pydantic-settings==2.9.1
+python-multipart==0.0.20
+docker==7.1.0

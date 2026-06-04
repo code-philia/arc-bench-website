@@ -1,0 +1,73 @@
+from concurrent.futures import ThreadPoolExecutor
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from app.core.enums import RuntimeType, SubmissionStatus
+from app.db.session import get_db
+from app.schemas.submission import SubmissionCreateResponse, SubmissionDetail, SubmissionLogs, SubmissionSummary
+from app.services.execution_service import ExecutionService
+from app.services.submission_service import SubmissionService
+
+
+router = APIRouter(prefix="/submissions", tags=["submissions"])
+executor = ThreadPoolExecutor(max_workers=2)
+
+
+@router.get("", response_model=list[SubmissionSummary])
+def list_submissions(requirement_id: str | None = None, db: Session = Depends(get_db)) -> list[SubmissionSummary]:
+    return SubmissionService(db).list_submissions(requirement_id=requirement_id)
+
+
+@router.post("", response_model=SubmissionCreateResponse)
+def create_submission(
+    requirement_id: str = Form(...),
+    runtime: RuntimeType = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> SubmissionCreateResponse:
+    try:
+        submission = SubmissionService(db).create_submission(requirement_id, runtime, file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return SubmissionCreateResponse(submission=SubmissionSummary.model_validate(submission, from_attributes=True))
+
+
+@router.post("/{submission_id}/start", response_model=SubmissionDetail)
+def start_submission(submission_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if submission.status != SubmissionStatus.PENDING.value:
+        raise HTTPException(status_code=409, detail="Submission is already running or completed")
+    background_tasks.add_task(ExecutionService(db).run_submission, submission_id)
+    return service.to_detail(submission)
+
+
+@router.get("/{submission_id}", response_model=SubmissionDetail)
+def get_submission(submission_id: str, db: Session = Depends(get_db)) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        return service.to_detail(service.get_submission(submission_id))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{submission_id}/logs", response_model=SubmissionLogs)
+def get_submission_logs(submission_id: str, db: Session = Depends(get_db)) -> SubmissionLogs:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    stdout = ""
+    stderr = ""
+    if submission.stdout_path:
+        stdout = open(submission.stdout_path, "r", encoding="utf-8").read()
+    if submission.stderr_path:
+        stderr = open(submission.stderr_path, "r", encoding="utf-8").read()
+    return SubmissionLogs(stdout=stdout, stderr=stderr)

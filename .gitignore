@@ -1,0 +1,14 @@
+arc-bench/
+
+frontend/dist
+frontend/node_modules
+backend/.venv
+backend/__pycache__
+backend/**/*.pyc
+runtime/app.db
+runtime/artifacts/*
+runtime/submissions/*
+runtime/workspaces/*
+!runtime/artifacts/.gitkeep
+!runtime/submissions/.gitkeep
+!runtime/workspaces/.gitkeep

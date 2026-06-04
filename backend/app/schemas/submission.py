@@ -1,0 +1,44 @@
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class StepState(BaseModel):
+    key: str
+    title: str
+    status: str
+    description: str
+
+
+class SubmissionSummary(BaseModel):
+    id: str
+    requirement_id: str
+    runtime: str
+    original_filename: str
+    status: str
+    score: float | None
+    passed_count: int
+    failed_count: int
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    failure_reason: str | None
+
+
+class SubmissionDetail(SubmissionSummary):
+    steps: list[StepState]
+    stdout_path: str | None
+    stderr_path: str | None
+    result_path: str | None
+    workspace_path: str | None
+    logs_available: bool
+    tests: list[dict]
+
+
+class SubmissionCreateResponse(BaseModel):
+    submission: SubmissionSummary
+
+
+class SubmissionLogs(BaseModel):
+    stdout: str
+    stderr: str
