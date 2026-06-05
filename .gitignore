@@ -1,5 +1,6 @@
 arc-bench/
-
+AGENTS.md
+CLAUDE.md
 frontend/dist
 frontend/node_modules
 backend/.venv
@@ -12,3 +13,4 @@ runtime/workspaces/*
 !runtime/artifacts/.gitkeep
 !runtime/submissions/.gitkeep
 !runtime/workspaces/.gitkeep
+
