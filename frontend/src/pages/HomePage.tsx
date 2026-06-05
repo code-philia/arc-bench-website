@@ -1,23 +1,215 @@
 import { ArrowRightOutlined } from "@ant-design/icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
 import type { RequirementSummary, SubmissionSummary } from "../lib/types";
 
-const leaderboardData = {
-  overall: [
-    { rank: 1, name: "Claude Code", model: "claude-sonnet-4", score: 93.2, passRate: "109/117" },
-    { rank: 2, name: "GPT Codex", model: "gpt-4.1", score: 89.7, passRate: "105/117" },
-    { rank: 3, name: "Gemini CLI", model: "gemini-2.5-pro", score: 85.5, passRate: "100/117" },
-    { rank: 4, name: "Cursor Agent", model: "cursor-small", score: 82.1, passRate: "96/117" },
+type BoardTab = "all" | "web" | "android";
+type SortKey =
+  | "avgRequirementRate"
+  | "maxPassRate"
+  | "minRequirementRate"
+  | "avgTokenUsage"
+  | "totalTokenUsage";
+
+type LeaderboardRecord = {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  avgRequirementRate: number;
+  maxPassRate: number;
+  minRequirementRate: number;
+  avgTokenUsage: number;
+  totalTokenUsage: number;
+};
+
+const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
+  all: [
+    {
+      id: "claude-code",
+      name: "Claude Code",
+      provider: "Anthropic",
+      model: "claude-sonnet-4",
+      avgRequirementRate: 86.7,
+      maxPassRate: 96.8,
+      minRequirementRate: 71.3,
+      avgTokenUsage: 3.9,
+      totalTokenUsage: 468.2,
+    },
+    {
+      id: "gpt-codex",
+      name: "GPT Codex",
+      provider: "OpenAI",
+      model: "gpt-4.1",
+      avgRequirementRate: 84.9,
+      maxPassRate: 95.1,
+      minRequirementRate: 69.8,
+      avgTokenUsage: 4.2,
+      totalTokenUsage: 491.5,
+    },
+    {
+      id: "gemini-cli",
+      name: "Gemini CLI",
+      provider: "Google",
+      model: "gemini-2.5-pro",
+      avgRequirementRate: 82.4,
+      maxPassRate: 92.6,
+      minRequirementRate: 66.4,
+      avgTokenUsage: 3.5,
+      totalTokenUsage: 430.8,
+    },
+    {
+      id: "cursor-agent",
+      name: "Cursor Agent",
+      provider: "Cursor",
+      model: "cursor-small",
+      avgRequirementRate: 80.1,
+      maxPassRate: 90.5,
+      minRequirementRate: 62.7,
+      avgTokenUsage: 2.8,
+      totalTokenUsage: 398.6,
+    },
+    {
+      id: "deepseek-agent",
+      name: "DeepSeek Agent",
+      provider: "DeepSeek",
+      model: "deepseek-v3",
+      avgRequirementRate: 77.8,
+      maxPassRate: 88.9,
+      minRequirementRate: 58.1,
+      avgTokenUsage: 2.6,
+      totalTokenUsage: 351.9,
+    },
+  ],
+  web: [
+    {
+      id: "claude-code-web",
+      name: "Claude Code",
+      provider: "Anthropic",
+      model: "claude-sonnet-4",
+      avgRequirementRate: 88.5,
+      maxPassRate: 97.3,
+      minRequirementRate: 74.9,
+      avgTokenUsage: 4.1,
+      totalTokenUsage: 282.4,
+    },
+    {
+      id: "gpt-codex-web",
+      name: "GPT Codex",
+      provider: "OpenAI",
+      model: "gpt-4.1",
+      avgRequirementRate: 87.1,
+      maxPassRate: 96.2,
+      minRequirementRate: 72.1,
+      avgTokenUsage: 4.5,
+      totalTokenUsage: 301.2,
+    },
+    {
+      id: "gemini-cli-web",
+      name: "Gemini CLI",
+      provider: "Google",
+      model: "gemini-2.5-pro",
+      avgRequirementRate: 84.2,
+      maxPassRate: 93.8,
+      minRequirementRate: 68.5,
+      avgTokenUsage: 3.8,
+      totalTokenUsage: 266.5,
+    },
+    {
+      id: "cursor-agent-web",
+      name: "Cursor Agent",
+      provider: "Cursor",
+      model: "cursor-small",
+      avgRequirementRate: 81.6,
+      maxPassRate: 91.7,
+      minRequirementRate: 63.4,
+      avgTokenUsage: 3.1,
+      totalTokenUsage: 244.9,
+    },
+  ],
+  android: [
+    {
+      id: "gpt-codex-android",
+      name: "GPT Codex",
+      provider: "OpenAI",
+      model: "gpt-4.1",
+      avgRequirementRate: 83.2,
+      maxPassRate: 93.4,
+      minRequirementRate: 67.2,
+      avgTokenUsage: 3.7,
+      totalTokenUsage: 190.3,
+    },
+    {
+      id: "claude-code-android",
+      name: "Claude Code",
+      provider: "Anthropic",
+      model: "claude-sonnet-4",
+      avgRequirementRate: 81.9,
+      maxPassRate: 91.4,
+      minRequirementRate: 65.1,
+      avgTokenUsage: 3.4,
+      totalTokenUsage: 185.8,
+    },
+    {
+      id: "deepseek-agent-android",
+      name: "DeepSeek Agent",
+      provider: "DeepSeek",
+      model: "deepseek-v3",
+      avgRequirementRate: 79.3,
+      maxPassRate: 89.6,
+      minRequirementRate: 60.8,
+      avgTokenUsage: 2.5,
+      totalTokenUsage: 160.2,
+    },
+    {
+      id: "kimi-agent-android",
+      name: "Kimi Agent",
+      provider: "Moonshot",
+      model: "kimi-k2",
+      avgRequirementRate: 76.4,
+      maxPassRate: 86.1,
+      minRequirementRate: 57.9,
+      avgTokenUsage: 2.2,
+      totalTokenUsage: 149.7,
+    },
   ],
 };
+
+const boardTabs: Array<{ key: BoardTab; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "web", label: "Web" },
+  { key: "android", label: "Android" },
+];
+
+const sortOptions: Array<{ key: SortKey; label: string }> = [
+  { key: "avgRequirementRate", label: "Average Requirement Coverage" },
+  { key: "maxPassRate", label: "Best Pass Rate" },
+  { key: "minRequirementRate", label: "Lowest Requirement Coverage" },
+  { key: "avgTokenUsage", label: "Average Token Usage (M)" },
+  { key: "totalTokenUsage", label: "Total Token Usage (M)" },
+];
+
+function formatPercent(value: number) {
+  return `${value.toFixed(1)}%`;
+}
+
+function formatToken(value: number) {
+  return `${value.toFixed(1)}M`;
+}
 
 export default function HomePage() {
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const topScore = leaderboardData.overall[0]?.score ?? 0;
+  const [activeTab, setActiveTab] = useState<BoardTab>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("avgRequirementRate");
+
+  const rankedRecords = useMemo(() => {
+    return [...leaderboardData[activeTab]].sort((a, b) => b[sortKey] - a[sortKey]);
+  }, [activeTab, sortKey]);
+
+  const topRecord = rankedRecords[0];
 
   useEffect(() => {
     api.listRequirements().then(setRequirements).catch(() => undefined);
@@ -26,7 +218,7 @@ export default function HomePage() {
 
   return (
     <div className="page home-page">
-      <div className="home-split">
+      <div className="home-split home-split-wide">
         <section className="home-left">
           <div className="home-copy">
             <div className="home-kicker">
@@ -69,7 +261,7 @@ export default function HomePage() {
           <div className="home-panels">
             <div className="categories">
               <Link className="category-card" to="/requirements">
-                <div className="category-icon web">🌐</div>
+                <div className="category-icon web">W</div>
                 <div>
                   <h3>Web Applications</h3>
                   <p className="desc">
@@ -87,7 +279,7 @@ export default function HomePage() {
                 <ArrowRightOutlined />
               </Link>
               <div className="category-card disabled">
-                <div className="category-icon android">📱</div>
+                <div className="category-icon android">A</div>
                 <div>
                   <h3>Android Applications</h3>
                   <p className="desc">
@@ -126,73 +318,93 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="leaderboard-card">
-          <div className="terminal-bar">
-            <div className="terminal-lights">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="terminal-path">arcbench://leaderboard/live</div>
-            <div className="terminal-state">LIVE</div>
-          </div>
-          <div className="leaderboard-header">
+        <section className="leaderboard-card leaderboard-card-clean">
+          <div className="leaderboard-clean-header">
             <div>
-              <h3>Leaderboard</h3>
-              <div className="leaderboard-subtitle">Terminal snapshot of current benchmark leaders.</div>
+              <div className="leaderboard-clean-title">Leaderboard</div>
+              <div className="leaderboard-clean-subtitle">
+                Mock data is used for now to preview the leaderboard layout, tabs, and sorting.
+              </div>
             </div>
-            <div className="leaderboard-tabs">
-              <button className="lb-tab active" type="button">
-                Overall
-              </button>
-              <button className="lb-tab" type="button">
-                Web
-              </button>
-              <button className="lb-tab" type="button">
-                Android
-              </button>
+            <div className="leaderboard-clean-summary">
+              <span className="summary-label">Current Leader</span>
+              <strong>{topRecord?.name ?? "-"}</strong>
             </div>
           </div>
-          <div className="leaderboard-overview">
-            <div className="overview-block">
-              <span className="overview-label">Top Score</span>
-              <span className="overview-value">{topScore.toFixed(1)}</span>
-            </div>
-            <div className="overview-block">
-              <span className="overview-label">Active Board</span>
-              <span className="overview-value">{leaderboardData.overall.length} agents</span>
-            </div>
-            <div className="overview-block">
-              <span className="overview-label">Spec Size</span>
-              <span className="overview-value">117 checks</span>
-            </div>
-          </div>
-          <table className="leaderboard-table leaderboard-table-terminal">
-            <thead>
-              <tr>
-                <th style={{ width: "36px" }}>#</th>
-                <th>Agent</th>
-                <th style={{ width: "86px" }}>Pass Rate</th>
-                <th style={{ width: "92px" }}>Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboardData.overall.map((record) => (
-                <tr key={record.rank} className={record.rank === 1 ? "is-top" : ""}>
-                  <td className="rank">{String(record.rank).padStart(2, "0")}</td>
-                  <td>
-                    <div className="leaderboard-agent">
-                      {record.name}
-                      <span className="sub">$ {record.model}</span>
-                    </div>
-                  </td>
-                  <td className="pass-rate high">{record.passRate}</td>
-                  <td className="leaderboard-score">{record.score.toFixed(1)}</td>
-                </tr>
+
+          <div className="leaderboard-controls">
+            <div className="leaderboard-segmented" role="tablist" aria-label="Leaderboard scope tabs">
+              {boardTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  className={`leaderboard-segment ${activeTab === tab.key ? "active" : ""}`}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
               ))}
-            </tbody>
-          </table>
-          <div className="recent-submissions">
+            </div>
+
+            <label className="leaderboard-sorter">
+              <span>Sort By</span>
+              <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
+                {sortOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="leaderboard-table-wrap">
+            <table className="leaderboard-table leaderboard-table-clean">
+              <thead>
+                <tr>
+                  <th style={{ width: "72px" }}>Rank</th>
+                  <th>Model</th>
+                  <th style={{ width: "138px" }}>Avg. Coverage</th>
+                  <th style={{ width: "138px" }}>Best Pass Rate</th>
+                  <th style={{ width: "138px" }}>Min. Coverage</th>
+                  <th style={{ width: "128px" }}>Avg. Tokens (M)</th>
+                  <th style={{ width: "128px" }}>Total Tokens (M)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankedRecords.map((record, index) => (
+                  <tr key={record.id}>
+                    <td className="leaderboard-rank-cell">{index + 1}</td>
+                    <td>
+                      <div className="leaderboard-model-cell">
+                        <div className="leaderboard-model-name">{record.name}</div>
+                        <div className="leaderboard-model-meta">
+                          {record.provider} | {record.model}
+                        </div>
+                      </div>
+                    </td>
+                    <td className={sortKey === "avgRequirementRate" ? "leaderboard-metric-active" : ""}>
+                      {formatPercent(record.avgRequirementRate)}
+                    </td>
+                    <td className={sortKey === "maxPassRate" ? "leaderboard-metric-active" : ""}>
+                      {formatPercent(record.maxPassRate)}
+                    </td>
+                    <td className={sortKey === "minRequirementRate" ? "leaderboard-metric-active" : ""}>
+                      {formatPercent(record.minRequirementRate)}
+                    </td>
+                    <td className={sortKey === "avgTokenUsage" ? "leaderboard-metric-active" : ""}>
+                      {formatToken(record.avgTokenUsage)}
+                    </td>
+                    <td className={sortKey === "totalTokenUsage" ? "leaderboard-metric-active" : ""}>
+                      {formatToken(record.totalTokenUsage)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="recent-submissions recent-submissions-compact">
             <div className="panel-title">Recent Submissions</div>
             {submissions.length === 0 ? (
               <div className="empty-state">No submissions yet.</div>
