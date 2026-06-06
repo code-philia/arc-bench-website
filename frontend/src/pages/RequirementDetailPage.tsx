@@ -24,6 +24,7 @@ export default function RequirementDetailPage() {
   const [activeDoc, setActiveDoc] = useState("readme");
   const [runtime, setRuntime] = useState("python");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeSubmission, setActiveSubmission] = useState<SubmissionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<number | null>(null);
@@ -77,6 +78,7 @@ export default function RequirementDetailPage() {
       return;
     }
     try {
+      setUploadError(null);
       const created = await api.createSubmission(requirement.id, runtime, file);
       setSubmissions((current) => [created.submission, ...current]);
       const started = await api.startSubmission(created.submission.id);
@@ -84,7 +86,9 @@ export default function RequirementDetailPage() {
       beginPolling(created.submission.id);
       message.success("Submission created and queued.");
     } catch (error) {
-      message.error((error as Error).message);
+      const errorMessage = (error as Error).message;
+      setUploadError(errorMessage);
+      message.error(errorMessage);
     }
   };
 
@@ -189,7 +193,10 @@ export default function RequirementDetailPage() {
                 className="visually-hidden"
                 type="file"
                 accept=".zip"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null);
+                  setUploadError(null);
+                }}
               />
               <div className="upload-icon">
                 <UploadOutlined />
@@ -209,6 +216,7 @@ export default function RequirementDetailPage() {
                 </button>
               </div>
             ) : null}
+            {uploadError ? <div className="inline-alert error">{uploadError}</div> : null}
             <button className="btn-primary" type="button" disabled={!file} onClick={handleUpload}>
               Start Test
             </button>
