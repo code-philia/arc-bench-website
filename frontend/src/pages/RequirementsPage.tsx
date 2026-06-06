@@ -1,140 +1,113 @@
+import { DownloadOutlined, RightOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
-import type { RequirementSummary } from "../lib/types";
+import type { CompetitionSummary } from "../lib/types";
 
-type PublicPlaceholderTask = Pick<
-  RequirementSummary,
-  "id" | "title" | "summary" | "total_tests" | "module_count"
-> & {
-  category?: string;
-};
-
-const placeholderTasks: PublicPlaceholderTask[] = [
-  {
-    id: "W-001",
-    title: "E-Commerce Dashboard",
-    summary: "Multimodal spec with wireframes.",
-    total_tests: 42,
-    module_count: 4,
-  },
-  {
-    id: "A-001",
-    title: "Notes App",
-    summary: "Jetpack Compose CRUD benchmark.",
-    total_tests: 28,
-    module_count: 3,
-  },
-];
+function competitionTypeLabel(type: string) {
+  if (type === "web") return "Web";
+  if (type === "android") return "Android";
+  if (type === "mixed") return "Mixed";
+  return type;
+}
 
 export default function RequirementsPage() {
-  const navigate = useNavigate();
-  const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
-  const [category, setCategory] = useState("web");
+  const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.listRequirements().then(setRequirements).catch(() => undefined);
+    api
+      .listCompetitions()
+      .then(setCompetitions)
+      .catch(() => setCompetitions([]))
+      .finally(() => setLoading(false));
   }, []);
-
-  const rows = category === "web" ? requirements : [];
 
   return (
     <div className="page library-page">
-      <div className="library-header">
-        <h2>Task Library</h2>
-        <div className="tabs">
-          {[
-            { label: "🌐 Web Apps", value: "web" },
-            { label: "📱 Android Apps", value: "android" },
-          ].map((option) => (
-            <button
-              key={option.value}
-              className={`tab${category === option.value ? " active" : ""}`}
-              type="button"
-              onClick={() => setCategory(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="competition-shell">
+        <section className="competition-hero">
+          <div>
+            <div className="competition-eyebrow">Competition Directory</div>
+            <h1>Competitions</h1>
+            <p>
+              Choose a competition track first, then inspect its task set, benchmark coverage, and any
+              downloadable public materials.
+            </p>
+          </div>
+          <div className="competition-hero-stats">
+            <div className="competition-stat">
+              <span className="competition-stat-value">{competitions.length}</span>
+              <span className="competition-stat-label">Competitions</span>
+            </div>
+            <div className="competition-stat">
+              <span className="competition-stat-value">
+                {competitions.reduce((sum, item) => sum + item.task_count, 0)}
+              </span>
+              <span className="competition-stat-label">Tasks</span>
+            </div>
+            <div className="competition-stat">
+              <span className="competition-stat-value">
+                {competitions.reduce((sum, item) => sum + item.total_tests, 0)}
+              </span>
+              <span className="competition-stat-label">Tests</span>
+            </div>
+          </div>
+        </section>
 
-      <div className="task-table-wrap">
-        <table className="task-table">
-          <thead>
-            <tr>
-              <th style={{ width: "76px" }}>#</th>
-              <th>Task</th>
-              <th style={{ width: "100px" }}>Modules</th>
-              <th style={{ width: "100px" }}>Tests</th>
-              <th style={{ width: "120px" }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((record) => (
-              <tr key={record.id} onClick={() => navigate(`/requirements/${record.id}`)}>
-                <td className="task-id">{record.id}</td>
-                <td>
-                  <div className="task-name">
-                    {record.title}
-                    <span className="sub">
-                      {record.test_runner} · {record.category}
-                    </span>
-                  </div>
-                </td>
-                <td>{record.module_count}</td>
-                <td>{record.total_tests}</td>
-                <td>
-                  <span className="status-dot completed">Ready</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <section className="public-tasks-section">
-        <h3>Public Tasks</h3>
-        {[...requirements, ...placeholderTasks].map((task) => {
-          const realTask = "category" in task;
-          return (
-            <div key={task.id} className="public-task-card">
-              <div className="public-task-header">
-                <h4>{task.title}</h4>
-                <span className="task-id-badge">{task.id}</span>
-              </div>
-              <p className="public-task-desc">{task.summary}</p>
-              <div className="public-task-stats">
-                <span>
-                  Tests: <strong>{task.total_tests}</strong>
-                </span>
-                <span>
-                  Modules: <strong>{task.module_count}</strong>
-                </span>
-                <span>
-                  Category: <strong>{realTask ? task.category : "prototype"}</strong>
-                </span>
-              </div>
-              <div className="public-task-downloads">
-                {realTask ? (
-                  <button
-                    className="btn-download"
-                    type="button"
-                    onClick={() => navigate(`/requirements/${task.id}`)}
-                  >
-                    Open Requirement
-                  </button>
-                ) : (
-                  <button className="btn-download" type="button" disabled>
-                    Coming Soon
-                  </button>
-                )}
+        <section className="competition-list-section">
+          <div className="home-section-header">
+            <div>
+              <div className="leaderboard-clean-title">Available Competitions</div>
+              <div className="leaderboard-clean-subtitle">
+                Public benchmark material is grouped as its own mixed competition.
               </div>
             </div>
-          );
-        })}
-      </section>
+          </div>
+
+          {loading ? (
+            <div className="loading-state">Loading competitions...</div>
+          ) : competitions.length === 0 ? (
+            <div className="empty-state">No competitions available.</div>
+          ) : (
+            <div className="competition-list-grid">
+              {competitions.map((competition) => (
+                <Link
+                  key={competition.id}
+                  to={`/competitions/${competition.id}`}
+                  className={`competition-card competition-card-${competition.type}`}
+                >
+                  <div className="competition-card-top">
+                    <div>
+                      <div className="competition-type-chip">{competitionTypeLabel(competition.type)}</div>
+                      <h3>{competition.title}</h3>
+                    </div>
+                    <RightOutlined className="competition-card-arrow" />
+                  </div>
+                  <p className="competition-card-summary">{competition.summary}</p>
+                  <div className="competition-card-meta">
+                    <span>
+                      <strong>{competition.task_count}</strong> tasks
+                    </span>
+                    <span>
+                      <strong>{competition.total_tests}</strong> tests
+                    </span>
+                    <span>{competition.is_public ? "Public pack" : "Competition track"}</span>
+                  </div>
+                  {competition.is_public ? (
+                    <div className="competition-card-foot">
+                      <span className="competition-download-hint">
+                        <DownloadOutlined /> Downloadable requirements, tests, and demo assets
+                      </span>
+                    </div>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

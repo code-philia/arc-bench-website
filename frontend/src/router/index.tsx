@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import AppShell from "../components/layout/AppShell";
+import CompetitionDetailPage from "../pages/CompetitionDetailPage";
 import HomePage from "../pages/HomePage";
 import PlaygroundPage from "../pages/PlaygroundPage";
 import RequirementDetailPage from "../pages/RequirementDetailPage";
@@ -14,6 +15,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: "requirements", element: <RequirementsPage /> },
+      { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },
       { path: "requirements/:requirementId", element: <RequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },

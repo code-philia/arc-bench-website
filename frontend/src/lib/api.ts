@@ -1,4 +1,6 @@
 import type {
+  CompetitionDetail,
+  CompetitionSummary,
   RequirementDetail,
   RequirementSummary,
   SubmissionDetail,
@@ -18,6 +20,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listCompetitions() {
+    return request<CompetitionSummary[]>("/competitions");
+  },
+  getCompetition(competitionId: string) {
+    return request<CompetitionDetail>(`/competitions/${competitionId}`);
+  },
   listRequirements() {
     return request<RequirementSummary[]>("/requirements");
   },

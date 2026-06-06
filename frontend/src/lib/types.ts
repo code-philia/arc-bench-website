@@ -15,6 +15,33 @@ export type RequirementDetail = RequirementSummary & {
   references_base_url: string;
 };
 
+export type CompetitionTaskDownloadLinks = {
+  requirement_document: string | null;
+  prerequisites_document: string | null;
+  tests_bundle: string | null;
+  demo_bundle: string | null;
+  full_bundle: string | null;
+};
+
+export type CompetitionTaskSummary = RequirementSummary & {
+  public_downloads: CompetitionTaskDownloadLinks | null;
+};
+
+export type CompetitionSummary = {
+  id: string;
+  title: string;
+  type: string;
+  summary: string;
+  task_count: number;
+  total_tests: number;
+  is_public: boolean;
+};
+
+export type CompetitionDetail = CompetitionSummary & {
+  downloads: CompetitionTaskDownloadLinks | null;
+  tasks: CompetitionTaskSummary[];
+};
+
 export type SubmissionStep = {
   key: string;
   title: string;

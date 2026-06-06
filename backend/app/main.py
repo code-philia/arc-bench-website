@@ -25,6 +25,7 @@ app.add_middleware(
 )
 app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(requirements.router, prefix=settings.api_prefix)
+app.include_router(requirements.competition_router, prefix=settings.api_prefix)
 app.include_router(submissions.router, prefix=settings.api_prefix)
 
 

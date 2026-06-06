@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import io
+import zipfile
 from pathlib import Path
 
 from sqlalchemy import select
@@ -5,7 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.requirement import Requirement
-from app.schemas.requirement import RequirementDetail, RequirementSummary
+from app.schemas.requirement import (
+    CompetitionDetail,
+    CompetitionSummary,
+    CompetitionTaskDownloadLinks,
+    CompetitionTaskSummary,
+    RequirementDetail,
+    RequirementSummary,
+)
 
 
 class RequirementCatalogService:
@@ -55,7 +66,7 @@ class RequirementCatalogService:
         self.db.commit()
 
     def list_requirements(self) -> list[RequirementSummary]:
-        rows = self.db.scalars(select(Requirement).order_by(Requirement.id)).all()
+        rows = self._list_requirement_rows()
         return [RequirementSummary.model_validate(row, from_attributes=True) for row in rows]
 
     def get_requirement_detail(self, requirement_id: str, base_url: str) -> RequirementDetail:
@@ -76,6 +87,76 @@ class RequirementCatalogService:
             references_base_url=f"{base_url}/api/requirements/{requirement.id}/references",
         )
 
+    def list_competitions(self) -> list[CompetitionSummary]:
+        rows = self._list_requirement_rows()
+        grouped: dict[str, list[Requirement]] = {}
+        for row in rows:
+            grouped.setdefault(row.category, []).append(row)
+
+        competitions: list[CompetitionSummary] = []
+        for category, items in sorted(grouped.items()):
+            competitions.append(
+                CompetitionSummary(
+                    id=category,
+                    title=self._competition_title(category),
+                    type=category,
+                    summary=self._competition_summary(category, len(items)),
+                    task_count=len(items),
+                    total_tests=sum(item.total_tests for item in items),
+                    is_public=False,
+                )
+            )
+
+        if rows:
+            competitions.append(
+                CompetitionSummary(
+                    id="public",
+                    title="Public Benchmark",
+                    type="mixed",
+                    summary="Downloadable benchmark pack with requirement docs, tests, and demo assets.",
+                    task_count=len(rows),
+                    total_tests=sum(item.total_tests for item in rows),
+                    is_public=True,
+                )
+            )
+
+        return competitions
+
+    def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
+        rows = self._list_requirement_rows()
+        if competition_id == "public":
+            tasks = [self._to_competition_task(row, base_url, is_public=True) for row in rows]
+            return CompetitionDetail(
+                id="public",
+                title="Public Benchmark",
+                type="mixed",
+                summary="Downloadable benchmark pack with requirement docs, tests, and demo assets.",
+                task_count=len(tasks),
+                total_tests=sum(task.total_tests for task in tasks),
+                is_public=True,
+                downloads=CompetitionTaskDownloadLinks(
+                    full_bundle=f"{base_url}/api/competitions/public/download",
+                ),
+                tasks=tasks,
+            )
+
+        competition_tasks = [row for row in rows if row.category == competition_id]
+        if not competition_tasks:
+            raise LookupError(f"Competition '{competition_id}' not found")
+
+        tasks = [self._to_competition_task(row, base_url, is_public=False) for row in competition_tasks]
+        return CompetitionDetail(
+            id=competition_id,
+            title=self._competition_title(competition_id),
+            type=competition_id,
+            summary=self._competition_summary(competition_id, len(tasks)),
+            task_count=len(tasks),
+            total_tests=sum(task.total_tests for task in tasks),
+            is_public=False,
+            downloads=None,
+            tasks=tasks,
+        )
+
     def get_document(self, requirement_id: str, kind: str) -> str:
         requirement = self._get_requirement(requirement_id)
         path = Path(requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path)
@@ -89,11 +170,115 @@ class RequirementCatalogService:
             raise FileNotFoundError(relative_path)
         return target
 
+    def build_public_task_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        requirement = self._get_requirement(requirement_id)
+        archive_name = f"arcbench-public-{requirement_id}.zip"
+        return self._build_zip(
+            [
+                (Path(requirement.requirements_path), f"{requirement.id}/requirements.md"),
+                (Path(requirement.prerequisites_path), f"{requirement.id}/prerequisites.md"),
+                (Path(requirement.tests_path), f"{requirement.id}/tests"),
+                (Path(requirement.assets_path), f"{requirement.id}/demo/assets"),
+                (Path(requirement.references_path), f"{requirement.id}/demo/reference"),
+            ],
+            archive_name,
+        )
+
+    def build_public_task_document(self, requirement_id: str, kind: str) -> tuple[bytes, str]:
+        requirement = self._get_requirement(requirement_id)
+        source = Path(requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path)
+        return source.read_bytes(), source.name
+
+    def build_public_task_tests_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        requirement = self._get_requirement(requirement_id)
+        archive_name = f"arcbench-public-{requirement_id}-tests.zip"
+        return self._build_zip([(Path(requirement.tests_path), f"{requirement.id}/tests")], archive_name)
+
+    def build_public_task_demo_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        requirement = self._get_requirement(requirement_id)
+        archive_name = f"arcbench-public-{requirement_id}-demo.zip"
+        return self._build_zip(
+            [
+                (Path(requirement.assets_path), f"{requirement.id}/assets"),
+                (Path(requirement.references_path), f"{requirement.id}/reference"),
+            ],
+            archive_name,
+        )
+
+    def build_public_competition_bundle(self) -> tuple[bytes, str]:
+        rows = self._list_requirement_rows()
+        entries: list[tuple[Path, str]] = []
+        for requirement in rows:
+            entries.extend(
+                [
+                    (Path(requirement.requirements_path), f"public/{requirement.id}/requirements.md"),
+                    (Path(requirement.prerequisites_path), f"public/{requirement.id}/prerequisites.md"),
+                    (Path(requirement.tests_path), f"public/{requirement.id}/tests"),
+                    (Path(requirement.assets_path), f"public/{requirement.id}/demo/assets"),
+                    (Path(requirement.references_path), f"public/{requirement.id}/demo/reference"),
+                ]
+            )
+        return self._build_zip(entries, "arcbench-public-competition.zip")
+
+    def _build_zip(self, entries: list[tuple[Path, str]], archive_name: str) -> tuple[bytes, str]:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for source, target in entries:
+                if not source.exists():
+                    continue
+                if source.is_dir():
+                    for path in sorted(source.rglob("*")):
+                        if path.is_file():
+                            archive.write(path, arcname=f"{target}/{path.relative_to(source).as_posix()}")
+                else:
+                    archive.write(source, arcname=target)
+        return buffer.getvalue(), archive_name
+
+    def _list_requirement_rows(self) -> list[Requirement]:
+        return self.db.scalars(select(Requirement).order_by(Requirement.category, Requirement.id)).all()
+
+    def _to_competition_task(self, row: Requirement, base_url: str, is_public: bool) -> CompetitionTaskSummary:
+        downloads = None
+        if is_public:
+            downloads = CompetitionTaskDownloadLinks(
+                requirement_document=f"{base_url}/api/competitions/public/tasks/{row.id}/download/requirements",
+                prerequisites_document=f"{base_url}/api/competitions/public/tasks/{row.id}/download/prerequisites",
+                tests_bundle=f"{base_url}/api/competitions/public/tasks/{row.id}/download/tests",
+                demo_bundle=f"{base_url}/api/competitions/public/tasks/{row.id}/download/demo",
+                full_bundle=f"{base_url}/api/competitions/public/tasks/{row.id}/download/full",
+            )
+        return CompetitionTaskSummary(
+            id=row.id,
+            title=row.title,
+            category=row.category,
+            summary=row.summary,
+            test_runner=row.test_runner,
+            total_tests=row.total_tests,
+            module_count=row.module_count,
+            public_downloads=downloads,
+        )
+
     def _get_requirement(self, requirement_id: str) -> Requirement:
         requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")
         return requirement
+
+    @staticmethod
+    def _competition_title(category: str) -> str:
+        if category == "web":
+            return "Web Competition"
+        if category == "android":
+            return "Android Competition"
+        return f"{category.title()} Competition"
+
+    @staticmethod
+    def _competition_summary(category: str, task_count: int) -> str:
+        if category == "web":
+            return f"Browser-based product tasks with Playwright evaluation across {task_count} benchmark tasks."
+        if category == "android":
+            return f"Android application tasks across {task_count} benchmark tasks."
+        return f"{task_count} benchmark tasks in the {category} track."
 
     @staticmethod
     def _extract_title(markdown: str, fallback: str) -> str:

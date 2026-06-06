@@ -11,7 +11,12 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { to: "/", label: "Home", icon: <TrophyOutlined />, matches: ["/"] },
-  { to: "/requirements", label: "Competition", icon: <CodeOutlined />, matches: ["/requirements"] },
+  {
+    to: "/requirements",
+    label: "Competition",
+    icon: <CodeOutlined />,
+    matches: ["/requirements", "/competitions/:competitionId"],
+  },
   {
     to: "/requirements/12306",
     label: "Task Detail",

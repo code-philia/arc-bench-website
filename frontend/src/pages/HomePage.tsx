@@ -422,7 +422,7 @@ export default function HomePage() {
               </div>
             </div>
             <Link className="inline-link" to="/requirements">
-              Browse tasks
+              Browse competitions
             </Link>
           </div>
 
