@@ -20,6 +20,7 @@ export type SubmissionStep = {
   title: string;
   status: string;
   description: string;
+  logs: string[];
 };
 
 export type SubmissionSummary = {
@@ -53,6 +54,7 @@ export type SubmissionDetail = SubmissionSummary & {
 };
 
 export type SubmissionLogs = {
+  events: string;
   stdout: string;
   stderr: string;
 };

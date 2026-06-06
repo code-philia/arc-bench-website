@@ -49,6 +49,8 @@ class SubmissionService:
             shutil.copyfileobj(upload.file, output)
 
         self._validate_python_agent_archive(archive_path)
+        self.append_event_log(submission_id, f"[ok] Uploaded archive saved to {archive_path.name}")
+        self.append_event_log(submission_id, "[ok] Archive validation passed")
 
         submission = Submission(
             id=submission_id,
@@ -63,6 +65,18 @@ class SubmissionService:
         self.db.commit()
         self.db.refresh(submission)
         return submission
+
+    def append_event_log(self, submission_id: str, message: str) -> Path:
+        submission_dir = self.settings.submissions_root / submission_id
+        submission_dir.mkdir(parents=True, exist_ok=True)
+        log_path = submission_dir / "events.log"
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        with log_path.open("a", encoding="utf-8") as output:
+            output.write(f"[{timestamp}] {message}\n")
+        return log_path
+
+    def get_event_log_path(self, submission: Submission) -> Path:
+        return self.settings.submissions_root / submission.id / "events.log"
 
     @staticmethod
     def _validate_python_agent_archive(archive_path: Path) -> None:
@@ -103,7 +117,12 @@ class SubmissionService:
         return submission
 
     def to_detail(self, submission: Submission) -> SubmissionDetail:
+        event_lines: list[str] = []
+        event_log_path = self.get_event_log_path(submission)
+        if event_log_path.exists():
+            event_lines = [line.strip() for line in event_log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         steps = [StepState.model_validate(step) for step in json.loads(submission.steps_json or "[]")]
+        steps = self.attach_step_logs(steps, event_lines)
         tests = []
         if submission.result_path and Path(submission.result_path).exists():
             tests = json.loads(Path(submission.result_path).read_text(encoding="utf-8")).get("tests", [])
@@ -181,7 +200,7 @@ class SubmissionService:
             elif active_key == step.key:
                 status = "running"
                 step_description = description or "Running"
-            steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description))
+            steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description, logs=[]))
         return steps
 
     @staticmethod
@@ -204,5 +223,20 @@ class SubmissionService:
             else:
                 status = "pending"
                 step_description = "Not reached"
-            steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description))
+            steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description, logs=[]))
         return steps
+
+    @staticmethod
+    def attach_step_logs(steps: list[StepState], event_lines: list[str]) -> list[StepState]:
+        prefixes = {
+            "deploy_agent": ("[deploy]",),
+            "start_agent": ("[start]",),
+            "run_tests": ("[test]",),
+        }
+        enriched: list[StepState] = []
+        for step in steps:
+            step_logs = [line for line in event_lines if any(prefix in line for prefix in prefixes.get(step.key, tuple()))]
+            step_data = step.model_dump()
+            step_data["logs"] = step_logs[-5:]
+            enriched.append(StepState(**step_data))
+        return enriched

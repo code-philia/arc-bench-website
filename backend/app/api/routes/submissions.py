@@ -44,6 +44,7 @@ def start_submission(submission_id: str, background_tasks: BackgroundTasks, db: 
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if submission.status != SubmissionStatus.PENDING.value:
         raise HTTPException(status_code=409, detail="Submission is already running or completed")
+    service.append_event_log(submission_id, "[start] Submission accepted and queued for execution")
     background_tasks.add_task(ExecutionService(db).run_submission, submission_id)
     return service.to_detail(submission)
 
@@ -64,10 +65,16 @@ def get_submission_logs(submission_id: str, db: Session = Depends(get_db)) -> Su
         submission = service.get_submission(submission_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    events = ""
     stdout = ""
     stderr = ""
+    event_log_path = service.get_event_log_path(submission)
+    if event_log_path.exists():
+        events = event_log_path.read_text("utf-8")
     if submission.stdout_path:
-        stdout = open(submission.stdout_path, "r", encoding="utf-8").read()
+        with open(submission.stdout_path, "r", encoding="utf-8") as stdout_file:
+            stdout = stdout_file.read()
     if submission.stderr_path:
-        stderr = open(submission.stderr_path, "r", encoding="utf-8").read()
-    return SubmissionLogs(stdout=stdout, stderr=stderr)
+        with open(submission.stderr_path, "r", encoding="utf-8") as stderr_file:
+            stderr = stderr_file.read()
+    return SubmissionLogs(events=events, stdout=stdout, stderr=stderr)

@@ -57,6 +57,18 @@ export default function SubmissionStepList({
           <div className="step-content">
             <div className="step-title">{step.title}</div>
             <div className="step-desc">{step.description}</div>
+            {step.logs.length ? (
+              <div className="step-log-list">
+                {step.logs.map((logLine) => (
+                  <div
+                    key={logLine}
+                    className={`step-log-item${logLine.includes("[ok]") ? " success" : ""}`}
+                  >
+                    {logLine}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       ))}

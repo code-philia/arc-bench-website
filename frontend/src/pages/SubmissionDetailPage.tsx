@@ -11,7 +11,7 @@ export default function SubmissionDetailPage() {
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"results" | "stdout" | "stderr">("results");
+  const [activeTab, setActiveTab] = useState<"results" | "events" | "stdout" | "stderr">("results");
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function SubmissionDetailPage() {
           <div className="muted">Submission</div>
           <h1>{submission.id}</h1>
           <p className="muted">
-            {submission.requirement_id} · {submission.runtime} · {submission.status}
+            {submission.requirement_id} / {submission.runtime} / {submission.status}
           </p>
         </div>
         <div className="submission-score">{submission.score?.toFixed(1) ?? "--"}</div>
@@ -95,14 +95,15 @@ export default function SubmissionDetailPage() {
           <div className="doc-tabs detail-tabs">
             {[
               { key: "results", label: "Results" },
-              { key: "stdout", label: "stdout" },
-              { key: "stderr", label: "stderr" },
+              { key: "events", label: "Events" },
+              { key: "stdout", label: "Stdout" },
+              { key: "stderr", label: "Stderr" },
             ].map((tab) => (
               <button
                 key={tab.key}
                 className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
                 type="button"
-                onClick={() => setActiveTab(tab.key as "results" | "stdout" | "stderr")}
+                onClick={() => setActiveTab(tab.key as "results" | "events" | "stdout" | "stderr")}
               >
                 {tab.label}
               </button>
@@ -111,6 +112,8 @@ export default function SubmissionDetailPage() {
           <div className="detail-tab-panel">
             {activeTab === "results" ? (
               <SubmissionResultCard submission={submission} />
+            ) : activeTab === "events" ? (
+              <pre className="log-panel">{logs?.events || "No backend events yet."}</pre>
             ) : activeTab === "stdout" ? (
               <pre className="log-panel">{logs?.stdout || "No stdout yet."}</pre>
             ) : (
@@ -122,3 +125,4 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+

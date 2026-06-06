@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StepState(BaseModel):
@@ -8,6 +8,7 @@ class StepState(BaseModel):
     title: str
     status: str
     description: str
+    logs: list[str] = Field(default_factory=list)
 
 
 class SubmissionSummary(BaseModel):
@@ -40,5 +41,6 @@ class SubmissionCreateResponse(BaseModel):
 
 
 class SubmissionLogs(BaseModel):
+    events: str
     stdout: str
     stderr: str

@@ -1762,6 +1762,22 @@ button {
   background: rgba(255, 77, 106, 0.4);
 }
 
+.step-log-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.step-log-item {
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.step-log-item.success {
+  color: var(--accent);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
