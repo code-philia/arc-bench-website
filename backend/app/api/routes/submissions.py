@@ -3,8 +3,10 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.api.deps import require_current_user
 from app.core.enums import RuntimeType, SubmissionStatus
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.submission import SubmissionCreateResponse, SubmissionDetail, SubmissionLogs, SubmissionSummary
 from app.services.execution_service import ExecutionService
 from app.services.submission_service import SubmissionService
@@ -15,8 +17,12 @@ executor = ThreadPoolExecutor(max_workers=2)
 
 
 @router.get("", response_model=list[SubmissionSummary])
-def list_submissions(requirement_id: str | None = None, db: Session = Depends(get_db)) -> list[SubmissionSummary]:
-    return SubmissionService(db).list_submissions(requirement_id=requirement_id)
+def list_submissions(
+    requirement_id: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> list[SubmissionSummary]:
+    return SubmissionService(db).list_submissions(current_user.id, requirement_id=requirement_id)
 
 
 @router.post("", response_model=SubmissionCreateResponse)
@@ -26,9 +32,16 @@ def create_submission(
     display_name: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
 ) -> SubmissionCreateResponse:
     try:
-        submission = SubmissionService(db).create_submission(requirement_id, runtime, file, display_name=display_name)
+        submission = SubmissionService(db).create_submission(
+            requirement_id,
+            runtime,
+            file,
+            user_id=current_user.id,
+            display_name=display_name,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:
@@ -37,10 +50,15 @@ def create_submission(
 
 
 @router.post("/{submission_id}/start", response_model=SubmissionDetail)
-def start_submission(submission_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> SubmissionDetail:
+def start_submission(
+    submission_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
     service = SubmissionService(db)
     try:
-        submission = service.get_submission(submission_id)
+        submission = service.get_submission(submission_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if submission.status != SubmissionStatus.PENDING.value:
@@ -51,19 +69,27 @@ def start_submission(submission_id: str, background_tasks: BackgroundTasks, db: 
 
 
 @router.get("/{submission_id}", response_model=SubmissionDetail)
-def get_submission(submission_id: str, db: Session = Depends(get_db)) -> SubmissionDetail:
+def get_submission(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
     service = SubmissionService(db)
     try:
-        return service.to_detail(service.get_submission(submission_id))
+        return service.to_detail(service.get_submission(submission_id, current_user.id))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/{submission_id}/logs", response_model=SubmissionLogs)
-def get_submission_logs(submission_id: str, db: Session = Depends(get_db)) -> SubmissionLogs:
+def get_submission_logs(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionLogs:
     service = SubmissionService(db)
     try:
-        submission = service.get_submission(submission_id)
+        submission = service.get_submission(submission_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     events = ""

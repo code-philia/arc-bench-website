@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import inspect, text
 
-from app.api.routes import health, requirements, submissions
+from app.api.routes import auth, health, requirements, submissions
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -24,6 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(health.router, prefix=settings.api_prefix)
+app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(requirements.router, prefix=settings.api_prefix)
 app.include_router(requirements.competition_router, prefix=settings.api_prefix)
 app.include_router(submissions.router, prefix=settings.api_prefix)
@@ -40,6 +41,8 @@ def on_startup() -> None:
         submission_columns = {column["name"] for column in inspector.get_columns("submissions")}
         if "display_name" not in submission_columns:
             connection.execute(text("ALTER TABLE submissions ADD COLUMN display_name VARCHAR(120)"))
+        if "user_id" not in submission_columns:
+            connection.execute(text("ALTER TABLE submissions ADD COLUMN user_id VARCHAR(64)"))
     db = SessionLocal()
     try:
         RequirementCatalogService(db).sync()

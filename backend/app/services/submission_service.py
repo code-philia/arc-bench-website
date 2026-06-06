@@ -34,6 +34,7 @@ class SubmissionService:
         requirement_id: str,
         runtime: RuntimeType,
         upload: UploadFile,
+        user_id: str,
         display_name: str | None = None,
     ) -> Submission:
         if not upload.filename or not upload.filename.lower().endswith(".zip"):
@@ -63,6 +64,7 @@ class SubmissionService:
 
         submission = Submission(
             id=submission_id,
+            user_id=user_id,
             display_name=normalized_display_name,
             requirement_id=requirement_id,
             runtime=runtime.value,
@@ -144,16 +146,16 @@ class SubmissionService:
         if missing:
             raise ValueError(f"Uploaded zip must include {', '.join(missing)} at the archive root")
 
-    def list_submissions(self, requirement_id: str | None = None) -> list[SubmissionSummary]:
-        query = select(Submission).order_by(desc(Submission.created_at))
+    def list_submissions(self, user_id: str, requirement_id: str | None = None) -> list[SubmissionSummary]:
+        query = select(Submission).where(Submission.user_id == user_id).order_by(desc(Submission.created_at))
         if requirement_id:
             query = query.where(Submission.requirement_id == requirement_id)
         rows = self.db.scalars(query).all()
         return [SubmissionSummary.model_validate(row, from_attributes=True) for row in rows]
 
-    def get_submission(self, submission_id: str) -> Submission:
+    def get_submission(self, submission_id: str, user_id: str | None = None) -> Submission:
         submission = self.db.get(Submission, submission_id)
-        if not submission:
+        if not submission or (user_id is not None and submission.user_id != user_id):
             raise LookupError(f"Submission '{submission_id}' not found")
         return submission
 

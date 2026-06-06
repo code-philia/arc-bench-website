@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     artifacts_root: Path = ROOT_DIR / "runtime" / "artifacts"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"
+    session_secret: str = "arcbench-dev-session-secret"
 
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
