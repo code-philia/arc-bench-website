@@ -12,6 +12,7 @@ WORKSPACE_ROOT = Path("/workspace")
 AGENT_DIR = WORKSPACE_ROOT / "agent"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
 ARTIFACTS_DIR = WORKSPACE_ROOT / "artifacts"
+REQUIREMENT_MARKDOWN_PATH = WORKSPACE_ROOT / "requirement" / "requirements.md"
 CONFIG_PATH = AGENT_DIR / "arcbench.config.json"
 RESULT_PATH = ARTIFACTS_DIR / "result.json"
 STDOUT_PATH = ARTIFACTS_DIR / "stdout.log"
@@ -25,11 +26,10 @@ def read_config() -> dict:
 
 
 def resolve_python_entrypoint() -> Path:
-    for candidate in ("main.py", "app.py"):
-        entrypoint = AGENT_DIR / candidate
-        if entrypoint.exists():
-            return entrypoint
-    raise RuntimeError("unsupported python entrypoint: expected main.py or app.py at the archive root")
+    entrypoint = AGENT_DIR / "main.py"
+    if entrypoint.exists():
+        return entrypoint
+    raise RuntimeError("unsupported python entrypoint: expected main.py at the archive root")
 
 
 def install_python_dependencies(stdout_file, stderr_file) -> None:
@@ -73,9 +73,10 @@ export default defineConfig({
   testDir: '.',
   timeout: 30000,
   fullyParallel: false,
+  workers: 1,
   reporter: [['json', { outputFile: '../artifacts/playwright-report.json' }]],
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:3000',
+    baseURL: 'http://127.0.0.1:3000',
     trace: 'off',
     screenshot: 'off',
   },
@@ -95,6 +96,7 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
     subprocess.run(["npm", "install"], cwd=str(TESTS_DIR), stdout=stdout_file, stderr=stderr_file, check=True)
+    subprocess.run(["npx", "playwright", "install", "--with-deps", "chromium"], cwd=str(TESTS_DIR), stdout=stdout_file, stderr=stderr_file, check=True)
 
 
 def parse_playwright_results() -> dict:
@@ -163,7 +165,7 @@ def main() -> int:
             install_python_dependencies(stdout_file, stderr_file)
 
             agent_process = subprocess.Popen(
-                ["python3", entrypoint.name],
+                ["python3", entrypoint.name, "-r", str(REQUIREMENT_MARKDOWN_PATH)],
                 cwd=str(AGENT_DIR),
                 stdout=stdout_file,
                 stderr=stderr_file,
@@ -182,7 +184,7 @@ def main() -> int:
                 cwd=str(TESTS_DIR),
                 stdout=stdout_file,
                 stderr=stderr_file,
-                env={**os.environ, "BASE_URL": "http://127.0.0.1:3000"},
+                env={**os.environ},
                 check=False,
             )
 

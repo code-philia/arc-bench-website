@@ -33,6 +33,9 @@ class ExecutionService:
             db.close()
 
     def _run(self, db: Session, submission_service: SubmissionService, submission_id: str, requirement: Requirement) -> None:
+        if requirement.category != "web":
+            raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
+
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.settings.workspaces_root / submission_id
         stdout_path = workspace_path / "artifacts" / "stdout.log"

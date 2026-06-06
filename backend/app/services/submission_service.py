@@ -1,6 +1,7 @@
 import json
 import shutil
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -36,6 +37,8 @@ class SubmissionService:
         requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")
+        if requirement.category != "web":
+            raise ValueError("Only web requirements are supported in v1")
 
         submission_id = uuid.uuid4().hex[:12]
         submission_dir = self.settings.submissions_root / submission_id
@@ -44,6 +47,8 @@ class SubmissionService:
 
         with archive_path.open("wb") as output:
             shutil.copyfileobj(upload.file, output)
+
+        self._validate_python_agent_archive(archive_path)
 
         submission = Submission(
             id=submission_id,
@@ -58,6 +63,31 @@ class SubmissionService:
         self.db.commit()
         self.db.refresh(submission)
         return submission
+
+    @staticmethod
+    def _validate_python_agent_archive(archive_path: Path) -> None:
+        try:
+            with zipfile.ZipFile(archive_path, "r") as archive:
+                members = [Path(info.filename) for info in archive.infolist() if not info.is_dir()]
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Uploaded file is not a valid zip archive") from exc
+
+        if not members:
+            raise ValueError("Uploaded zip archive is empty")
+
+        normalized_members = [member for member in members if member.name and not member.name.startswith(".")]
+        root_level_members = [member for member in normalized_members if len(member.parts) == 1]
+        roots = {member.parts[0] for member in normalized_members if member.parts}
+        if not root_level_members and len(roots) == 1:
+            root_name = next(iter(roots))
+            candidate_paths = [Path(*member.parts[1:]) for member in normalized_members if len(member.parts) > 1 and member.parts[0] == root_name]
+        else:
+            candidate_paths = normalized_members
+
+        root_files = {path.as_posix() for path in candidate_paths if len(path.parts) == 1}
+        missing = [name for name in ("main.py", "requirements.txt") if name not in root_files]
+        if missing:
+            raise ValueError(f"Uploaded zip must include {', '.join(missing)} at the archive root")
 
     def list_submissions(self, requirement_id: str | None = None) -> list[SubmissionSummary]:
         query = select(Submission).order_by(desc(Submission.created_at))

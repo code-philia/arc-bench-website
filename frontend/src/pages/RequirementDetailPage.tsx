@@ -195,7 +195,7 @@ export default function RequirementDetailPage() {
                 <UploadOutlined />
               </div>
               <div className="upload-text">Drop your agent code here</div>
-              <div className="upload-hint">Python only · root main.py/app.py · optional requirements.txt</div>
+              <div className="upload-hint">Python only | root main.py + requirements.txt | entrypoint: python main.py -r &lt;requirements.md&gt;</div>
             </label>
             {file ? (
               <div className="uploaded-file">
