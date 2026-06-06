@@ -91,7 +91,7 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
         "private": True,
         "type": "module",
         "devDependencies": {
-            "@playwright/test": "^1.54.1"
+            "@playwright/test": "1.54.0"
         }
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
