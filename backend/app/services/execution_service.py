@@ -1,6 +1,8 @@
+import json
+import time
 from pathlib import Path
 
-from docker.errors import DockerException
+from docker.errors import DockerException, NotFound
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -48,20 +50,26 @@ class ExecutionService:
         manager = None
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
+        processed_runner_event_count = 0
 
         def emit_event(step_key: str, message: str, status: str = "info") -> None:
             submission_service.append_step_event(submission_id, step_key=step_key, message=message, status=status)
 
-        def import_runner_events() -> None:
+        def import_runner_events() -> list[dict]:
+            nonlocal processed_runner_event_count
             runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
             if not runner_events_path.exists():
-                return
-            for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+                return []
+            imported_events: list[dict] = []
+            lines = runner_events_path.read_text(encoding="utf-8").splitlines()
+            new_lines = lines[processed_runner_event_count:]
+            processed_runner_event_count = len(lines)
+            for raw_line in new_lines:
                 line = raw_line.strip()
                 if not line:
                     continue
                 try:
-                    event = __import__("json").loads(line)
+                    event = json.loads(line)
                 except Exception:
                     debug_log.append("backend", f"Failed to parse runner event line: {line}")
                     continue
@@ -70,6 +78,34 @@ class ExecutionService:
                 status = str(event.get("status", "info")).strip() or "info"
                 if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
                     emit_event(step_key, message, status=status)
+                    imported_events.append({"step_key": step_key, "message": message, "status": status})
+            return imported_events
+
+        def refresh_running_steps(latest_events: list[dict]) -> None:
+            nonlocal active_step_key, completed_steps
+            if not latest_events:
+                return
+            latest_step = latest_events[-1]["step_key"]
+            if latest_step == "run_tests":
+                completed_steps = {"deploy_agent", "start_agent"}
+                active_step_key = "run_tests"
+                description = "Preparing and running tests"
+            elif latest_step == "start_agent":
+                completed_steps = {"deploy_agent"}
+                active_step_key = "start_agent"
+                description = "Running uploaded agent"
+            else:
+                completed_steps = set()
+                active_step_key = "deploy_agent"
+                description = "Preparing workspace"
+            submission_service.update_steps(
+                submission_service.get_submission(submission_id),
+                submission_service.build_step_states(
+                    active_key=active_step_key,
+                    completed=completed_steps,
+                    description=description,
+                ),
+            )
 
         try:
             debug_log.append("backend", f"Execution started for submission {submission_id}")
@@ -124,13 +160,26 @@ class ExecutionService:
             )
             emit_event("start_agent", "Running uploaded agent")
             debug_log.append("backend", f"Waiting for container to exit with timeout={self.settings.runner_timeout_seconds + 30}s")
-
-            exit_result = container.wait(timeout=self.settings.runner_timeout_seconds + 30)
+            wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
+            exit_result = None
+            while time.time() < wait_deadline:
+                latest_events = import_runner_events()
+                if latest_events:
+                    refresh_running_steps(latest_events)
+                try:
+                    container.reload()
+                except NotFound as exc:
+                    raise RuntimeError("Runner container disappeared before completion") from exc
+                if container.status == "exited":
+                    exit_result = container.wait(timeout=5)
+                    break
+                time.sleep(1)
+            if exit_result is None:
+                raise TimeoutError("Runner did not finish before timeout")
             debug_log.append("backend", f"Container exited with result={exit_result}")
-            import_runner_events()
-            emit_event("start_agent", "Uploaded agent run completed", status="success")
-            completed_steps = {"deploy_agent", "start_agent"}
-            active_step_key = "run_tests"
+            latest_events = import_runner_events()
+            if latest_events:
+                refresh_running_steps(latest_events)
             emit_event("run_tests", "Collecting test artifacts")
             stdout, stderr = manager.collect_logs(container)
             if stdout and not stdout_path.exists():
