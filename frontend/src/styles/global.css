@@ -1778,6 +1778,10 @@ button {
   color: var(--accent);
 }
 
+.step-log-item.error {
+  color: var(--fail);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.enums import SubmissionStatus
 from app.db.session import SessionLocal
 from app.models.requirement import Requirement
+from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
 from app.services.result_parser import ResultParser
 from app.services.submission_service import SubmissionService
@@ -41,15 +42,43 @@ class ExecutionService:
         stdout_path = workspace_path / "artifacts" / "stdout.log"
         stderr_path = workspace_path / "artifacts" / "stderr.log"
         result_path = workspace_path / "artifacts" / "result.json"
+        debug_log = DebugLogService(workspace_path)
 
         container = None
         manager = None
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
+
+        def emit_event(step_key: str, message: str, status: str = "info") -> None:
+            submission_service.append_step_event(submission_id, step_key=step_key, message=message, status=status)
+
+        def import_runner_events() -> None:
+            runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+            if not runner_events_path.exists():
+                return
+            for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    event = __import__("json").loads(line)
+                except Exception:
+                    debug_log.append("backend", f"Failed to parse runner event line: {line}")
+                    continue
+                step_key = str(event.get("step_key", "")).strip()
+                message = str(event.get("message", "")).strip()
+                status = str(event.get("status", "info")).strip() or "info"
+                if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
+                    emit_event(step_key, message, status=status)
+
         try:
-            submission_service.append_event_log(submission_id, "[deploy] Preparing workspace")
+            debug_log.append("backend", f"Execution started for submission {submission_id}")
+            debug_log.append("backend", f"Requirement category: {requirement.category}")
+            emit_event("deploy_agent", "Preparing workspace")
             workspace_path = self.assembler.assemble(submission, requirement)
-            submission_service.append_event_log(submission_id, f"[ok] [deploy] Workspace prepared at {workspace_path}")
+            debug_log = DebugLogService(workspace_path)
+            debug_log.append("backend", f"Workspace assembled at {workspace_path}")
+            emit_event("deploy_agent", "Workspace assembled", status="success")
             stdout_path = workspace_path / "artifacts" / "stdout.log"
             stderr_path = workspace_path / "artifacts" / "stderr.log"
             result_path = workspace_path / "artifacts" / "result.json"
@@ -59,19 +88,28 @@ class ExecutionService:
                 submission_service.build_step_states(active_key="deploy_agent", description="Preparing workspace"),
             )
 
-            submission_service.append_event_log(submission_id, "[deploy] Connecting to Docker daemon")
+            emit_event("deploy_agent", "Connecting to Docker daemon")
+            debug_log.append("backend", "Connecting to Docker daemon")
             manager = DockerManager()
-            submission_service.append_event_log(submission_id, "[ok] [deploy] Docker daemon is reachable")
+            debug_log.append("backend", "Docker daemon ping succeeded")
+            emit_event("deploy_agent", "Docker daemon is reachable", status="success")
             submission = submission_service.get_submission(submission_id)
             submission_service.update_steps(
                 submission,
                 submission_service.build_step_states(active_key="deploy_agent", description="Creating runner container"),
             )
-            submission_service.append_event_log(submission_id, "[deploy] Ensuring runner image is available")
-            container = manager.create_container(submission.id, workspace_path)
-            submission_service.append_event_log(submission_id, f"[ok] [deploy] Container created: {container.name}")
+            emit_event("deploy_agent", "Preparing runner image")
+            debug_log.append("backend", f"Ensuring runner image is available: {self.settings.runner_image}")
+            container = manager.create_container(
+                submission.id,
+                workspace_path,
+                log_callback=lambda line: debug_log.append("docker-build", line),
+            )
+            debug_log.append("backend", f"Container created: name={container.name}, id={container.id}")
+            emit_event("deploy_agent", f"Runner container created ({container.name})", status="success")
             manager.start_container(container)
-            submission_service.append_event_log(submission_id, "[ok] [deploy] Container started")
+            debug_log.append("backend", "Container start requested")
+            emit_event("deploy_agent", "Runner container started", status="success")
             completed_steps = {"deploy_agent"}
             active_step_key = "start_agent"
 
@@ -81,19 +119,26 @@ class ExecutionService:
                 submission_service.build_step_states(
                     active_key="start_agent",
                     completed={"deploy_agent"},
-                    description="Starting uploaded agent",
+                    description="Running uploaded agent",
                 ),
             )
-            submission_service.append_event_log(submission_id, "[start] Waiting for runner process to complete")
+            emit_event("start_agent", "Running uploaded agent")
+            debug_log.append("backend", f"Waiting for container to exit with timeout={self.settings.runner_timeout_seconds + 30}s")
 
             exit_result = container.wait(timeout=self.settings.runner_timeout_seconds + 30)
-            submission_service.append_event_log(submission_id, f"[ok] [start] Runner process exited with status code {exit_result.get('StatusCode', 'unknown')}")
+            debug_log.append("backend", f"Container exited with result={exit_result}")
+            import_runner_events()
+            emit_event("start_agent", "Uploaded agent run completed", status="success")
             completed_steps = {"deploy_agent", "start_agent"}
             active_step_key = "run_tests"
+            emit_event("run_tests", "Collecting test artifacts")
             stdout, stderr = manager.collect_logs(container)
-            stdout_path.write_text(stdout, encoding="utf-8")
-            stderr_path.write_text(stderr, encoding="utf-8")
-            submission_service.append_event_log(submission_id, "[ok] [test] Runner stdout/stderr collected")
+            if stdout and not stdout_path.exists():
+                stdout_path.write_text(stdout, encoding="utf-8")
+            if stderr and not stderr_path.exists():
+                stderr_path.write_text(stderr, encoding="utf-8")
+            debug_log.append("backend", f"Collected container logs: stdout_bytes={len(stdout.encode('utf-8'))}, stderr_bytes={len(stderr.encode('utf-8'))}")
+            emit_event("run_tests", "Test artifacts collected", status="success")
 
             submission = submission_service.get_submission(submission_id)
             submission_service.update_steps(
@@ -101,18 +146,23 @@ class ExecutionService:
                 submission_service.build_step_states(
                     active_key="run_tests",
                     completed={"deploy_agent", "start_agent"},
-                    description="Collecting test results",
+                    description="Preparing and running tests",
                 ),
             )
 
             parsed = self.result_parser.parse(result_path)
-            submission_service.append_event_log(submission_id, f"[ok] [test] Parsed test results: passed={parsed['passed']}, failed={parsed['failed']}, score={parsed['score']}")
+            debug_log.append("backend", f"Parsed result file at {result_path}: {parsed}")
+            emit_event(
+                "run_tests",
+                f"Test results parsed: passed={parsed['passed']}, failed={parsed['failed']}, score={parsed['score']}",
+                status="success",
+            )
             status = SubmissionStatus.PASSED if parsed["failed"] == 0 and exit_result.get("StatusCode", 1) == 0 else SubmissionStatus.FAILED
             failure_reason = None if status == SubmissionStatus.PASSED else "Runner exited with test failures or runtime errors"
             if status == SubmissionStatus.PASSED:
-                submission_service.append_event_log(submission_id, "[ok] [test] Submission finished successfully")
+                emit_event("run_tests", "Submission finished successfully", status="success")
             else:
-                submission_service.append_event_log(submission_id, f"[test] Submission failed: {failure_reason}")
+                emit_event("run_tests", failure_reason, status="error")
             submission_service.update_steps(
                 submission_service.get_submission(submission_id),
                 submission_service.build_step_states(completed={"deploy_agent", "start_agent", "run_tests"}),
@@ -128,14 +178,11 @@ class ExecutionService:
                 result_path=result_path if result_path.exists() else None,
                 failure_reason=failure_reason,
             )
+            debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
         except Exception as exc:  # noqa: BLE001
             submission = submission_service.get_submission(submission_id)
-            log_prefix = {
-                "deploy_agent": "deploy",
-                "start_agent": "start",
-                "run_tests": "test",
-            }.get(active_step_key, "system")
-            submission_service.append_event_log(submission_id, f"[{log_prefix}] Failure: {exc}")
+            emit_event(active_step_key, str(exc), status="error")
+            debug_log.append("backend", f"Execution failed during {active_step_key}: {exc}")
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
             if stdout_path.exists() is False:
                 stdout_path.write_text("", encoding="utf-8")
@@ -160,11 +207,13 @@ class ExecutionService:
                 result_path=result_path if result_path.exists() else None,
                 failure_reason=str(exc),
             )
+            debug_log.append("backend", "Failure state persisted to database")
         finally:
             if manager is not None and container is not None:
                 try:
-                    submission_service.append_event_log(submission_id, "[deploy] Removing container")
+                    debug_log.append("backend", f"Removing container {container.name}")
                     manager.remove_container(container)
-                    submission_service.append_event_log(submission_id, "[ok] [deploy] Container removed")
+                    debug_log.append("backend", "Container removed")
                 except DockerException:
+                    debug_log.append("backend", "Container removal failed with DockerException")
                     pass

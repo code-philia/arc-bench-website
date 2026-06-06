@@ -34,6 +34,12 @@ class WorkspaceAssembler:
         shutil.copy2(Path(requirement.requirements_path), requirement_dir / "requirements.md")
         shutil.copy2(Path(requirement.prerequisites_path), requirement_dir / "prerequisites.md")
         shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
+
+        debug_log_path = workspace_root / "execution.debug.log"
+        debug_log_path.write_text(
+            "Workspace assembled successfully.\n",
+            encoding="utf-8",
+        )
         return workspace_root
 
     @staticmethod

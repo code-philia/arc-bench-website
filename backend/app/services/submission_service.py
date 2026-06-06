@@ -4,6 +4,7 @@ import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import UploadFile
 from sqlalchemy import desc, select
@@ -18,7 +19,7 @@ from app.schemas.submission import StepState, SubmissionDetail, SubmissionSummar
 
 DEFAULT_STEPS = [
     StepState(key="deploy_agent", title="Deploy Agent", status="pending", description="Waiting"),
-    StepState(key="start_agent", title="Start Agent", status="pending", description="Waiting"),
+    StepState(key="start_agent", title="Run Agent", status="pending", description="Waiting"),
     StepState(key="run_tests", title="Run Tests", status="pending", description="Waiting"),
 ]
 
@@ -75,6 +76,26 @@ class SubmissionService:
             output.write(f"[{timestamp}] {message}\n")
         return log_path
 
+    def append_step_event(
+        self,
+        submission_id: str,
+        step_key: Literal["deploy_agent", "start_agent", "run_tests"],
+        message: str,
+        status: Literal["info", "success", "error"] = "info",
+    ) -> Path:
+        submission_dir = self.settings.submissions_root / submission_id
+        submission_dir.mkdir(parents=True, exist_ok=True)
+        log_path = submission_dir / "events.log"
+        payload = {
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "step_key": step_key,
+            "status": status,
+            "message": message,
+        }
+        with log_path.open("a", encoding="utf-8") as output:
+            output.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        return log_path
+
     def get_event_log_path(self, submission: Submission) -> Path:
         return self.settings.submissions_root / submission.id / "events.log"
 
@@ -120,7 +141,7 @@ class SubmissionService:
         event_lines: list[str] = []
         event_log_path = self.get_event_log_path(submission)
         if event_log_path.exists():
-            event_lines = [line.strip() for line in event_log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            event_lines = self.read_event_lines(submission)
         steps = [StepState.model_validate(step) for step in json.loads(submission.steps_json or "[]")]
         steps = self.attach_step_logs(steps, event_lines)
         tests = []
@@ -147,6 +168,43 @@ class SubmissionService:
             logs_available=bool(submission.stdout_path or submission.stderr_path),
             tests=tests,
         )
+
+    def read_events(self, submission: Submission) -> list[dict]:
+        event_log_path = self.get_event_log_path(submission)
+        if not event_log_path.exists():
+            return []
+        events: list[dict] = []
+        for raw_line in event_log_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            timestamp = str(parsed.get("timestamp", "")).strip()
+            step_key = str(parsed.get("step_key", "")).strip()
+            status = str(parsed.get("status", "info")).strip() or "info"
+            message = str(parsed.get("message", "")).strip()
+            if not timestamp or not step_key or not message:
+                continue
+            events.append(
+                {
+                    "timestamp": timestamp,
+                    "step_key": step_key,
+                    "status": status,
+                    "message": message,
+                }
+            )
+        return events
+
+    def read_event_lines(self, submission: Submission) -> list[str]:
+        return [
+            f"[{event['timestamp']}] [{event['step_key']}] [{event['status']}] {event['message']}"
+            for event in self.read_events(submission)
+        ]
 
     def update_steps(self, submission: Submission, steps: list[StepState]) -> None:
         submission.steps_json = json.dumps([step.model_dump() for step in steps])
@@ -228,14 +286,15 @@ class SubmissionService:
 
     @staticmethod
     def attach_step_logs(steps: list[StepState], event_lines: list[str]) -> list[StepState]:
-        prefixes = {
-            "deploy_agent": ("[deploy]",),
-            "start_agent": ("[start]",),
-            "run_tests": ("[test]",),
+        step_prefixes = {
+            "deploy_agent": "[deploy_agent]",
+            "start_agent": "[start_agent]",
+            "run_tests": "[run_tests]",
         }
         enriched: list[StepState] = []
         for step in steps:
-            step_logs = [line for line in event_lines if any(prefix in line for prefix in prefixes.get(step.key, tuple()))]
+            prefix = step_prefixes.get(step.key)
+            step_logs = [line.replace(f"{prefix} ", "", 1) for line in event_lines if prefix and prefix in line]
             step_data = step.model_dump()
             step_data["logs"] = step_logs[-5:]
             enriched.append(StepState(**step_data))

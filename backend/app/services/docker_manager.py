@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import docker
-from docker.errors import APIError, BuildError, DockerException, ImageNotFound
+from docker.errors import APIError, BuildError, DockerException
 
 from app.core.config import get_settings
 
@@ -15,22 +15,35 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_daemon_error(exc)) from exc
 
-    def ensure_image(self) -> None:
+    def ensure_image(self, log_callback=None) -> None:
         try:
-            self.client.images.get(self.settings.runner_image)
-        except ImageNotFound:
-            try:
-                self.client.images.build(
-                    path=str(self.settings.runner_context_dir),
-                    tag=self.settings.runner_image,
-                )
-            except BuildError as exc:
-                raise RuntimeError(self._format_build_error(exc)) from exc
-            except DockerException as exc:
-                raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
+            if log_callback is not None:
+                log_callback(f"Rebuilding runner image: {self.settings.runner_image}")
+            _, build_logs = self.client.images.build(
+                path=str(self.settings.runner_context_dir),
+                tag=self.settings.runner_image,
+                rm=True,
+                pull=False,
+                nocache=True,
+                forcerm=True,
+            )
+            if log_callback is not None:
+                for entry in build_logs:
+                    line = self._stringify_build_log_entry(entry)
+                    if line:
+                        log_callback(line)
+        except BuildError as exc:
+            if log_callback is not None:
+                for entry in getattr(exc, "build_log", []) or []:
+                    line = self._stringify_build_log_entry(entry)
+                    if line:
+                        log_callback(line)
+            raise RuntimeError(self._format_build_error(exc)) from exc
+        except DockerException as exc:
+            raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
 
-    def create_container(self, submission_id: str, workspace_path: str | Path):
-        self.ensure_image()
+    def create_container(self, submission_id: str, workspace_path: str | Path, log_callback=None):
+        self.ensure_image(log_callback=log_callback)
         return self.client.containers.create(
             self.settings.runner_image,
             name=f"arcbench-{submission_id}",
@@ -43,7 +56,6 @@ class DockerManager:
             volumes={str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
             mem_limit=self.settings.runner_memory_limit,
             nano_cpus=self.settings.runner_cpu_limit * 1_000_000_000,
-            user="1000:1000",
             working_dir="/workspace",
         )
 
@@ -93,3 +105,23 @@ class DockerManager:
         if isinstance(exc, APIError):
             return f"{prefix}. Docker API error: {message}"
         return f"{prefix}: {message}"
+
+    @staticmethod
+    def _stringify_build_log_entry(entry: dict) -> str:
+        stream = entry.get("stream")
+        if stream:
+            return stream.strip()
+        error = entry.get("error") or entry.get("errorDetail", {}).get("message")
+        if error:
+            return f"ERROR: {error}"
+        status = entry.get("status")
+        progress = entry.get("progress")
+        identifier = entry.get("id")
+        if status:
+            parts = [status]
+            if identifier:
+                parts.append(identifier)
+            if progress:
+                parts.append(progress)
+            return " ".join(parts).strip()
+        return ""

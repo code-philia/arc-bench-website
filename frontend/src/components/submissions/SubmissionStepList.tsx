@@ -46,6 +46,12 @@ export default function SubmissionStepList({
 }: SubmissionStepListProps) {
   const resolvedSteps = normalizeSteps(steps, submissionStatus, failureReason);
 
+  const logClassName = (logLine: string) => {
+    if (logLine.includes("[success]")) return "step-log-item success";
+    if (logLine.includes("[error]")) return "step-log-item error";
+    return "step-log-item";
+  };
+
   return (
     <div className="stepper">
       {resolvedSteps.map((step, index) => (
@@ -60,10 +66,7 @@ export default function SubmissionStepList({
             {step.logs.length ? (
               <div className="step-log-list">
                 {step.logs.map((logLine) => (
-                  <div
-                    key={logLine}
-                    className={`step-log-item${logLine.includes("[ok]") ? " success" : ""}`}
-                  >
+                  <div key={logLine} className={logClassName(logLine)}>
                     {logLine}
                   </div>
                 ))}
