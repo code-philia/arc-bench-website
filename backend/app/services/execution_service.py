@@ -44,6 +44,8 @@ class ExecutionService:
 
         container = None
         manager = None
+        active_step_key = "deploy_agent"
+        completed_steps: set[str] = set()
         try:
             workspace_path = self.assembler.assemble(submission, requirement)
             stdout_path = workspace_path / "artifacts" / "stdout.log"
@@ -63,6 +65,8 @@ class ExecutionService:
             )
             container = manager.create_container(submission.id, workspace_path)
             manager.start_container(container)
+            completed_steps = {"deploy_agent"}
+            active_step_key = "start_agent"
 
             submission = submission_service.get_submission(submission_id)
             submission_service.update_steps(
@@ -75,6 +79,8 @@ class ExecutionService:
             )
 
             exit_result = container.wait(timeout=self.settings.runner_timeout_seconds + 30)
+            completed_steps = {"deploy_agent", "start_agent"}
+            active_step_key = "run_tests"
             stdout, stderr = manager.collect_logs(container)
             stdout_path.write_text(stdout, encoding="utf-8")
             stderr_path.write_text(stderr, encoding="utf-8")
@@ -114,6 +120,14 @@ class ExecutionService:
                 stdout_path.write_text("", encoding="utf-8")
             if stderr_path.exists() is False:
                 stderr_path.write_text(str(exc), encoding="utf-8")
+            submission_service.update_steps(
+                submission,
+                submission_service.build_failed_step_states(
+                    failed_key=active_step_key,
+                    reason=str(exc),
+                    completed=completed_steps,
+                ),
+            )
             submission_service.finalize(
                 submission,
                 status=SubmissionStatus.FAILED,

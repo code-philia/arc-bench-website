@@ -183,3 +183,26 @@ class SubmissionService:
                 step_description = description or "Running"
             steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description))
         return steps
+
+    @staticmethod
+    def build_failed_step_states(failed_key: str, reason: str, completed: set[str] | None = None) -> list[StepState]:
+        completed = completed or set()
+        steps: list[StepState] = []
+        failure_assigned = False
+        for step in DEFAULT_STEPS:
+            if step.key in completed:
+                status = "completed"
+                step_description = "Done"
+            elif not failure_assigned and step.key == failed_key:
+                status = "failed"
+                step_description = reason
+                failure_assigned = True
+            elif not failure_assigned and step.key not in completed:
+                status = "failed"
+                step_description = reason
+                failure_assigned = True
+            else:
+                status = "pending"
+                step_description = "Not reached"
+            steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description))
+        return steps
