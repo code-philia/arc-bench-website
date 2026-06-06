@@ -3,8 +3,9 @@ import {
 } from "antd";
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthContext";
 import MarkdownDocument, { extractHeadings } from "../components/requirements/MarkdownDocument";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
@@ -19,6 +20,8 @@ function submissionBadgeClass(status: string) {
 
 export default function RequirementDetailPage() {
   const { requirementId = "12306" } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [requirement, setRequirement] = useState<RequirementDetail | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState("readme");
@@ -32,17 +35,32 @@ export default function RequirementDetailPage() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([api.getRequirement(requirementId), api.listSubmissions(requirementId)])
-      .then(([detail, history]) => {
+    api
+      .getRequirement(requirementId)
+      .then((detail) => {
         setRequirement(detail);
-        setSubmissions(history);
+        if (!user) {
+          setSubmissions([]);
+          return;
+        }
+        return api.listSubmissions(requirementId).then(setSubmissions).catch(() => setSubmissions([]));
       })
       .catch((error: Error) => {
         message.error(error.message);
         setRequirement(null);
       })
       .finally(() => setLoading(false));
-  }, [requirementId]);
+  }, [requirementId, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setActiveSubmission(null);
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     return () => {
@@ -76,6 +94,10 @@ export default function RequirementDetailPage() {
 
   const handleUpload = async () => {
     if (!requirement || !file) {
+      return;
+    }
+    if (!user) {
+      navigate("/login", { state: { from: `/requirements/${requirement.id}` } });
       return;
     }
     try {
@@ -206,6 +228,9 @@ export default function RequirementDetailPage() {
               <div className="upload-text">Drop your agent code here</div>
               <div className="upload-hint">Python only | root main.py + requirements.txt | entrypoint: python main.py -r &lt;requirements.md&gt;</div>
             </label>
+            {!user ? (
+              <div className="inline-alert">Login is required before uploading an agent or viewing your submission history.</div>
+            ) : null}
             <div className="submission-name-field">
               <label className="field-label" htmlFor="submission-name">
                 Submission Name
@@ -233,7 +258,7 @@ export default function RequirementDetailPage() {
               </div>
             ) : null}
             {uploadError ? <div className="inline-alert error">{uploadError}</div> : null}
-            <button className="btn-primary" type="button" disabled={!file} onClick={handleUpload}>
+            <button className="btn-primary" type="button" disabled={!file || !user} onClick={handleUpload}>
               Start Test
             </button>
           </div>
@@ -267,7 +292,9 @@ export default function RequirementDetailPage() {
 
           <div className="action-section">
             <div className="action-section-title">Submission History</div>
-            {submissions.length === 0 ? (
+            {!user ? (
+              <div className="empty-state compact">Login to view your submission history.</div>
+            ) : submissions.length === 0 ? (
               <div className="empty-state compact">No submissions yet.</div>
             ) : (
               <table className="task-table compact">

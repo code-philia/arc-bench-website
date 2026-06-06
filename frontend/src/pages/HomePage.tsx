@@ -2,6 +2,7 @@ import { ArrowRightOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
 import type { RequirementSummary, SubmissionSummary } from "../lib/types";
 
@@ -204,6 +205,7 @@ function submissionTitle(submission: SubmissionSummary) {
 }
 
 export default function HomePage() {
+  const { user, isLoading } = useAuth();
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeTab, setActiveTab] = useState<BoardTab>("all");
@@ -217,8 +219,15 @@ export default function HomePage() {
 
   useEffect(() => {
     api.listRequirements().then(setRequirements).catch(() => undefined);
-    api.listSubmissions().then((items) => setSubmissions(items.slice(0, 6))).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setSubmissions([]);
+      return;
+    }
+    api.listSubmissions().then((items) => setSubmissions(items.slice(0, 6))).catch(() => setSubmissions([]));
+  }, [user]);
 
   return (
     <div className="page home-page">
@@ -418,15 +427,19 @@ export default function HomePage() {
             <div>
               <div className="leaderboard-clean-title">Recent Submissions</div>
               <div className="leaderboard-clean-subtitle">
-                Latest runs across all requirements, with custom submission names when provided.
+                {user
+                  ? "Latest runs from your account, with custom submission names when provided."
+                  : "Login to see your recent runs and private submission history."}
               </div>
             </div>
-            <Link className="inline-link" to="/requirements">
-              Browse competitions
+            <Link className="inline-link" to={user ? "/requirements" : "/login"}>
+              {user ? "Browse competitions" : "Login"}
             </Link>
           </div>
 
-          {submissions.length === 0 ? (
+          {!user && !isLoading ? (
+            <div className="empty-state">Login to view your submission history.</div>
+          ) : submissions.length === 0 ? (
             <div className="empty-state">No submissions yet.</div>
           ) : (
             <div className="recent-list-grid">

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { message } from "antd";
 import { BulbOutlined, CodeOutlined, PlayCircleOutlined, TrophyOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
+
+import { useAuth } from "../../auth/AuthContext";
 
 type NavItem = {
   to: string;
@@ -33,6 +36,7 @@ function isNavItemActive(pathname: string, item: NavItem) {
 export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, isLoading } = useAuth();
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = window.localStorage.getItem("theme");
     return saved === "light" ? "light" : "dark";
@@ -42,6 +46,23 @@ export default function AppShell() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("theme", theme);
   }, [theme]);
+
+  const initials = useMemo(() => {
+    if (!user) {
+      return "";
+    }
+    return user.username.slice(0, 2).toUpperCase();
+  }, [user]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      message.success("Signed out.");
+      navigate("/");
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -69,9 +90,27 @@ export default function AppShell() {
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? "☀" : "☾"}
+            {theme === "dark" ? "Light" : "Dark"}
           </button>
-          <div className="nav-avatar">U</div>
+          {isLoading ? null : user ? (
+            <div className="nav-auth-group">
+              <div className="nav-avatar" title={user.username}>
+                {initials}
+              </div>
+              <button className="nav-auth-link" type="button" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div className="nav-auth-group">
+              <NavLink to="/login" className="nav-auth-link">
+                Login
+              </NavLink>
+              <NavLink to="/register" className="nav-auth-link nav-auth-link-primary">
+                Register
+              </NavLink>
+            </div>
+          )}
         </div>
       </nav>
       <main className="shell-content">

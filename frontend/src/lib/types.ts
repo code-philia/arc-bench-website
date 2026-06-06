@@ -86,3 +86,14 @@ export type SubmissionLogs = {
   stdout: string;
   stderr: string;
 };
+
+export type UserSummary = {
+  id: string;
+  email: string;
+  username: string;
+  created_at: string;
+};
+
+export type AuthResponse = {
+  user: UserSummary;
+};
