@@ -217,7 +217,11 @@ export default function RequirementDetailPage() {
           <div className="action-section">
             <div className="action-section-title">Progress</div>
             {activeSubmission ? (
-              <SubmissionStepList steps={activeSubmission.steps} />
+              <SubmissionStepList
+                steps={activeSubmission.steps}
+                submissionStatus={activeSubmission.status}
+                failureReason={activeSubmission.failure_reason}
+              />
             ) : (
               <div className="empty-state compact">No active submission.</div>
             )}

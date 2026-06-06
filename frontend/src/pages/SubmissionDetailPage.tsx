@@ -83,7 +83,11 @@ export default function SubmissionDetailPage() {
       <div className="submission-grid">
         <section className="action-section">
           <div className="action-section-title">Run Status</div>
-          <SubmissionStepList steps={submission.steps} />
+          <SubmissionStepList
+            steps={submission.steps}
+            submissionStatus={submission.status}
+            failureReason={submission.failure_reason}
+          />
         </section>
 
         <section className="action-section">
