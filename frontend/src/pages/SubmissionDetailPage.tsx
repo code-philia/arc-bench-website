@@ -6,6 +6,27 @@ import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
 import type { SubmissionDetail, SubmissionLogs } from "../lib/types";
 
+function formatDateTime(value: string | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString();
+}
+
+function formatDuration(startedAt: string | null, finishedAt: string | null) {
+  if (!startedAt) return "-";
+  const start = new Date(startedAt).getTime();
+  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+  const totalSeconds = Math.max(0, Math.round((end - start) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+function resultSummary(submission: SubmissionDetail) {
+  const total = submission.passed_count + submission.failed_count;
+  if (total === 0) return "No test results yet";
+  return `${submission.passed_count}/${total} passed`;
+}
+
 export default function SubmissionDetailPage() {
   const { submissionId = "" } = useParams();
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
@@ -64,19 +85,46 @@ export default function SubmissionDetailPage() {
   return (
     <div className="page submission-page">
       <div className="submission-hero">
-        <div>
-          <div className="muted">Submission</div>
-          <h1>{submission.id}</h1>
-          <p className="muted">
-            {submission.requirement_id} / {submission.runtime} / {submission.status}
-          </p>
+        <div className="submission-hero-main">
+          <div>
+            <div className="muted">Submission</div>
+            <h1>{submission.id}</h1>
+            <p className="muted">
+              {submission.requirement_id} / {submission.runtime} / {submission.status}
+            </p>
+          </div>
+          <div className="submission-meta-grid">
+            <div className="submission-meta-card">
+              <div className="submission-meta-label">Created</div>
+              <div className="submission-meta-value">{formatDateTime(submission.created_at)}</div>
+            </div>
+            <div className="submission-meta-card">
+              <div className="submission-meta-label">Started</div>
+              <div className="submission-meta-value">{formatDateTime(submission.started_at)}</div>
+            </div>
+            <div className="submission-meta-card">
+              <div className="submission-meta-label">Duration</div>
+              <div className="submission-meta-value">{formatDuration(submission.started_at, submission.finished_at)}</div>
+            </div>
+            <div className="submission-meta-card">
+              <div className="submission-meta-label">Results</div>
+              <div className="submission-meta-value">{resultSummary(submission)}</div>
+            </div>
+          </div>
         </div>
-        <div className="submission-score">{submission.score?.toFixed(1) ?? "--"}</div>
+        <div className="submission-hero-side">
+          <div className="submission-score">{submission.score?.toFixed(1) ?? "--"}</div>
+          <div className={`test-badge ${submission.status === "PASSED" ? "pass" : submission.status === "FAILED" ? "fail" : "pending"}`}>
+            {submission.status}
+          </div>
+        </div>
       </div>
 
       {submission.failure_reason ? (
-        <div className="inline-alert error" style={{ marginBottom: 16 }}>
-          {submission.failure_reason}
+        <div className="submission-alert-wrap">
+          <div className="inline-alert error submission-alert">
+            {submission.failure_reason}
+          </div>
         </div>
       ) : null}
 
