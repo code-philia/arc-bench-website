@@ -10,6 +10,7 @@ class Submission(Base):
     __tablename__ = "submissions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     requirement_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     runtime: Mapped[str] = mapped_column(String(32), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)

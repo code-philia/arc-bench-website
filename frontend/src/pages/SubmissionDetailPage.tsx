@@ -88,12 +88,16 @@ export default function SubmissionDetailPage() {
         <div className="submission-hero-main">
           <div>
             <div className="muted">Submission</div>
-            <h1>{submission.id}</h1>
+            <h1>{submission.display_name || submission.id}</h1>
             <p className="muted">
               {submission.requirement_id} / {submission.runtime} / {submission.status}
             </p>
           </div>
           <div className="submission-meta-grid">
+            <div className="submission-meta-card">
+              <div className="submission-meta-label">Submission ID</div>
+              <div className="submission-meta-value">{submission.id}</div>
+            </div>
             <div className="submission-meta-card">
               <div className="submission-meta-label">Created</div>
               <div className="submission-meta-value">{formatDateTime(submission.created_at)}</div>

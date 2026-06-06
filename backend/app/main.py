@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from sqlalchemy import inspect, text
 
 from app.api.routes import health, requirements, submissions
 from app.core.config import get_settings
@@ -33,6 +34,11 @@ def on_startup() -> None:
     settings.workspaces_root.mkdir(parents=True, exist_ok=True)
     settings.artifacts_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        submission_columns = {column["name"] for column in inspector.get_columns("submissions")}
+        if "display_name" not in submission_columns:
+            connection.execute(text("ALTER TABLE submissions ADD COLUMN display_name VARCHAR(120)"))
     db = SessionLocal()
     try:
         RequirementCatalogService(db).sync()

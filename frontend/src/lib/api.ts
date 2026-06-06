@@ -34,10 +34,13 @@ export const api = {
   getSubmissionLogs(submissionId: string) {
     return request<SubmissionLogs>(`/submissions/${submissionId}/logs`);
   },
-  async createSubmission(requirementId: string, runtime: string, file: File) {
+  async createSubmission(requirementId: string, runtime: string, file: File, displayName?: string) {
     const form = new FormData();
     form.append("requirement_id", requirementId);
     form.append("runtime", runtime);
+    if (displayName && displayName.trim()) {
+      form.append("display_name", displayName.trim());
+    }
     form.append("file", file);
     return request<{ submission: SubmissionSummary }>("/submissions", {
       method: "POST",

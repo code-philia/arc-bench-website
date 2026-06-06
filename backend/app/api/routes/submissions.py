@@ -23,11 +23,12 @@ def list_submissions(requirement_id: str | None = None, db: Session = Depends(ge
 def create_submission(
     requirement_id: str = Form(...),
     runtime: RuntimeType = Form(...),
+    display_name: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> SubmissionCreateResponse:
     try:
-        submission = SubmissionService(db).create_submission(requirement_id, runtime, file)
+        submission = SubmissionService(db).create_submission(requirement_id, runtime, file, display_name=display_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:

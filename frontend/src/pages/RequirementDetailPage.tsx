@@ -24,6 +24,7 @@ export default function RequirementDetailPage() {
   const [activeDoc, setActiveDoc] = useState("readme");
   const [runtime, setRuntime] = useState("python");
   const [file, setFile] = useState<File | null>(null);
+  const [displayName, setDisplayName] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeSubmission, setActiveSubmission] = useState<SubmissionDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,11 +80,12 @@ export default function RequirementDetailPage() {
     }
     try {
       setUploadError(null);
-      const created = await api.createSubmission(requirement.id, runtime, file);
+      const created = await api.createSubmission(requirement.id, runtime, file, displayName);
       setSubmissions((current) => [created.submission, ...current]);
       const started = await api.startSubmission(created.submission.id);
       setActiveSubmission(started);
       beginPolling(created.submission.id);
+      setDisplayName("");
       message.success("Submission created and queued.");
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -204,6 +206,20 @@ export default function RequirementDetailPage() {
               <div className="upload-text">Drop your agent code here</div>
               <div className="upload-hint">Python only | root main.py + requirements.txt | entrypoint: python main.py -r &lt;requirements.md&gt;</div>
             </label>
+            <div className="submission-name-field">
+              <label className="field-label" htmlFor="submission-name">
+                Submission Name
+              </label>
+              <input
+                id="submission-name"
+                className="text-input"
+                type="text"
+                maxLength={120}
+                placeholder="MyAgent_v1"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </div>
             {file ? (
               <div className="uploaded-file">
                 <div className="file-icon">.zip</div>
@@ -257,7 +273,7 @@ export default function RequirementDetailPage() {
               <table className="task-table compact">
                 <thead>
                   <tr>
-                    <th>Submission ID</th>
+                    <th>Submission</th>
                     <th style={{ width: "100px" }}>Status</th>
                     <th style={{ width: "80px" }}>Score</th>
                     <th style={{ width: "170px" }}>Created</th>
@@ -268,8 +284,9 @@ export default function RequirementDetailPage() {
                     <tr key={record.id}>
                       <td>
                         <Link className="inline-link" to={`/submissions/${record.id}`}>
-                          {record.id}
+                          {record.display_name || record.id}
                         </Link>
+                        {record.display_name ? <div className="table-sub mono-sub">{record.id}</div> : null}
                       </td>
                       <td>
                         <span className={`test-badge ${submissionBadgeClass(record.status)}`}>

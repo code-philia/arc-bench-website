@@ -13,6 +13,7 @@ class StepState(BaseModel):
 
 class SubmissionSummary(BaseModel):
     id: str
+    display_name: str | None
     requirement_id: str
     runtime: str
     original_filename: str

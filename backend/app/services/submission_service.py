@@ -29,7 +29,13 @@ class SubmissionService:
         self.db = db
         self.settings = get_settings()
 
-    def create_submission(self, requirement_id: str, runtime: RuntimeType, upload: UploadFile) -> Submission:
+    def create_submission(
+        self,
+        requirement_id: str,
+        runtime: RuntimeType,
+        upload: UploadFile,
+        display_name: str | None = None,
+    ) -> Submission:
         if not upload.filename or not upload.filename.lower().endswith(".zip"):
             raise ValueError("Only .zip uploads are supported")
         if runtime != RuntimeType.PYTHON:
@@ -53,8 +59,11 @@ class SubmissionService:
         self.append_event_log(submission_id, f"[ok] Uploaded archive saved to {archive_path.name}")
         self.append_event_log(submission_id, "[ok] Archive validation passed")
 
+        normalized_display_name = self._normalize_display_name(display_name)
+
         submission = Submission(
             id=submission_id,
+            display_name=normalized_display_name,
             requirement_id=requirement_id,
             runtime=runtime.value,
             original_filename=upload.filename,
@@ -75,6 +84,17 @@ class SubmissionService:
         with log_path.open("a", encoding="utf-8") as output:
             output.write(f"[{timestamp}] {message}\n")
         return log_path
+
+    @staticmethod
+    def _normalize_display_name(display_name: str | None) -> str | None:
+        if display_name is None:
+            return None
+        normalized = " ".join(display_name.strip().split())
+        if not normalized:
+            return None
+        if len(normalized) > 120:
+            raise ValueError("Submission name must be 120 characters or fewer")
+        return normalized
 
     def append_step_event(
         self,
@@ -149,6 +169,7 @@ class SubmissionService:
             tests = json.loads(Path(submission.result_path).read_text(encoding="utf-8")).get("tests", [])
         return SubmissionDetail(
             id=submission.id,
+            display_name=submission.display_name,
             requirement_id=submission.requirement_id,
             runtime=submission.runtime,
             original_filename=submission.original_filename,
