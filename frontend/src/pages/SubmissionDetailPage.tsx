@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthContext";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import type { SubmissionDetail, SubmissionLogs } from "../lib/types";
 
 function formatDateTime(value: string | null) {
@@ -29,13 +30,18 @@ function resultSummary(submission: SubmissionDetail) {
 
 export default function SubmissionDetailPage() {
   const { submissionId = "" } = useParams();
+  const { user } = useAuth();
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"results" | "events" | "stdout" | "stderr">("results");
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
+    setLoadError(null);
+    setLoadErrorStatus(null);
     Promise.all([api.getSubmission(submissionId), api.getSubmissionLogs(submissionId)])
       .then(([detail, latestLogs]) => {
         setSubmission(detail);
@@ -46,6 +52,12 @@ export default function SubmissionDetailPage() {
             api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
           }, 2000);
         }
+      })
+      .catch((error: Error) => {
+        setSubmission(null);
+        setLogs(null);
+        setLoadError(error.message);
+        setLoadErrorStatus(error instanceof ApiError ? error.status : null);
       })
       .finally(() => setLoading(false));
 
@@ -75,9 +87,25 @@ export default function SubmissionDetailPage() {
   }
 
   if (!submission) {
+    const loginRequired = loadErrorStatus === 401;
     return (
       <div className="page centered">
-        <div className="empty-state">Submission not found.</div>
+        <div className="empty-state">
+          {loginRequired
+            ? "Login is required to view this submission."
+            : loadError || "Submission not found."}
+          <div style={{ marginTop: 8 }}>
+            {loginRequired || !user ? (
+              <Link className="inline-link" to="/login">
+                Login
+              </Link>
+            ) : (
+              <Link className="inline-link" to="/requirements">
+                Back to competitions
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

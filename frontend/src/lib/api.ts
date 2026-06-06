@@ -1,4 +1,5 @@
 import type {
+  AuthResponse,
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
@@ -10,16 +11,56 @@ import type {
 
 const API_BASE = "/api";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init);
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    ...init,
+    headers: {
+      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...(init?.headers ?? {}),
+    },
+  });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(payload.detail ?? "Request failed");
+    throw new ApiError(payload.detail ?? "Request failed", response.status);
+  }
+  if (response.status === 204) {
+    return undefined as T;
   }
   return response.json() as Promise<T>;
 }
 
 export const api = {
+  getCurrentUser() {
+    return request<AuthResponse>("/auth/me");
+  },
+  register(payload: { email: string; username: string; password: string }) {
+    return request<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  login(payload: { email: string; password: string }) {
+    return request<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  logout() {
+    return request<{ detail: string }>("/auth/logout", {
+      method: "POST",
+    });
+  },
   listCompetitions() {
     return request<CompetitionSummary[]>("/competitions");
   },
