@@ -1,5 +1,5 @@
 import { message } from "antd";
-import { BulbOutlined, CodeOutlined, PlayCircleOutlined, TrophyOutlined } from "@ant-design/icons";
+import { BulbOutlined, CodeOutlined, MoonOutlined, PlayCircleOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
@@ -90,7 +90,7 @@ export default function AppShell() {
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? "Light" : "Dark"}
+            {theme === "dark" ? <SunOutlined /> : <MoonOutlined />}
           </button>
           {isLoading ? null : user ? (
             <div className="nav-auth-group">
