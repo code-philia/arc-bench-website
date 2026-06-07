@@ -45,6 +45,7 @@ class SubmissionService:
         upload: UploadFile,
         user_id: str,
         display_name: str | None = None,
+        model_name: str | None = None,
     ) -> Submission:
         if not upload.filename or not upload.filename.lower().endswith(".zip"):
             raise ValueError("Only .zip uploads are supported")
@@ -72,11 +73,13 @@ class SubmissionService:
         self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Archive validation passed")
 
         normalized_display_name = self._normalize_display_name(display_name)
+        normalized_model_name = self._normalize_model_name(model_name)
 
         submission = Submission(
             id=submission_id,
             user_id=user_id,
             display_name=normalized_display_name,
+            model_name=normalized_model_name,
             requirement_id=requirement_id,
             runtime=runtime.value,
             original_filename=upload.filename,
@@ -119,6 +122,17 @@ class SubmissionService:
             return None
         if len(normalized) > 120:
             raise ValueError("Submission name must be 120 characters or fewer")
+        return normalized
+
+    @staticmethod
+    def _normalize_model_name(model_name: str | None) -> str | None:
+        if model_name is None:
+            return None
+        normalized = " ".join(model_name.strip().split())
+        if not normalized:
+            return None
+        if len(normalized) > 120:
+            raise ValueError("Model name must be 120 characters or fewer")
         return normalized
 
     def append_step_event(
@@ -200,6 +214,7 @@ class SubmissionService:
         return SubmissionDetail(
             id=submission.id,
             display_name=submission.display_name,
+            model_name=submission.model_name,
             requirement_id=submission.requirement_id,
             runtime=submission.runtime,
             original_filename=submission.original_filename,

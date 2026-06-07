@@ -53,6 +53,7 @@ export type SubmissionStep = {
 export type SubmissionSummary = {
   id: string;
   display_name: string | null;
+  model_name: string | null;
   requirement_id: string;
   runtime: string;
   original_filename: string;

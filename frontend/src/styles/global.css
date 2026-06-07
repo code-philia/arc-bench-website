@@ -796,6 +796,22 @@ button {
   font-size: 0.76rem;
 }
 
+.model-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border) 72%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg) 90%);
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .leaderboard-metric-active {
   color: var(--accent);
   font-family: var(--mono);
@@ -1866,12 +1882,18 @@ button {
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  min-height: calc(100vh - 60px);
+  max-height: calc(100vh - 60px);
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .action-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
 }
 
 .env-selector {
@@ -1944,6 +1966,97 @@ button {
 
 .submission-name-field {
   margin-top: 14px;
+}
+
+.action-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.submission-tabs-shell {
+  margin-bottom: 12px;
+  border-bottom: 0;
+}
+
+.submission-tabs {
+  width: 100%;
+}
+
+.submission-tabs .tab {
+  flex: 1;
+  text-align: center;
+}
+
+.submission-subsection + .submission-subsection {
+  margin-top: 18px;
+}
+
+.submission-subsection-title {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.submission-summary-card {
+  display: grid;
+  gap: 14px;
+}
+
+.submission-summary-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.submission-summary-name {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.submission-summary-meta {
+  margin-top: 6px;
+}
+
+.submission-result-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.submission-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.submission-result-stat {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.submission-result-label {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.submission-result-stat strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.84rem;
 }
 
 .field-label {
@@ -2340,6 +2453,10 @@ button {
 .submission-hero p {
   margin: 0;
   font-size: 0.86rem;
+}
+
+.submission-model-row {
+  margin-top: 12px;
 }
 
 .submission-score {

@@ -16,7 +16,7 @@ type SortKey =
 
 type LeaderboardRecord = {
   id: string;
-  name: string;
+  submissionName: string;
   provider: string;
   model: string;
   avgRequirementRate: number;
@@ -30,9 +30,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
   all: [
     {
       id: "claude-code",
-      name: "Claude Code",
+      submissionName: "Claude Code - Web Arena",
       provider: "Anthropic",
-      model: "claude-sonnet-4",
+      model: "Claude Sonnet 4",
       avgRequirementRate: 86.7,
       maxPassRate: 96.8,
       minRequirementRate: 71.3,
@@ -41,9 +41,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "gpt-codex",
-      name: "GPT Codex",
+      submissionName: "GPT Codex - Fullstack Sprint",
       provider: "OpenAI",
-      model: "gpt-4.1",
+      model: "GPT-4.1",
       avgRequirementRate: 84.9,
       maxPassRate: 95.1,
       minRequirementRate: 69.8,
@@ -52,9 +52,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "gemini-cli",
-      name: "Gemini CLI",
+      submissionName: "Gemini CLI - Browser Tasks",
       provider: "Google",
-      model: "gemini-2.5-pro",
+      model: "Gemini 2.5 Pro",
       avgRequirementRate: 82.4,
       maxPassRate: 92.6,
       minRequirementRate: 66.4,
@@ -63,9 +63,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "cursor-agent",
-      name: "Cursor Agent",
+      submissionName: "Cursor Agent - Commerce Flow",
       provider: "Cursor",
-      model: "cursor-small",
+      model: "Claude 3.5 Sonnet",
       avgRequirementRate: 80.1,
       maxPassRate: 90.5,
       minRequirementRate: 62.7,
@@ -74,9 +74,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "deepseek-agent",
-      name: "DeepSeek Agent",
+      submissionName: "DeepSeek Agent - CRM Pass",
       provider: "DeepSeek",
-      model: "deepseek-v3",
+      model: "DeepSeek V3",
       avgRequirementRate: 77.8,
       maxPassRate: 88.9,
       minRequirementRate: 58.1,
@@ -87,9 +87,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
   web: [
     {
       id: "claude-code-web",
-      name: "Claude Code",
+      submissionName: "Claude Code - Retail Checkout",
       provider: "Anthropic",
-      model: "claude-sonnet-4",
+      model: "Claude Sonnet 4",
       avgRequirementRate: 88.5,
       maxPassRate: 97.3,
       minRequirementRate: 74.9,
@@ -98,9 +98,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "gpt-codex-web",
-      name: "GPT Codex",
+      submissionName: "GPT Codex - Admin Console",
       provider: "OpenAI",
-      model: "gpt-4.1",
+      model: "GPT-4.1",
       avgRequirementRate: 87.1,
       maxPassRate: 96.2,
       minRequirementRate: 72.1,
@@ -109,9 +109,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "gemini-cli-web",
-      name: "Gemini CLI",
+      submissionName: "Gemini CLI - Ops Dashboard",
       provider: "Google",
-      model: "gemini-2.5-pro",
+      model: "Gemini 2.5 Pro",
       avgRequirementRate: 84.2,
       maxPassRate: 93.8,
       minRequirementRate: 68.5,
@@ -120,9 +120,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "cursor-agent-web",
-      name: "Cursor Agent",
+      submissionName: "Cursor Agent - Helpdesk Queue",
       provider: "Cursor",
-      model: "cursor-small",
+      model: "GPT-4.1",
       avgRequirementRate: 81.6,
       maxPassRate: 91.7,
       minRequirementRate: 63.4,
@@ -133,9 +133,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
   android: [
     {
       id: "gpt-codex-android",
-      name: "GPT Codex",
+      submissionName: "GPT Codex - Mobile Booking",
       provider: "OpenAI",
-      model: "gpt-4.1",
+      model: "GPT-4.1",
       avgRequirementRate: 83.2,
       maxPassRate: 93.4,
       minRequirementRate: 67.2,
@@ -144,9 +144,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "claude-code-android",
-      name: "Claude Code",
+      submissionName: "Claude Code - Mobile Wallet",
       provider: "Anthropic",
-      model: "claude-sonnet-4",
+      model: "Claude Sonnet 4",
       avgRequirementRate: 81.9,
       maxPassRate: 91.4,
       minRequirementRate: 65.1,
@@ -155,9 +155,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "deepseek-agent-android",
-      name: "DeepSeek Agent",
+      submissionName: "DeepSeek Agent - Device Setup",
       provider: "DeepSeek",
-      model: "deepseek-v3",
+      model: "DeepSeek V3",
       avgRequirementRate: 79.3,
       maxPassRate: 89.6,
       minRequirementRate: 60.8,
@@ -166,9 +166,9 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
     },
     {
       id: "kimi-agent-android",
-      name: "Kimi Agent",
+      submissionName: "Kimi Agent - Mobile Support",
       provider: "Moonshot",
-      model: "kimi-k2",
+      model: "Kimi K2",
       avgRequirementRate: 76.4,
       maxPassRate: 86.1,
       minRequirementRate: 57.9,
@@ -343,7 +343,7 @@ export default function HomePage() {
                 </div>
                 <div className="leaderboard-clean-summary">
                   <span className="summary-label">Current Leader</span>
-                  <strong>{topRecord?.name ?? "-"}</strong>
+                  <strong>{topRecord?.submissionName ?? "-"}</strong>
                 </div>
               </div>
 
@@ -378,7 +378,8 @@ export default function HomePage() {
                   <thead>
                     <tr>
                       <th style={{ width: "72px" }}>Rank</th>
-                      <th>Model</th>
+                      <th>Submission</th>
+                      <th style={{ width: "170px" }}>Model</th>
                       <th style={{ width: "138px" }}>Avg. Coverage</th>
                       <th style={{ width: "138px" }}>Best Pass Rate</th>
                       <th style={{ width: "138px" }}>Min. Coverage</th>
@@ -392,11 +393,12 @@ export default function HomePage() {
                         <td className="leaderboard-rank-cell">{index + 1}</td>
                         <td>
                           <div className="leaderboard-model-cell">
-                            <div className="leaderboard-model-name">{record.name}</div>
-                            <div className="leaderboard-model-meta">
-                              {record.provider} | {record.model}
-                            </div>
+                            <div className="leaderboard-model-name">{record.submissionName}</div>
+                            <div className="leaderboard-model-meta">{record.provider}</div>
                           </div>
+                        </td>
+                        <td>
+                          <span className="model-chip">{record.model}</span>
                         </td>
                         <td className={sortKey === "avgRequirementRate" ? "leaderboard-metric-active" : ""}>
                           {formatPercent(record.avgRequirementRate)}

@@ -32,6 +32,7 @@ def create_submission(
     requirement_id: str = Form(...),
     runtime: RuntimeType = Form(...),
     display_name: str | None = Form(None),
+    model_name: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
@@ -43,6 +44,7 @@ def create_submission(
             file,
             user_id=current_user.id,
             display_name=display_name,
+            model_name=model_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

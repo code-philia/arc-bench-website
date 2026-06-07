@@ -39,6 +39,8 @@ def on_startup() -> None:
         submission_columns = {column["name"] for column in inspector.get_columns("submissions")}
         if "display_name" not in submission_columns:
             connection.execute(text("ALTER TABLE submissions ADD COLUMN display_name VARCHAR(120)"))
+        if "model_name" not in submission_columns:
+            connection.execute(text("ALTER TABLE submissions ADD COLUMN model_name VARCHAR(120)"))
         if "user_id" not in submission_columns:
             connection.execute(text("ALTER TABLE submissions ADD COLUMN user_id VARCHAR(64)"))
     db = SessionLocal()

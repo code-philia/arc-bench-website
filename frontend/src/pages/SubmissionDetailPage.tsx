@@ -120,11 +120,16 @@ export default function SubmissionDetailPage() {
             <p className="muted">
               {submission.requirement_id} / {submission.runtime} / {submission.status}
             </p>
+            {submission.model_name ? <div className="submission-model-row"><span className="model-chip">{submission.model_name}</span></div> : null}
           </div>
           <div className="submission-meta-grid">
             <div className="submission-meta-card">
               <div className="submission-meta-label">Submission ID</div>
               <div className="submission-meta-value">{submission.id}</div>
+            </div>
+            <div className="submission-meta-card">
+              <div className="submission-meta-label">Model</div>
+              <div className="submission-meta-value">{submission.model_name || "-"}</div>
             </div>
             <div className="submission-meta-card">
               <div className="submission-meta-label">Created</div>
