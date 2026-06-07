@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from queue import Empty, Queue
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -24,6 +25,7 @@ DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
 
 WEB_APP_PORT = 3000
+PLAYWRIGHT_WORKERS = 4
 
 
 def append_debug_log(message: str) -> None:
@@ -59,6 +61,20 @@ def stream_pipe(pipe, sink_file, section: str) -> None:
             sink_file.write(line)
             sink_file.flush()
             append_debug_log(f"{section} | {line.rstrip()}")
+    finally:
+        pipe.close()
+
+
+def queue_pipe(pipe, sink_file, section: str, line_queue: Queue | None = None) -> None:
+    try:
+        for line in iter(pipe.readline, ""):
+            if not line:
+                break
+            sink_file.write(line)
+            sink_file.flush()
+            append_debug_log(f"{section} | {line.rstrip()}")
+            if line_queue is not None:
+                line_queue.put((section, line.rstrip("\n")))
     finally:
         pipe.close()
 
@@ -192,7 +208,7 @@ export default defineConfig({{
   testDir: '.',
   timeout: 30000,
   fullyParallel: false,
-  workers: 1,
+  workers: {PLAYWRIGHT_WORKERS},
   reporter: [['json', {{ outputFile: '../artifacts/playwright-report.json' }}]],
   use: {{
     baseURL: '{base_url}',
@@ -219,6 +235,69 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
     append_runner_event("run_tests", "Installing Chromium browser")
     run_command(["npx", "playwright", "install", "--with-deps", "chromium"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="playwright-install")
     append_runner_event("run_tests", "Playwright environment is ready", status="success")
+
+
+def count_playwright_tests() -> int:
+    append_debug_log("Counting Playwright tests before execution")
+    completed = subprocess.run(
+        ["npx", "playwright", "test", "--list"],
+        cwd=str(TESTS_DIR),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    append_debug_block("playwright-list.stdout", completed.stdout)
+    append_debug_block("playwright-list.stderr", completed.stderr)
+    if completed.returncode != 0:
+        raise RuntimeError("Failed to enumerate Playwright tests before execution")
+    return sum(1 for line in completed.stdout.splitlines() if line.strip().startswith("["))
+
+
+def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.Popen:
+    command = ["npx", "playwright", "test", f"--workers={PLAYWRIGHT_WORKERS}"]
+    append_runner_event("run_tests", "Deploying generated application", status="info")
+    append_runner_event("run_tests", f"Generated application is reachable on http://127.0.0.1:{WEB_APP_PORT}", status="success")
+    append_runner_event("run_tests", "Deploying test environment", status="info")
+    append_runner_event("run_tests", f"Test environment ready with {PLAYWRIGHT_WORKERS} workers", status="success")
+    total_tests = count_playwright_tests()
+    append_runner_event("run_tests", f"Executing tests with {PLAYWRIGHT_WORKERS} workers", status="info")
+    append_runner_event("run_tests", f"Test progress 0/{total_tests}", status="info")
+
+    line_queue: Queue = Queue()
+    append_debug_log(f"Starting Playwright test process: {' '.join(command)}")
+    process = subprocess.Popen(
+        command,
+        cwd=str(TESTS_DIR),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        bufsize=1,
+    )
+    stdout_thread = threading.Thread(target=queue_pipe, args=(process.stdout, stdout_file, "playwright-test.stdout", line_queue), daemon=True)
+    stderr_thread = threading.Thread(target=queue_pipe, args=(process.stderr, stderr_file, "playwright-test.stderr", line_queue), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    managed_count = 0
+    last_reported_count = -1
+    while process.poll() is None or not line_queue.empty():
+        try:
+            section, line = line_queue.get(timeout=0.5)
+        except Empty:
+            continue
+        if section.endswith("stdout") and line.lstrip().startswith(("✓", "✘", "-")):
+            managed_count += 1
+            if managed_count != last_reported_count:
+                last_reported_count = managed_count
+                append_runner_event("run_tests", f"Test progress {managed_count}/{total_tests}", status="info")
+
+    stdout_thread.join(timeout=2)
+    stderr_thread.join(timeout=2)
+    append_runner_event("run_tests", f"Test progress {managed_count}/{total_tests}", status="success")
+    return process
 
 
 def parse_playwright_results() -> dict:
@@ -296,8 +375,8 @@ def run_web_template(stdout_file, stderr_file) -> dict:
     if not frontend_dir.exists() or not backend_dir.exists():
         raise RuntimeError("web template is incomplete: expected frontend/ and backend/ directories")
 
-    install_node_dependencies(frontend_dir, stdout_file, stderr_file, "frontend", "deploy_agent")
-    append_runner_event("deploy_agent", "Building template frontend")
+    install_node_dependencies(frontend_dir, stdout_file, stderr_file, "frontend", "run_tests")
+    append_runner_event("run_tests", "Building template frontend")
     run_command(
         ["npm", "run", "build"],
         cwd=frontend_dir,
@@ -306,9 +385,9 @@ def run_web_template(stdout_file, stderr_file) -> dict:
         check=True,
         label="frontend-npm-build",
     )
-    append_runner_event("deploy_agent", "Template frontend built", status="success")
+    append_runner_event("run_tests", "Template frontend built", status="success")
 
-    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "deploy_agent")
+    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "run_tests")
 
     backend_env = {
         **os.environ,
@@ -316,7 +395,7 @@ def run_web_template(stdout_file, stderr_file) -> dict:
         "PORT": str(WEB_APP_PORT),
     }
 
-    append_runner_event("deploy_agent", "Starting template application server")
+    append_runner_event("run_tests", "Starting template application server")
     backend_process, backend_stdout_thread, backend_stderr_thread = start_background_process(
         ["npm", "run", "dev"],
         cwd=backend_dir,
@@ -325,10 +404,10 @@ def run_web_template(stdout_file, stderr_file) -> dict:
         label="template-app",
         env=backend_env,
     )
-    append_runner_event("deploy_agent", f"Template application server started (pid={backend_process.pid})", status="success")
+    append_runner_event("run_tests", f"Template application server started (pid={backend_process.pid})", status="success")
 
     wait_for_http_ready(f"http://127.0.0.1:{WEB_APP_PORT}", 120, "template application server")
-    append_runner_event("deploy_agent", f"Template application is reachable on http://127.0.0.1:{WEB_APP_PORT}", status="success")
+    append_runner_event("run_tests", f"Template application is reachable on http://127.0.0.1:{WEB_APP_PORT}", status="success")
 
     return {
         "app_process": backend_process,
@@ -369,14 +448,10 @@ def main() -> int:
             append_runner_event("run_tests", "Preparing Playwright configuration")
             write_playwright_config(runtime["base_url"])
             ensure_test_package(stdout_file, stderr_file)
-            append_runner_event("run_tests", "Running Playwright tests")
-            playwright_result = run_command(
-                ["npx", "playwright", "test"],
-                cwd=TESTS_DIR,
-                stdout_file=stdout_file,
-                stderr_file=stderr_file,
-                check=False,
-                label="playwright-test",
+            playwright_process = run_playwright_tests_with_progress(stdout_file, stderr_file)
+            playwright_result = subprocess.CompletedProcess(
+                ["npx", "playwright", "test", f"--workers={PLAYWRIGHT_WORKERS}"],
+                returncode=playwright_process.returncode if playwright_process.returncode is not None else 1,
             )
             append_runner_event("run_tests", f"Playwright test process finished with code {playwright_result.returncode}")
 

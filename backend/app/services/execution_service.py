@@ -91,12 +91,14 @@ class ExecutionService:
             nonlocal active_step_key, completed_steps
             if not latest_events:
                 return
-            latest_step = latest_events[-1]["step_key"]
-            if latest_step == "run_tests":
+
+            event_step_keys = {str(event.get("step_key", "")).strip() for event in latest_events}
+
+            if "run_tests" in event_step_keys:
                 completed_steps = {"deploy_agent", "start_agent"}
                 active_step_key = "run_tests"
                 description = "Preparing and running tests"
-            elif latest_step == "start_agent":
+            elif "start_agent" in event_step_keys:
                 completed_steps = {"deploy_agent"}
                 active_step_key = "start_agent"
                 description = "Running uploaded agent"

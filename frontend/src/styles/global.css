@@ -2535,11 +2535,14 @@ button {
   margin: 0 auto;
   border: 1px solid var(--border);
   border-top: 0;
+  align-items: stretch;
 }
 
 .submission-grid .action-section {
   min-width: 0;
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
 }
 
 .submission-grid .action-section:first-child {
@@ -2548,11 +2551,28 @@ button {
 
 .detail-tab-panel {
   min-width: 0;
+  height: 520px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .log-panel {
   margin: 0;
-  min-height: 420px;
+  height: 100%;
+  overflow: auto;
+  min-height: 0;
+}
+
+.detail-tab-panel .results-panel,
+.detail-tab-panel .results-empty {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.detail-tab-panel .test-list {
+  max-height: none;
 }
 
 .playground-page {
@@ -2714,6 +2734,10 @@ button {
   .submission-grid .action-section:first-child {
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .detail-tab-panel {
+    height: 420px;
   }
 }
 
