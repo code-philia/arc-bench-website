@@ -34,7 +34,7 @@ class RequirementCatalogService:
             tests_path = self.settings.tests_root / requirement_id
             assets_path = requirement_dir / "assets"
             references_path = requirement_dir / "reference"
-            if not requirements_path.exists() or not prerequisites_path.exists() or not tests_path.exists():
+            if not requirements_path.exists() or not prerequisites_path.exists() or not tests_path.exists() or not self.settings.templates_root.exists():
                 continue
 
             requirements_md = requirements_path.read_text(encoding="utf-8")

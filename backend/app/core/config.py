@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     frontend_dist: Path = ROOT_DIR / "frontend" / "dist"
     requirements_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "requirements"
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
+    templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"
     user_submissions_root: Path = ROOT_DIR / "runtime" / "user-submissions"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"

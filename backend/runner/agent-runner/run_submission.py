@@ -1,8 +1,8 @@
 import json
 import os
-import threading
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
 from urllib.error import URLError
@@ -10,16 +10,20 @@ from urllib.request import urlopen
 
 
 WORKSPACE_ROOT = Path("/workspace")
-AGENT_DIR = WORKSPACE_ROOT / "agent"
+SUBMISSION_DIR = WORKSPACE_ROOT / "submission"
+TEMPLATE_DIR = WORKSPACE_ROOT / "template"
+TASK_DIR = WORKSPACE_ROOT / "task"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
+PROMPT_PATH = WORKSPACE_ROOT / "prompt" / "task_prompt.txt"
+SPEC_PATH = WORKSPACE_ROOT / "runner-spec.json"
 ARTIFACTS_DIR = WORKSPACE_ROOT / "artifacts"
-REQUIREMENT_MARKDOWN_PATH = WORKSPACE_ROOT / "requirement" / "requirements.md"
-CONFIG_PATH = AGENT_DIR / "arcbench.config.json"
 RESULT_PATH = ARTIFACTS_DIR / "result.json"
 STDOUT_PATH = ARTIFACTS_DIR / "stdout.log"
 STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
+
+WEB_APP_PORT = 3000
 
 
 def append_debug_log(message: str) -> None:
@@ -54,12 +58,12 @@ def stream_pipe(pipe, sink_file, section: str) -> None:
                 break
             sink_file.write(line)
             sink_file.flush()
-            append_debug_log(f"{section} | {line.rstrip()}" )
+            append_debug_log(f"{section} | {line.rstrip()}")
     finally:
         pipe.close()
 
 
-def run_command(command: list[str], cwd: Path, stdout_file, stderr_file, check: bool = True, label: str = "command") -> subprocess.CompletedProcess:
+def run_command(command: list[str], cwd: Path, stdout_file, stderr_file, check: bool = True, label: str = "command", env: dict | None = None) -> subprocess.CompletedProcess:
     append_debug_log(f"Executing {label}: {' '.join(command)}")
     completed = subprocess.run(
         command,
@@ -69,98 +73,138 @@ def run_command(command: list[str], cwd: Path, stdout_file, stderr_file, check: 
         text=True,
         errors="replace",
         check=False,
+        env=env,
     )
-    append_debug_log(f"{label} exit code: {completed.returncode}")
     if completed.stdout:
+        stdout_file.write(completed.stdout)
+        stdout_file.flush()
         append_debug_block(f"{label}.stdout", completed.stdout)
     if completed.stderr:
+        stderr_file.write(completed.stderr)
+        stderr_file.flush()
         append_debug_block(f"{label}.stderr", completed.stderr)
+    append_debug_log(f"{label} exit code: {completed.returncode}")
     if check and completed.returncode != 0:
         raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout, stderr=completed.stderr)
     return completed
 
 
-def read_config() -> dict:
-    if CONFIG_PATH.exists():
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
+def read_spec() -> dict:
+    if not SPEC_PATH.exists():
+        raise RuntimeError("runner-spec.json is missing from the workspace")
+    return json.loads(SPEC_PATH.read_text(encoding="utf-8"))
 
 
-def resolve_python_entrypoint() -> Path:
-    entrypoint = AGENT_DIR / "main.py"
+def resolve_python_agent_entrypoint() -> Path:
+    entrypoint = SUBMISSION_DIR / "main.py"
     if entrypoint.exists():
         return entrypoint
-    raise RuntimeError("unsupported python entrypoint: expected main.py at the archive root")
+    raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
 
 
-def install_python_dependencies(stdout_file, stderr_file) -> None:
-    requirements_path = AGENT_DIR / "requirements.txt"
+def install_agent_dependencies(stdout_file, stderr_file) -> None:
+    requirements_path = SUBMISSION_DIR / "requirements.txt"
     if not requirements_path.exists():
-        append_debug_log("No requirements.txt found, skipping dependency install")
+        append_debug_log("No submission requirements.txt found, skipping dependency install")
         return
-    append_debug_log("Running pip install -r requirements.txt")
-    append_runner_event("start_agent", "Installing Python dependencies")
+    append_runner_event("start_agent", "Installing agent dependencies")
     run_command(
-        [
-            "python3",
-            "-m",
-            "pip",
-            "install",
-            "--no-cache-dir",
-            "-r",
-            "requirements.txt",
-        ],
-        cwd=AGENT_DIR,
+        ["python3", "-m", "pip", "install", "--no-cache-dir", "-r", "requirements.txt"],
+        cwd=SUBMISSION_DIR,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
         check=True,
-        label="pip-install",
+        label="agent-pip-install",
     )
-    append_debug_log("Dependency installation completed")
-    append_runner_event("start_agent", "Python dependencies installed", status="success")
+    append_runner_event("start_agent", "Agent dependencies installed", status="success")
 
 
-def wait_for_healthcheck(url: str, timeout_seconds: int) -> None:
+def run_generation_agent(stdout_file, stderr_file) -> None:
+    entrypoint = resolve_python_agent_entrypoint()
+    prompt = PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() else ""
+    command = ["python3", entrypoint.name]
+    append_runner_event("start_agent", "Launching generation agent")
+    env = {
+        **os.environ,
+        "ARCBENCH_TASK_PROMPT": prompt,
+        "ARCBENCH_PROMPT_PATH": str(PROMPT_PATH),
+        "ARCBENCH_TEMPLATE_DIR": str(TEMPLATE_DIR),
+        "ARCBENCH_TASK_DIR": str(TASK_DIR),
+        "ARCBENCH_SUBMISSION_DIR": str(SUBMISSION_DIR),
+        "ARCBENCH_OUTPUT_DIR": str(TEMPLATE_DIR),
+    }
+    completed = run_command(
+        command,
+        cwd=SUBMISSION_DIR,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=True,
+        label="generation-agent",
+        env=env,
+    )
+    append_runner_event("start_agent", f"Generation agent finished with code {completed.returncode}", status="success")
+
+
+def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str) -> None:
+    append_runner_event(step_key, f"Installing dependencies for {label}")
+    run_command(["npm", "install"], cwd=project_dir, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label=f"{label}-npm-install")
+    append_runner_event(step_key, f"Dependencies installed for {label}", status="success")
+
+
+def start_background_process(command: list[str], cwd: Path, stdout_file, stderr_file, label: str, env: dict | None = None) -> tuple[subprocess.Popen, threading.Thread, threading.Thread]:
+    append_debug_log(f"Starting background process {label}: {' '.join(command)}")
+    process = subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        bufsize=1,
+        env=env,
+    )
+    stdout_thread = threading.Thread(target=stream_pipe, args=(process.stdout, stdout_file, f"{label}.stdout"), daemon=True)
+    stderr_thread = threading.Thread(target=stream_pipe, args=(process.stderr, stderr_file, f"{label}.stderr"), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+    return process, stdout_thread, stderr_thread
+
+
+def wait_for_http_ready(url: str, timeout_seconds: int, label: str) -> None:
     deadline = time.time() + timeout_seconds
-    append_debug_log(f"Waiting for healthcheck at {url} with timeout={timeout_seconds}s")
-    append_runner_event("start_agent", f"Waiting for agent healthcheck on {url}")
+    append_debug_log(f"Waiting for {label} at {url} with timeout={timeout_seconds}s")
     while time.time() < deadline:
         try:
             with urlopen(url, timeout=2) as response:
                 if response.status < 500:
-                    append_debug_log(f"Healthcheck passed with status={response.status}")
-                    append_runner_event("start_agent", f"Agent healthcheck passed with status {response.status}", status="success")
+                    append_debug_log(f"{label} became ready with status={response.status}")
                     return
         except (URLError, TimeoutError):
             time.sleep(1)
-    raise TimeoutError(f"Agent health check did not pass within {timeout_seconds} seconds")
+    raise TimeoutError(f"{label} did not become ready within {timeout_seconds} seconds")
 
 
-def build_playwright_config() -> None:
-    append_debug_log("Writing Playwright config")
-    append_runner_event("run_tests", "Writing Playwright config")
-    config = """
-import { defineConfig } from '@playwright/test';
+def write_playwright_config(base_url: str) -> None:
+    config = f"""
+import {{ defineConfig }} from '@playwright/test';
 
-export default defineConfig({
+export default defineConfig({{
   testDir: '.',
   timeout: 30000,
   fullyParallel: false,
   workers: 1,
-  reporter: [['json', { outputFile: '../artifacts/playwright-report.json' }]],
-  use: {
-    baseURL: 'http://127.0.0.1:3000',
+  reporter: [['json', {{ outputFile: '../artifacts/playwright-report.json' }}]],
+  use: {{
+    baseURL: '{base_url}',
     trace: 'off',
     screenshot: 'off',
-  },
-});
+  }},
+}});
 """
     (TESTS_DIR / "playwright.config.ts").write_text(config.strip() + "\n", encoding="utf-8")
 
 
 def ensure_test_package(stdout_file, stderr_file) -> None:
-    append_debug_log("Writing Playwright package.json")
-    append_runner_event("run_tests", "Preparing Playwright test package")
     package_json = {
         "name": "arcbench-tests",
         "private": True,
@@ -170,30 +214,18 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
         }
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
-    append_debug_log("Running npm install in tests directory")
     append_runner_event("run_tests", "Installing Playwright dependencies")
-    run_command(["npm", "install"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="npm-install")
-    append_debug_log("Installing Playwright browser dependencies")
+    run_command(["npm", "install"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="tests-npm-install")
     append_runner_event("run_tests", "Installing Chromium browser")
-    run_command(
-        ["npx", "playwright", "install", "--with-deps", "chromium"],
-        cwd=TESTS_DIR,
-        stdout_file=stdout_file,
-        stderr_file=stderr_file,
-        check=True,
-        label="playwright-install",
-    )
-    append_debug_log("Playwright environment is ready")
+    run_command(["npx", "playwright", "install", "--with-deps", "chromium"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="playwright-install")
     append_runner_event("run_tests", "Playwright environment is ready", status="success")
 
 
 def parse_playwright_results() -> dict:
     report_path = ARTIFACTS_DIR / "playwright-report.json"
     if not report_path.exists():
-        append_debug_log("Playwright report not found, returning empty result")
         return {"passed": 0, "failed": 0, "score": 0, "duration_seconds": 0, "tests": []}
-    append_debug_log(f"Parsing Playwright report from {report_path}")
-    append_runner_event("run_tests", "Parsing Playwright report")
+
     report = json.loads(report_path.read_text(encoding="utf-8"))
     tests = []
     passed = 0
@@ -218,14 +250,12 @@ def parse_playwright_results() -> dict:
                     if errors:
                         error_text = errors[0].get("message")
                         break
-                tests.append(
-                    {
-                        "name": title,
-                        "status": status,
-                        "duration_ms": duration,
-                        "error": error_text,
-                    }
-                )
+                tests.append({
+                    "name": title,
+                    "status": status,
+                    "duration_ms": duration,
+                    "error": error_text,
+                })
         for child in suite.get("suites", []):
             walk_suite(child)
 
@@ -234,8 +264,6 @@ def parse_playwright_results() -> dict:
 
     total = passed + failed
     score = round((passed / total) * 100, 1) if total else 0.0
-    append_debug_log(f"Playwright results parsed: passed={passed}, failed={failed}, score={score}")
-    append_runner_event("run_tests", f"Playwright results parsed: passed={passed}, failed={failed}, score={score}", status="success")
     return {
         "passed": passed,
         "failed": failed,
@@ -245,62 +273,102 @@ def parse_playwright_results() -> dict:
     }
 
 
+def stop_process(process: subprocess.Popen | None, label: str) -> None:
+    if process is None or process.poll() is not None:
+        return
+    append_debug_log(f"Stopping process {label}")
+    process.send_signal(signal.SIGTERM)
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        append_debug_log(f"Killing process {label}")
+        process.kill()
+
+
+def join_thread(thread: threading.Thread | None) -> None:
+    if thread is not None:
+        thread.join(timeout=2)
+
+
+def run_web_template(stdout_file, stderr_file) -> dict:
+    frontend_dir = TEMPLATE_DIR / "frontend"
+    backend_dir = TEMPLATE_DIR / "backend"
+    if not frontend_dir.exists() or not backend_dir.exists():
+        raise RuntimeError("web template is incomplete: expected frontend/ and backend/ directories")
+
+    install_node_dependencies(frontend_dir, stdout_file, stderr_file, "frontend", "deploy_agent")
+    append_runner_event("deploy_agent", "Building template frontend")
+    run_command(
+        ["npm", "run", "build"],
+        cwd=frontend_dir,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=True,
+        label="frontend-npm-build",
+    )
+    append_runner_event("deploy_agent", "Template frontend built", status="success")
+
+    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "deploy_agent")
+
+    backend_env = {
+        **os.environ,
+        "HOST": "0.0.0.0",
+        "PORT": str(WEB_APP_PORT),
+    }
+
+    append_runner_event("deploy_agent", "Starting template application server")
+    backend_process, backend_stdout_thread, backend_stderr_thread = start_background_process(
+        ["npm", "run", "dev"],
+        cwd=backend_dir,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        label="template-app",
+        env=backend_env,
+    )
+    append_runner_event("deploy_agent", f"Template application server started (pid={backend_process.pid})", status="success")
+
+    wait_for_http_ready(f"http://127.0.0.1:{WEB_APP_PORT}", 120, "template application server")
+    append_runner_event("deploy_agent", f"Template application is reachable on http://127.0.0.1:{WEB_APP_PORT}", status="success")
+
+    return {
+        "app_process": backend_process,
+        "app_stdout_thread": backend_stdout_thread,
+        "app_stderr_thread": backend_stderr_thread,
+        "base_url": f"http://127.0.0.1:{WEB_APP_PORT}",
+    }
+
+
 def main() -> int:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
-    append_debug_log("Runner started")
-    config = read_config()
-    health_url = config.get("healthcheck_url", "http://127.0.0.1:3000")
-    timeout_seconds = int(os.environ.get("AGENT_HEALTH_TIMEOUT_SECONDS", "90"))
-    entrypoint = resolve_python_entrypoint()
-    append_debug_log(f"Resolved entrypoint: {entrypoint}")
-    append_debug_log(f"Requirements markdown path: {REQUIREMENT_MARKDOWN_PATH}")
+    spec = read_spec()
+    append_debug_log(f"Runner started with spec: {spec}")
+
+    managed_processes: list[tuple[subprocess.Popen | None, str]] = []
+    managed_threads: list[threading.Thread | None] = []
 
     with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file, STDERR_PATH.open("w", encoding="utf-8") as stderr_file:
-        agent_process = None
-        stdout_thread = None
-        stderr_thread = None
         try:
-            install_python_dependencies(stdout_file, stderr_file)
+            install_agent_dependencies(stdout_file, stderr_file)
+            run_generation_agent(stdout_file, stderr_file)
 
-            command = ["python3", entrypoint.name, "-r", str(REQUIREMENT_MARKDOWN_PATH)]
-            append_debug_log(f"Launching agent command: {' '.join(command)}")
-            append_runner_event("start_agent", "Launching uploaded agent")
-            agent_process = subprocess.Popen(
-                command,
-                cwd=str(AGENT_DIR),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                errors="replace",
-                bufsize=1,
-                env={
-                    **os.environ,
-                    "HOST": "0.0.0.0",
-                    "PORT": "3000",
-                },
-            )
-            append_debug_log(f"Agent process started with pid={agent_process.pid}")
-            append_runner_event("start_agent", f"Agent process started (pid={agent_process.pid})", status="success")
-            stdout_thread = threading.Thread(
-                target=stream_pipe,
-                args=(agent_process.stdout, stdout_file, "agent.stdout"),
-                daemon=True,
-            )
-            stderr_thread = threading.Thread(
-                target=stream_pipe,
-                args=(agent_process.stderr, stderr_file, "agent.stderr"),
-                daemon=True,
-            )
-            stdout_thread.start()
-            stderr_thread.start()
-            wait_for_healthcheck(health_url, timeout_seconds)
-            agent_poll_result = agent_process.poll()
-            append_debug_log(f"Agent process state after healthcheck: {'running' if agent_poll_result is None else f'exited({agent_poll_result})'}")
+            task = spec.get("task", {})
+            category = task.get("category", "web")
+            if category != "web":
+                raise RuntimeError(f"Unsupported task category inside runner: {category}")
 
-            build_playwright_config()
+            runtime = run_web_template(stdout_file, stderr_file)
+            managed_processes.extend([
+                (runtime["app_process"], "template application server"),
+            ])
+            managed_threads.extend([
+                runtime["app_stdout_thread"],
+                runtime["app_stderr_thread"],
+            ])
+
+            append_runner_event("run_tests", "Preparing Playwright configuration")
+            write_playwright_config(runtime["base_url"])
             ensure_test_package(stdout_file, stderr_file)
-            append_debug_log("Running Playwright tests via npx playwright test")
             append_runner_event("run_tests", "Running Playwright tests")
             playwright_result = run_command(
                 ["npx", "playwright", "test"],
@@ -310,12 +378,11 @@ def main() -> int:
                 check=False,
                 label="playwright-test",
             )
-            append_debug_log(f"Playwright test process finished with code={playwright_result.returncode}")
             append_runner_event("run_tests", f"Playwright test process finished with code {playwright_result.returncode}")
 
             results = parse_playwright_results()
+            append_runner_event("run_tests", f"Playwright results parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}", status="success")
             RESULT_PATH.write_text(json.dumps(results, indent=2), encoding="utf-8")
-            append_debug_log(f"Result file written to {RESULT_PATH}")
             append_runner_event("run_tests", "Result file written", status="success")
             return 0 if results["failed"] == 0 else 1
         except Exception as exc:  # noqa: BLE001
@@ -335,28 +402,12 @@ def main() -> int:
                 ),
                 encoding="utf-8",
             )
-            append_debug_log(f"Fallback result file written to {RESULT_PATH}")
             return 1
         finally:
-            if agent_process and agent_process.poll() is None:
-                append_debug_log("Stopping agent process with SIGTERM")
-                agent_process.send_signal(signal.SIGTERM)
-                try:
-                    agent_process.wait(timeout=10)
-                    append_debug_log("Agent process exited after SIGTERM")
-                except subprocess.TimeoutExpired:
-                    append_debug_log("Agent process did not exit after SIGTERM, killing process")
-                    agent_process.kill()
-                    append_debug_log("Agent process killed")
-            if agent_process:
-                try:
-                    agent_process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    pass
-            if stdout_thread is not None:
-                stdout_thread.join(timeout=2)
-            if stderr_thread is not None:
-                stderr_thread.join(timeout=2)
+            for process, label in reversed(managed_processes):
+                stop_process(process, label)
+            for thread in managed_threads:
+                join_thread(thread)
 
 
 if __name__ == "__main__":
