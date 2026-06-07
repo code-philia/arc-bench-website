@@ -7,7 +7,7 @@ import type { CompetitionSummary } from "../lib/types";
 
 function competitionTypeLabel(type: string) {
   if (type === "web") return "Web";
-  if (type === "android") return "Android";
+  if (type === "android") return "Mobile";
   if (type === "mixed") return "Mixed";
   return type;
 }

@@ -181,7 +181,7 @@ const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
 const boardTabs: Array<{ key: BoardTab; label: string }> = [
   { key: "all", label: "All" },
   { key: "web", label: "Web" },
-  { key: "android", label: "Android" },
+  { key: "android", label: "Mobile" },
 ];
 
 const sortOptions: Array<{ key: SortKey; label: string }> = [
@@ -296,7 +296,7 @@ export default function HomePage() {
                   <div className="category-card disabled">
                     <div className="category-icon android">A</div>
                     <div>
-                      <h3>Android Applications</h3>
+                      <h3>Mobile Applications</h3>
                       <p className="desc">
                         Placeholder inventory preserved from the prototype; execution pipeline comes later.
                       </p>
