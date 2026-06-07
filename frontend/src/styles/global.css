@@ -1357,40 +1357,10 @@ button {
   transition: border-color var(--transition), background var(--transition), transform var(--transition);
 }
 
-.competition-card-web {
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg) 92%);
-  border-color: color-mix(in srgb, var(--accent) 20%, var(--border) 80%);
-}
-
-.competition-card-android {
-  background: color-mix(in srgb, #7cc6ff 10%, var(--bg) 90%);
-  border-color: color-mix(in srgb, #7cc6ff 22%, var(--border) 78%);
-}
-
-.competition-card-mixed {
-  background: color-mix(in srgb, #ffd36e 12%, var(--bg) 88%);
-  border-color: color-mix(in srgb, #ffd36e 24%, var(--border) 76%);
-}
-
 .competition-card:hover {
   border-color: var(--border-light);
   background: var(--bg-elevated);
   transform: translateY(-1px);
-}
-
-.competition-card-web:hover {
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated) 86%);
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-light) 72%);
-}
-
-.competition-card-android:hover {
-  background: color-mix(in srgb, #7cc6ff 16%, var(--bg-elevated) 84%);
-  border-color: color-mix(in srgb, #7cc6ff 30%, var(--border-light) 70%);
-}
-
-.competition-card-mixed:hover {
-  background: color-mix(in srgb, #ffd36e 18%, var(--bg-elevated) 82%);
-  border-color: color-mix(in srgb, #ffd36e 32%, var(--border-light) 68%);
 }
 
 .competition-card-top {
@@ -1425,6 +1395,24 @@ button {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.competition-type-chip-web {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border) 74%);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg) 90%);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text) 28%);
+}
+
+.competition-type-chip-android {
+  border-color: color-mix(in srgb, #7cc6ff 30%, var(--border) 70%);
+  background: color-mix(in srgb, #7cc6ff 12%, var(--bg) 88%);
+  color: color-mix(in srgb, #7cc6ff 75%, var(--text) 25%);
+}
+
+.competition-type-chip-mixed {
+  border-color: color-mix(in srgb, #ffd36e 34%, var(--border) 66%);
+  background: color-mix(in srgb, #ffd36e 14%, var(--bg) 86%);
+  color: color-mix(in srgb, #ffd36e 70%, var(--text) 30%);
 }
 
 .competition-type-chip.large {

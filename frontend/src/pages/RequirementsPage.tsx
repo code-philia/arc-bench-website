@@ -80,7 +80,9 @@ export default function RequirementsPage() {
                 >
                   <div className="competition-card-top">
                     <div>
-                      <div className="competition-type-chip">{competitionTypeLabel(competition.type)}</div>
+                      <div className={`competition-type-chip competition-type-chip-${competition.type}`}>
+                        {competitionTypeLabel(competition.type)}
+                      </div>
                       <h3>{competition.title}</h3>
                     </div>
                     <RightOutlined className="competition-card-arrow" />
