@@ -1,4 +1,5 @@
-arc-bench/
+arc-bench/webapp/requirements/
+arc-bench/webapp/tests/
 AGENTS.md
 CLAUDE.md
 frontend/dist
