@@ -1,6 +1,6 @@
 import { DownloadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../lib/api";
 import type { CompetitionDetail } from "../lib/types";
@@ -14,6 +14,7 @@ function typeLabel(type: string) {
 
 export default function CompetitionDetailPage() {
   const { competitionId = "" } = useParams();
+  const navigate = useNavigate();
   const [competition, setCompetition] = useState<CompetitionDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -93,7 +94,7 @@ export default function CompetitionDetailPage() {
             </thead>
             <tbody>
               {competition.tasks.map((task) => (
-                <tr key={task.id}>
+                <tr key={task.id} onClick={() => navigate(`/requirements/${task.id}`)}>
                   <td className="task-id">{task.id}</td>
                   <td>
                     <div className="task-name">
