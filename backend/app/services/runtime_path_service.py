@@ -44,3 +44,10 @@ class RuntimePathService:
 
     def get_event_log_path(self, submission: Submission, username: str | None = None) -> Path:
         return self.get_submission_root(submission, username=username) / "events.log"
+
+    @staticmethod
+    def resolve_existing_path(path_value: str | None) -> Path | None:
+        if not path_value:
+            return None
+        path = Path(path_value)
+        return path if path.exists() else None

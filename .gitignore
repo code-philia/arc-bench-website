@@ -11,11 +11,5 @@ backend/**/*.pyc
 backend/.pytest_cache
 backend/.mypy_cache
 backend/.ruff_cache
-runtime/app.db
-runtime/artifacts/*
-runtime/submissions/*
-runtime/workspaces/*
-!runtime/artifacts/.gitkeep
-!runtime/submissions/.gitkeep
-!runtime/workspaces/.gitkeep
+runtime/
 

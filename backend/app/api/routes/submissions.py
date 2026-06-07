@@ -9,11 +9,13 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.submission import SubmissionCreateResponse, SubmissionDetail, SubmissionLogs, SubmissionSummary
 from app.services.execution_service import ExecutionService
+from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_service import SubmissionService
 
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 executor = ThreadPoolExecutor(max_workers=2)
+runtime_paths = RuntimePathService()
 
 
 @router.get("", response_model=list[SubmissionSummary])
@@ -98,10 +100,12 @@ def get_submission_logs(
     event_log_path = service.get_event_log_path(submission)
     if event_log_path.exists():
         events = "\n".join(service.read_event_lines(submission))
-    if submission.stdout_path:
-        with open(submission.stdout_path, "r", encoding="utf-8") as stdout_file:
+    stdout_path = runtime_paths.resolve_existing_path(submission.stdout_path)
+    stderr_path = runtime_paths.resolve_existing_path(submission.stderr_path)
+    if stdout_path:
+        with stdout_path.open("r", encoding="utf-8") as stdout_file:
             stdout = stdout_file.read()
-    if submission.stderr_path:
-        with open(submission.stderr_path, "r", encoding="utf-8") as stderr_file:
+    if stderr_path:
+        with stderr_path.open("r", encoding="utf-8") as stderr_file:
             stderr = stderr_file.read()
     return SubmissionLogs(events=events, stdout=stdout, stderr=stderr)
