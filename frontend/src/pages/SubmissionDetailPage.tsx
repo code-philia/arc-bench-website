@@ -157,14 +157,6 @@ export default function SubmissionDetailPage() {
         </div>
       </div>
 
-      {submission.failure_reason ? (
-        <div className="submission-alert-wrap">
-          <div className="inline-alert error submission-alert">
-            {submission.failure_reason}
-          </div>
-        </div>
-      ) : null}
-
       <div className="submission-grid">
         <section className="action-section">
           <div className="action-section-title">Run Status</div>

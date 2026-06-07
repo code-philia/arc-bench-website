@@ -2215,11 +2215,27 @@ button {
   padding-bottom: 16px;
 }
 
+.step-stage-label {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .step-title {
   color: var(--text-dim);
   font-size: 0.87rem;
   font-weight: 500;
   transition: color 400ms ease;
+}
+
+.step-desc {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .step.running .step-node {
@@ -2268,7 +2284,27 @@ button {
 }
 
 .step.failed .step-line {
-  background: rgba(255, 77, 106, 0.4);
+  background: var(--border);
+}
+
+.step.failed .step-title {
+  color: var(--fail);
+}
+
+.step.failed .step-desc {
+  color: color-mix(in srgb, var(--fail) 75%, var(--text) 25%);
+}
+
+.step.pending .step-node,
+.step.pending .step-line {
+  background: var(--border);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.step.pending .step-title,
+.step.pending .step-desc {
+  color: var(--text-muted);
 }
 
 .step-log-list {

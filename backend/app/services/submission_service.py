@@ -20,9 +20,24 @@ from app.services.runtime_path_service import RuntimePathService
 
 
 DEFAULT_STEPS = [
-    StepState(key="deploy_agent", title="Deploy Agent", status="pending", description="Waiting"),
-    StepState(key="start_agent", title="Run Agent", status="pending", description="Waiting"),
-    StepState(key="run_tests", title="Run Tests", status="pending", description="Waiting"),
+    StepState(
+        key="deploy_agent",
+        title="Deploy Agent",
+        status="pending",
+        description="Pull runner container, prepare workspace, and install agent dependencies.",
+    ),
+    StepState(
+        key="start_agent",
+        title="Run Agent",
+        status="pending",
+        description="Execute the agent until it finishes the task and exits cleanly.",
+    ),
+    StepState(
+        key="run_tests",
+        title="Run Tests",
+        status="pending",
+        description="Execute the benchmark test suite against the finished task output.",
+    ),
 ]
 
 
@@ -331,19 +346,13 @@ class SubmissionService:
     def build_failed_step_states(failed_key: str, reason: str, completed: set[str] | None = None) -> list[StepState]:
         completed = completed or set()
         steps: list[StepState] = []
-        failure_assigned = False
         for step in DEFAULT_STEPS:
             if step.key in completed:
                 status = "completed"
                 step_description = "Done"
-            elif not failure_assigned and step.key == failed_key:
+            elif step.key == failed_key:
                 status = "failed"
                 step_description = reason
-                failure_assigned = True
-            elif not failure_assigned and step.key not in completed:
-                status = "failed"
-                step_description = reason
-                failure_assigned = True
             else:
                 status = "pending"
                 step_description = "Not reached"
