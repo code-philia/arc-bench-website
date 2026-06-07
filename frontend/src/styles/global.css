@@ -1972,6 +1972,13 @@ button {
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+.field-hint {
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .uploaded-file {
   display: flex;
   align-items: center;

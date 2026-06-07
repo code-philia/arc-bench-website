@@ -21,6 +21,31 @@ export class ApiError extends Error {
   }
 }
 
+type ApiErrorPayload = {
+  detail?: string | Array<{ msg?: string; loc?: Array<string | number> }>;
+};
+
+function formatErrorMessage(payload: ApiErrorPayload, fallback: string): string {
+  if (typeof payload.detail === "string" && payload.detail.trim()) {
+    return payload.detail;
+  }
+
+  if (Array.isArray(payload.detail) && payload.detail.length > 0) {
+    return payload.detail
+      .map((item) => {
+        const path = Array.isArray(item.loc) ? item.loc.slice(1).join(".") : "";
+        if (path && item.msg) {
+          return `${path}: ${item.msg}`;
+        }
+        return item.msg;
+      })
+      .filter((message): message is string => Boolean(message && message.trim()))
+      .join("; ");
+  }
+
+  return fallback;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
@@ -31,8 +56,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new ApiError(payload.detail ?? "Request failed", response.status);
+    const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
+    throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
   }
   if (response.status === 204) {
     return undefined as T;

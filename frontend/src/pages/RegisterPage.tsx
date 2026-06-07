@@ -4,6 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 
+const PASSWORD_REQUIREMENT_TEXT = "Password must be 8-128 characters.";
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -14,6 +16,10 @@ export default function RegisterPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (password.length < 8 || password.length > 128) {
+      message.error(PASSWORD_REQUIREMENT_TEXT);
+      return;
+    }
     setSubmitting(true);
     try {
       await register({ email, username, password });
@@ -69,10 +75,13 @@ export default function RegisterPage() {
             className="text-input"
             type="password"
             autoComplete="new-password"
+            minLength={8}
+            maxLength={128}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
           />
+          <p className="field-hint">{PASSWORD_REQUIREMENT_TEXT}</p>
 
           <button className="btn-primary" type="submit" disabled={submitting}>
             {submitting ? "Creating..." : "Register"}
