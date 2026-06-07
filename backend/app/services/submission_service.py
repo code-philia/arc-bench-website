@@ -14,7 +14,9 @@ from app.core.config import get_settings
 from app.core.enums import RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
 from app.models.submission import Submission
+from app.models.user import User
 from app.schemas.submission import StepState, SubmissionDetail, SubmissionSummary
+from app.services.runtime_path_service import RuntimePathService
 
 
 DEFAULT_STEPS = [
@@ -28,6 +30,13 @@ class SubmissionService:
     def __init__(self, db: Session):
         self.db = db
         self.settings = get_settings()
+        self.runtime_paths = RuntimePathService()
+
+    def _get_submission_user(self, user_id: str) -> User:
+        user = self.db.get(User, user_id)
+        if not user:
+            raise LookupError(f"User '{user_id}' not found")
+        return user
 
     def create_submission(
         self,
@@ -49,7 +58,9 @@ class SubmissionService:
             raise ValueError("Only web requirements are supported in v1")
 
         submission_id = uuid.uuid4().hex[:12]
-        submission_dir = self.settings.submissions_root / submission_id
+        user = self._get_submission_user(user_id)
+        draft_submission = Submission(id=submission_id, user_id=user_id)
+        submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
         submission_dir.mkdir(parents=True, exist_ok=True)
         archive_path = submission_dir / "agent.zip"
 
@@ -57,8 +68,8 @@ class SubmissionService:
             shutil.copyfileobj(upload.file, output)
 
         self._validate_python_agent_archive(archive_path)
-        self.append_event_log(submission_id, f"[ok] Uploaded archive saved to {archive_path.name}")
-        self.append_event_log(submission_id, "[ok] Archive validation passed")
+        self.append_event_log_for_identity(submission_id, user_id, user.username, f"[ok] Uploaded archive saved to {archive_path.name}")
+        self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Archive validation passed")
 
         normalized_display_name = self._normalize_display_name(display_name)
 
@@ -79,9 +90,21 @@ class SubmissionService:
         return submission
 
     def append_event_log(self, submission_id: str, message: str) -> Path:
-        submission_dir = self.settings.submissions_root / submission_id
+        submission = self.get_submission(submission_id)
+        submission_dir = self.runtime_paths.get_submission_root(
+            submission,
+            username=self._get_submission_user(submission.user_id or "").username,
+        )
         submission_dir.mkdir(parents=True, exist_ok=True)
         log_path = submission_dir / "events.log"
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        with log_path.open("a", encoding="utf-8") as output:
+            output.write(f"[{timestamp}] {message}\n")
+        return log_path
+
+    def append_event_log_for_identity(self, submission_id: str, user_id: str, username: str, message: str) -> Path:
+        log_path = self.runtime_paths.get_event_log_path_by_identity(username, user_id, submission_id)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         with log_path.open("a", encoding="utf-8") as output:
             output.write(f"[{timestamp}] {message}\n")
@@ -105,7 +128,11 @@ class SubmissionService:
         message: str,
         status: Literal["info", "success", "error"] = "info",
     ) -> Path:
-        submission_dir = self.settings.submissions_root / submission_id
+        submission = self.get_submission(submission_id)
+        submission_dir = self.runtime_paths.get_submission_root(
+            submission,
+            username=self._get_submission_user(submission.user_id or "").username,
+        )
         submission_dir.mkdir(parents=True, exist_ok=True)
         log_path = submission_dir / "events.log"
         payload = {
@@ -119,7 +146,8 @@ class SubmissionService:
         return log_path
 
     def get_event_log_path(self, submission: Submission) -> Path:
-        return self.settings.submissions_root / submission.id / "events.log"
+        username = self._get_submission_user(submission.user_id or "").username if submission.user_id else None
+        return self.runtime_paths.get_event_log_path(submission, username=username)
 
     @staticmethod
     def _validate_python_agent_archive(archive_path: Path) -> None:

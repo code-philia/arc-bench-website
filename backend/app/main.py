@@ -32,9 +32,7 @@ app.include_router(submissions.router, prefix=settings.api_prefix)
 
 @app.on_event("startup")
 def on_startup() -> None:
-    settings.submissions_root.mkdir(parents=True, exist_ok=True)
-    settings.workspaces_root.mkdir(parents=True, exist_ok=True)
-    settings.artifacts_root.mkdir(parents=True, exist_ok=True)
+    settings.user_submissions_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     with engine.begin() as connection:
         inspector = inspect(connection)

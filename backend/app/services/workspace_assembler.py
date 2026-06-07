@@ -5,14 +5,17 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.models.requirement import Requirement
 from app.models.submission import Submission
+from app.models.user import User
+from app.services.runtime_path_service import RuntimePathService
 
 
 class WorkspaceAssembler:
     def __init__(self) -> None:
         self.settings = get_settings()
+        self.runtime_paths = RuntimePathService()
 
-    def assemble(self, submission: Submission, requirement: Requirement) -> Path:
-        workspace_root = self.settings.workspaces_root / submission.id
+    def assemble(self, submission: Submission, requirement: Requirement, user: User) -> Path:
+        workspace_root = self.runtime_paths.get_workspace_root(submission, username=user.username)
         if workspace_root.exists():
             shutil.rmtree(workspace_root)
         agent_dir = workspace_root / "agent"

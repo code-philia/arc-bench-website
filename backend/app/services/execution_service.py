@@ -9,9 +9,11 @@ from app.core.config import get_settings
 from app.core.enums import SubmissionStatus
 from app.db.session import SessionLocal
 from app.models.requirement import Requirement
+from app.models.user import User
 from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
 from app.services.result_parser import ResultParser
+from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_service import SubmissionService
 from app.services.workspace_assembler import WorkspaceAssembler
 
@@ -22,25 +24,29 @@ class ExecutionService:
         self.settings = get_settings()
         self.assembler = WorkspaceAssembler()
         self.result_parser = ResultParser()
+        self.runtime_paths = RuntimePathService()
 
     def run_submission(self, submission_id: str) -> None:
         db = SessionLocal()
         try:
             submission_service = SubmissionService(db)
             submission = submission_service.get_submission(submission_id)
+            user = db.get(User, submission.user_id) if submission.user_id else None
+            if not user:
+                raise RuntimeError(f"User '{submission.user_id}' not found")
             requirement = db.get(Requirement, submission.requirement_id)
             if not requirement:
                 raise RuntimeError(f"Requirement '{submission.requirement_id}' not found")
-            self._run(db, submission_service, submission_id, requirement)
+            self._run(db, submission_service, submission_id, requirement, user)
         finally:
             db.close()
 
-    def _run(self, db: Session, submission_service: SubmissionService, submission_id: str, requirement: Requirement) -> None:
+    def _run(self, db: Session, submission_service: SubmissionService, submission_id: str, requirement: Requirement, user: User) -> None:
         if requirement.category != "web":
             raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
 
         submission = submission_service.get_submission(submission_id)
-        workspace_path = self.settings.workspaces_root / submission_id
+        workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
         stdout_path = workspace_path / "artifacts" / "stdout.log"
         stderr_path = workspace_path / "artifacts" / "stderr.log"
         result_path = workspace_path / "artifacts" / "result.json"
@@ -111,7 +117,7 @@ class ExecutionService:
             debug_log.append("backend", f"Execution started for submission {submission_id}")
             debug_log.append("backend", f"Requirement category: {requirement.category}")
             emit_event("deploy_agent", "Preparing workspace")
-            workspace_path = self.assembler.assemble(submission, requirement)
+            workspace_path = self.assembler.assemble(submission, requirement, user)
             debug_log = DebugLogService(workspace_path)
             debug_log.append("backend", f"Workspace assembled at {workspace_path}")
             emit_event("deploy_agent", "Workspace assembled", status="success")
