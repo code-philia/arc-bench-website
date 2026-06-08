@@ -311,15 +311,37 @@ def parse_playwright_results() -> dict:
     failed = 0
     total_duration_ms = 0
 
+    def summarize_test_outcome(test: dict) -> tuple[str, str | None]:
+        results = test.get("results", [])
+        statuses = [str(result.get("status", "")).strip() for result in results]
+
+        if any(status == "failed" for status in statuses):
+            return "failed", "failed"
+        if any(status == "timedOut" for status in statuses):
+            return "timedOut", "failed"
+        if any(status == "interrupted" for status in statuses):
+            return "interrupted", "failed"
+        if any(status == "passed" for status in statuses):
+            expected_status = str(test.get("expectedStatus", "passed")).strip() or "passed"
+            return expected_status, "passed"
+        if any(status == "skipped" for status in statuses):
+            return "skipped", "failed"
+
+        aggregate_status = str(test.get("status", "unknown")).strip() or "unknown"
+        if aggregate_status == "expected":
+            expected_status = str(test.get("expectedStatus", "passed")).strip() or "passed"
+            return expected_status, "passed"
+        return aggregate_status, "failed"
+
     def walk_suite(suite: dict) -> None:
         nonlocal passed, failed, total_duration_ms
         for spec in suite.get("specs", []):
             title = spec.get("title", "Unnamed spec")
             for test in spec.get("tests", []):
-                status = test.get("status", "unknown")
+                normalized_status, outcome = summarize_test_outcome(test)
                 duration = sum(result.get("duration", 0) for result in test.get("results", []))
                 total_duration_ms += duration
-                if status == "passed":
+                if outcome == "passed":
                     passed += 1
                 else:
                     failed += 1
@@ -331,7 +353,7 @@ def parse_playwright_results() -> dict:
                         break
                 tests.append({
                     "name": title,
-                    "status": status,
+                    "status": normalized_status,
                     "duration_ms": duration,
                     "error": error_text,
                 })
