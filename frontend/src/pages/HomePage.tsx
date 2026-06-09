@@ -1,478 +1,294 @@
-import { ArrowRightOutlined } from "@ant-design/icons";
+import {
+  ArrowRightOutlined,
+  CodeOutlined,
+  ExperimentOutlined,
+  PlayCircleOutlined,
+  TrophyOutlined,
+} from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
-import type { RequirementSummary, SubmissionSummary } from "../lib/types";
+import type { CompetitionSummary, RequirementSummary, SubmissionSummary } from "../lib/types";
 
-type BoardTab = "all" | "web" | "android";
-type SortKey =
-  | "avgRequirementRate"
-  | "maxPassRate"
-  | "minRequirementRate"
-  | "avgTokenUsage"
-  | "totalTokenUsage";
+type SurfaceKey = "playground" | "competition" | "research";
 
-type LeaderboardRecord = {
-  id: string;
-  submissionName: string;
-  provider: string;
-  model: string;
-  avgRequirementRate: number;
-  maxPassRate: number;
-  minRequirementRate: number;
-  avgTokenUsage: number;
-  totalTokenUsage: number;
+type SurfaceCard = {
+  key: SurfaceKey;
+  title: string;
+  eyebrow: string;
+  description: string;
+  accentClass: string;
+  icon: React.ReactNode;
+  stats: Array<{ label: string; value: string }>;
+  href?: string;
+  comingSoon?: boolean;
 };
-
-const leaderboardData: Record<BoardTab, LeaderboardRecord[]> = {
-  all: [
-    {
-      id: "claude-code",
-      submissionName: "Claude Code - Web Arena",
-      provider: "Anthropic",
-      model: "Claude Sonnet 4",
-      avgRequirementRate: 86.7,
-      maxPassRate: 96.8,
-      minRequirementRate: 71.3,
-      avgTokenUsage: 3.9,
-      totalTokenUsage: 468.2,
-    },
-    {
-      id: "gpt-codex",
-      submissionName: "GPT Codex - Fullstack Sprint",
-      provider: "OpenAI",
-      model: "GPT-4.1",
-      avgRequirementRate: 84.9,
-      maxPassRate: 95.1,
-      minRequirementRate: 69.8,
-      avgTokenUsage: 4.2,
-      totalTokenUsage: 491.5,
-    },
-    {
-      id: "gemini-cli",
-      submissionName: "Gemini CLI - Browser Tasks",
-      provider: "Google",
-      model: "Gemini 2.5 Pro",
-      avgRequirementRate: 82.4,
-      maxPassRate: 92.6,
-      minRequirementRate: 66.4,
-      avgTokenUsage: 3.5,
-      totalTokenUsage: 430.8,
-    },
-    {
-      id: "cursor-agent",
-      submissionName: "Cursor Agent - Commerce Flow",
-      provider: "Cursor",
-      model: "Claude 3.5 Sonnet",
-      avgRequirementRate: 80.1,
-      maxPassRate: 90.5,
-      minRequirementRate: 62.7,
-      avgTokenUsage: 2.8,
-      totalTokenUsage: 398.6,
-    },
-    {
-      id: "deepseek-agent",
-      submissionName: "DeepSeek Agent - CRM Pass",
-      provider: "DeepSeek",
-      model: "DeepSeek V3",
-      avgRequirementRate: 77.8,
-      maxPassRate: 88.9,
-      minRequirementRate: 58.1,
-      avgTokenUsage: 2.6,
-      totalTokenUsage: 351.9,
-    },
-  ],
-  web: [
-    {
-      id: "claude-code-web",
-      submissionName: "Claude Code - Retail Checkout",
-      provider: "Anthropic",
-      model: "Claude Sonnet 4",
-      avgRequirementRate: 88.5,
-      maxPassRate: 97.3,
-      minRequirementRate: 74.9,
-      avgTokenUsage: 4.1,
-      totalTokenUsage: 282.4,
-    },
-    {
-      id: "gpt-codex-web",
-      submissionName: "GPT Codex - Admin Console",
-      provider: "OpenAI",
-      model: "GPT-4.1",
-      avgRequirementRate: 87.1,
-      maxPassRate: 96.2,
-      minRequirementRate: 72.1,
-      avgTokenUsage: 4.5,
-      totalTokenUsage: 301.2,
-    },
-    {
-      id: "gemini-cli-web",
-      submissionName: "Gemini CLI - Ops Dashboard",
-      provider: "Google",
-      model: "Gemini 2.5 Pro",
-      avgRequirementRate: 84.2,
-      maxPassRate: 93.8,
-      minRequirementRate: 68.5,
-      avgTokenUsage: 3.8,
-      totalTokenUsage: 266.5,
-    },
-    {
-      id: "cursor-agent-web",
-      submissionName: "Cursor Agent - Helpdesk Queue",
-      provider: "Cursor",
-      model: "GPT-4.1",
-      avgRequirementRate: 81.6,
-      maxPassRate: 91.7,
-      minRequirementRate: 63.4,
-      avgTokenUsage: 3.1,
-      totalTokenUsage: 244.9,
-    },
-  ],
-  android: [
-    {
-      id: "gpt-codex-android",
-      submissionName: "GPT Codex - Mobile Booking",
-      provider: "OpenAI",
-      model: "GPT-4.1",
-      avgRequirementRate: 83.2,
-      maxPassRate: 93.4,
-      minRequirementRate: 67.2,
-      avgTokenUsage: 3.7,
-      totalTokenUsage: 190.3,
-    },
-    {
-      id: "claude-code-android",
-      submissionName: "Claude Code - Mobile Wallet",
-      provider: "Anthropic",
-      model: "Claude Sonnet 4",
-      avgRequirementRate: 81.9,
-      maxPassRate: 91.4,
-      minRequirementRate: 65.1,
-      avgTokenUsage: 3.4,
-      totalTokenUsage: 185.8,
-    },
-    {
-      id: "deepseek-agent-android",
-      submissionName: "DeepSeek Agent - Device Setup",
-      provider: "DeepSeek",
-      model: "DeepSeek V3",
-      avgRequirementRate: 79.3,
-      maxPassRate: 89.6,
-      minRequirementRate: 60.8,
-      avgTokenUsage: 2.5,
-      totalTokenUsage: 160.2,
-    },
-    {
-      id: "kimi-agent-android",
-      submissionName: "Kimi Agent - Mobile Support",
-      provider: "Moonshot",
-      model: "Kimi K2",
-      avgRequirementRate: 76.4,
-      maxPassRate: 86.1,
-      minRequirementRate: 57.9,
-      avgTokenUsage: 2.2,
-      totalTokenUsage: 149.7,
-    },
-  ],
-};
-
-const boardTabs: Array<{ key: BoardTab; label: string }> = [
-  { key: "all", label: "All" },
-  { key: "web", label: "Web" },
-  { key: "android", label: "Mobile" },
-];
-
-const sortOptions: Array<{ key: SortKey; label: string }> = [
-  { key: "avgRequirementRate", label: "Average Requirement Coverage" },
-  { key: "maxPassRate", label: "Best Pass Rate" },
-  { key: "minRequirementRate", label: "Lowest Requirement Coverage" },
-  { key: "avgTokenUsage", label: "Average Token Usage (M)" },
-  { key: "totalTokenUsage", label: "Total Token Usage (M)" },
-];
-
-function formatPercent(value: number) {
-  return `${value.toFixed(1)}%`;
-}
-
-function formatToken(value: number) {
-  return `${value.toFixed(1)}M`;
-}
 
 function submissionTitle(submission: SubmissionSummary) {
-  return submission.display_name || submission.id;
+  return submission.display_name || submission.model_name || submission.id;
 }
 
 export default function HomePage() {
-  const { user, isLoading } = useAuth();
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
+  const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const [activeTab, setActiveTab] = useState<BoardTab>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("avgRequirementRate");
-
-  const rankedRecords = useMemo(() => {
-    return [...leaderboardData[activeTab]].sort((a, b) => b[sortKey] - a[sortKey]);
-  }, [activeTab, sortKey]);
-
-  const topRecord = rankedRecords[0];
+  const [activeSurface, setActiveSurface] = useState<SurfaceKey>("playground");
 
   useEffect(() => {
-    api.listRequirements().then(setRequirements).catch(() => undefined);
+    api.listRequirements().then(setRequirements).catch(() => setRequirements([]));
+    api.listCompetitions().then(setCompetitions).catch(() => setCompetitions([]));
+    api.listSubmissions().then((items) => setSubmissions(items.slice(0, 4))).catch(() => setSubmissions([]));
   }, []);
 
-  useEffect(() => {
-    if (!user) {
-      setSubmissions([]);
-      return;
-    }
-    api.listSubmissions().then((items) => setSubmissions(items.slice(0, 6))).catch(() => setSubmissions([]));
-  }, [user]);
+  const webRequirementCount = requirements.filter((item) => item.category === "web").length;
+  const totalTests = requirements.reduce((sum, item) => sum + item.total_tests, 0);
+  const passedSubmissions = submissions.filter((item) => item.status === "PASSED").length;
+  const publicCompetitionCount = competitions.filter((item) => item.is_public).length;
+
+  const surfaces = useMemo<SurfaceCard[]>(
+    () => [
+      {
+        key: "playground",
+        title: "Playground",
+        eyebrow: "Interactive drafting",
+        description:
+          "Design requirements, inspect benchmark structure, and iterate in a lower-pressure workspace before formal evaluation.",
+        accentClass: "playground",
+        icon: <PlayCircleOutlined />,
+        href: "/playground",
+        stats: [
+          { label: "Requirement sets", value: `${requirements.length}` },
+          { label: "Web tasks", value: `${webRequirementCount}` },
+        ],
+      },
+      {
+        key: "competition",
+        title: "Competition",
+        eyebrow: "Scored benchmark runs",
+        description:
+          "Browse active benchmark tracks, review task inventories, and move into scored submission workflows with shared evaluation rules.",
+        accentClass: "competition",
+        icon: <TrophyOutlined />,
+        href: "/requirements",
+        stats: [
+          { label: "Competition tracks", value: `${competitions.length}` },
+          { label: "Public packs", value: `${publicCompetitionCount}` },
+        ],
+      },
+      {
+        key: "research",
+        title: "Research",
+        eyebrow: "Artifacts and findings",
+        description:
+          "Aggregate benchmark outcomes, compare execution evidence, and prepare a home for papers, repos, and methodology notes.",
+        accentClass: "research",
+        icon: <ExperimentOutlined />,
+        comingSoon: true,
+        stats: [
+          { label: "Tracked runs", value: `${submissions.length}` },
+          { label: "Passed runs", value: `${passedSubmissions}` },
+        ],
+      },
+    ],
+    [competitions.length, passedSubmissions, publicCompetitionCount, requirements.length, submissions.length, webRequirementCount],
+  );
+
+  const activeCard = surfaces.find((item) => item.key === activeSurface) ?? surfaces[0];
+  const featuredCompetition = competitions[0] ?? null;
+  const featuredRequirement = requirements[0] ?? null;
+  const featuredSubmission = submissions[0] ?? null;
 
   return (
-    <div className="page home-page">
-      <div className="home-layout">
-        <section className="home-hero-panel">
-          <div className="home-split home-split-wide">
-            <section className="home-left">
-              <div className="home-copy">
-                <div className="home-kicker">
-                  <span className="home-kicker-label">Evaluation Surface</span>
-                  <span className="home-kicker-copy">Executable specs, runner traces, and benchmark scoring.</span>
-                </div>
-                <div className="home-badge">
-                  <span className="dot" />
-                  Benchmark v2.4 Live
-                </div>
-                <div className="home-brand">
-                  <div className="mark">A</div>
-                  <div className="home-brand-text">
-                    <h1>
-                      Arc<span className="gradient">Bench</span>
-                    </h1>
-                    <div className="tagline">Agent Benchmark Platform</div>
-                  </div>
-                </div>
-                <p className="home-desc">
-                  Upload your AI agent, run it against real-world application benchmarks, and inspect
-                  the exact test outcomes, logs, and scoring.
-                </p>
-                <div className="home-proof-strip">
-                  <div className="proof-item">
-                    <span className="proof-key">Specs</span>
-                    <span className="proof-value">Markdown requirements + references</span>
-                  </div>
-                  <div className="proof-item">
-                    <span className="proof-key">Runner</span>
-                    <span className="proof-value">Deterministic execution pipeline</span>
-                  </div>
-                  <div className="proof-item">
-                    <span className="proof-key">Review</span>
-                    <span className="proof-value">Step logs, scores, and artifacts</span>
-                  </div>
-                </div>
-              </div>
+    <div className="page home-page home-page-redesign">
+      <div className="home-layout home-layout-redesign">
+        <section className="home-stage">
+          <div className="home-stage-copy">
+            <div className="home-stage-kicker">
+              <span className="home-stage-kicker-mark">ArcBench</span>
+              <span className="home-stage-kicker-copy">Agent Benchmark Platform</span>
+            </div>
 
-              <div className="home-panels">
-                <div className="categories">
-                  <Link className="category-card" to="/requirements">
-                    <div className="category-icon web">W</div>
-                    <div>
-                      <h3>Web Applications</h3>
-                      <p className="desc">
-                        Benchmark agents on full-stack web tasks backed by executable Playwright suites.
-                      </p>
-                      <div className="category-meta">
-                        <span>
-                          <span className="num">{requirements.length}</span> tasks
-                        </span>
-                        <span>
-                          <span className="num">{submissions.length}</span> recent submissions
-                        </span>
-                      </div>
+            <h1 className="home-stage-title">
+              A benchmark workspace for <span className="gradient">building</span>, <span className="gradient">competing</span>, and <span className="gradient">studying</span> agent behavior.
+            </h1>
+
+            <p className="home-stage-description">
+              Start from the surface that matches your goal. The homepage acts as a routing layer: each area has a distinct intent, a clearer preview, and lighter interaction before deeper workflows.
+            </p>
+
+            <div className="home-stage-metrics">
+              <div className="home-stage-metric">
+                <span className="home-stage-metric-value">{requirements.length}</span>
+                <span className="home-stage-metric-label">Requirements</span>
+              </div>
+              <div className="home-stage-metric">
+                <span className="home-stage-metric-value">{competitions.length}</span>
+                <span className="home-stage-metric-label">Tracks</span>
+              </div>
+              <div className="home-stage-metric">
+                <span className="home-stage-metric-value">{totalTests}</span>
+                <span className="home-stage-metric-label">Tests</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="home-surface-grid" role="tablist" aria-label="Homepage surfaces">
+            {surfaces.map((surface) => {
+              const isActive = surface.key === activeSurface;
+              const cardBody = (
+                <>
+                  <div className="home-surface-main">
+                    <div className={`home-surface-icon ${surface.accentClass}`}>{surface.icon}</div>
+                    <div className="home-surface-text">
+                      <div className="home-surface-eyebrow">{surface.eyebrow}</div>
+                      <h2>{surface.title}</h2>
                     </div>
-                    <ArrowRightOutlined />
-                  </Link>
-                  <div className="category-card disabled">
-                    <div className="category-icon android">A</div>
-                    <div>
-                      <h3>Mobile Applications</h3>
-                      <p className="desc">
-                        Placeholder inventory preserved from the prototype; execution pipeline comes later.
-                      </p>
-                      <div className="category-meta">
-                        <span>
-                          <span className="num">12</span> tasks
-                        </span>
-                        <span>
-                          <span className="num">189</span> submissions
-                        </span>
-                      </div>
+                    <div className="home-surface-arrow" aria-hidden="true">
+                      <ArrowRightOutlined />
                     </div>
                   </div>
-                </div>
 
-                <div className="home-stats">
-                  <div className="home-stat">
-                    <div className="val">{requirements.length || 1}</div>
-                    <div className="lbl">Tasks</div>
+                  <div className="home-surface-support">
+                    <p>{surface.description}</p>
+                    <div className="home-surface-stats">
+                      {surface.stats.map((stat) => (
+                        <div key={stat.label} className="home-surface-stat">
+                          <strong>{stat.value}</strong>
+                          <span>{stat.label}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="home-stat">
-                    <div className="val">{submissions.length}</div>
-                    <div className="lbl">Recent Runs</div>
-                  </div>
-                  <div className="home-stat">
-                    <div className="val">1</div>
-                    <div className="lbl">Live Runner</div>
-                  </div>
-                  <div className="home-stat">
-                    <div className="val">2</div>
-                    <div className="lbl">Runtimes</div>
-                  </div>
-                </div>
-              </div>
-            </section>
+                </>
+              );
 
-            <section className="leaderboard-card leaderboard-card-clean">
-              <div className="leaderboard-clean-header">
-                <div>
-                  <div className="leaderboard-clean-title">Leaderboard</div>
-                  <div className="leaderboard-clean-subtitle">
-                    Mock data is used for now to preview the leaderboard layout, tabs, and sorting.
-                  </div>
-                </div>
-                <div className="leaderboard-clean-summary">
-                  <span className="summary-label">Current Leader</span>
-                  <strong>{topRecord?.submissionName ?? "-"}</strong>
-                </div>
-              </div>
-
-              <div className="leaderboard-controls">
-                <div className="leaderboard-segmented" role="tablist" aria-label="Leaderboard scope tabs">
-                  {boardTabs.map((tab) => (
-                    <button
-                      key={tab.key}
-                      className={`leaderboard-segment ${activeTab === tab.key ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setActiveTab(tab.key)}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <label className="leaderboard-sorter">
-                  <span>Sort By</span>
-                  <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
-                    {sortOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="leaderboard-table-wrap">
-                <table className="leaderboard-table leaderboard-table-clean">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "72px" }}>Rank</th>
-                      <th>Submission</th>
-                      <th style={{ width: "170px" }}>Model</th>
-                      <th style={{ width: "138px" }}>Avg. Coverage</th>
-                      <th style={{ width: "138px" }}>Best Pass Rate</th>
-                      <th style={{ width: "138px" }}>Min. Coverage</th>
-                      <th style={{ width: "128px" }}>Avg. Tokens (M)</th>
-                      <th style={{ width: "128px" }}>Total Tokens (M)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rankedRecords.map((record, index) => (
-                      <tr key={record.id}>
-                        <td className="leaderboard-rank-cell">{index + 1}</td>
-                        <td>
-                          <div className="leaderboard-model-cell">
-                            <div className="leaderboard-model-name">{record.submissionName}</div>
-                            <div className="leaderboard-model-meta">{record.provider}</div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="model-chip">{record.model}</span>
-                        </td>
-                        <td className={sortKey === "avgRequirementRate" ? "leaderboard-metric-active" : ""}>
-                          {formatPercent(record.avgRequirementRate)}
-                        </td>
-                        <td className={sortKey === "maxPassRate" ? "leaderboard-metric-active" : ""}>
-                          {formatPercent(record.maxPassRate)}
-                        </td>
-                        <td className={sortKey === "minRequirementRate" ? "leaderboard-metric-active" : ""}>
-                          {formatPercent(record.minRequirementRate)}
-                        </td>
-                        <td className={sortKey === "avgTokenUsage" ? "leaderboard-metric-active" : ""}>
-                          {formatToken(record.avgTokenUsage)}
-                        </td>
-                        <td className={sortKey === "totalTokenUsage" ? "leaderboard-metric-active" : ""}>
-                          {formatToken(record.totalTokenUsage)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+              return surface.href && !surface.comingSoon ? (
+                <Link
+                  key={surface.key}
+                  to={surface.href}
+                  className={`home-surface-card ${surface.accentClass} ${isActive ? "active" : ""}`}
+                  onMouseEnter={() => setActiveSurface(surface.key)}
+                  onFocus={() => setActiveSurface(surface.key)}
+                >
+                  {cardBody}
+                </Link>
+              ) : (
+                <button
+                  key={surface.key}
+                  type="button"
+                  className={`home-surface-card ${surface.accentClass} ${isActive ? "active" : ""} is-static`}
+                  onMouseEnter={() => setActiveSurface(surface.key)}
+                  onFocus={() => setActiveSurface(surface.key)}
+                  onClick={() => setActiveSurface(surface.key)}
+                >
+                  {cardBody}
+                </button>
+              );
+            })}
           </div>
         </section>
 
-        <section className="home-recent-panel">
-          <div className="home-section-header">
-            <div>
-              <div className="leaderboard-clean-title">Recent Submissions</div>
-              <div className="leaderboard-clean-subtitle">
-                {user
-                  ? "Latest runs from your account, with custom submission names when provided."
-                  : "Login to see your recent runs and private submission history."}
+        <section className="home-preview-band">
+          <div className="home-preview-panel">
+            <div className="home-preview-header">
+              <div>
+                <div className="home-preview-label">Surface Preview</div>
+                <h3>{activeCard.title}</h3>
               </div>
+              {activeCard.comingSoon ? <span className="home-preview-chip">Planned</span> : <span className="home-preview-chip active">Available</span>}
             </div>
-            <Link className="inline-link" to={user ? "/requirements" : "/login"}>
-              {user ? "Browse competitions" : "Login"}
-            </Link>
+
+            <div className="home-preview-content">
+              {activeSurface === "playground" ? (
+                <>
+                  <div className="home-preview-block">
+                    <span className="home-preview-block-label">Focus</span>
+                    <strong>Interactive requirement design and exploratory submission setup</strong>
+                  </div>
+                  <div className="home-preview-list">
+                    <div className="home-preview-item">
+                      <CodeOutlined />
+                      <span>Enter from a drafting-first workflow before pushing agents into scored evaluation.</span>
+                    </div>
+                    <div className="home-preview-item">
+                      <CodeOutlined />
+                      <span>Keep the entry lightweight and closer to requirement authoring, test inspection, and structure learning.</span>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {activeSurface === "competition" ? (
+                <>
+                  <div className="home-preview-grid">
+                    <div className="home-preview-record">
+                      <span className="home-preview-block-label">Featured track</span>
+                      <strong>{featuredCompetition?.title ?? "No competition data"}</strong>
+                      <p>{featuredCompetition?.summary ?? "Competition summaries will appear here once data is available."}</p>
+                    </div>
+                    <div className="home-preview-record">
+                      <span className="home-preview-block-label">Task snapshot</span>
+                      <strong>{featuredRequirement?.title ?? "No task loaded"}</strong>
+                      <p>{featuredRequirement?.summary ?? "Task examples can be previewed here to help users choose an entry path."}</p>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {activeSurface === "research" ? (
+                <>
+                  <div className="home-preview-block">
+                    <span className="home-preview-block-label">Intent</span>
+                    <strong>Evidence-oriented browsing for benchmark outcomes, artifacts, and research context</strong>
+                  </div>
+                  <div className="home-preview-grid compact">
+                    <div className="home-preview-record">
+                      <span className="home-preview-block-label">Latest run</span>
+                      <strong>{featuredSubmission ? submissionTitle(featuredSubmission) : "No recent run"}</strong>
+                      <p>
+                        {featuredSubmission
+                          ? `${featuredSubmission.status} on ${featuredSubmission.requirement_id}`
+                          : "Once research views are added, benchmark run evidence can be surfaced here."}
+                      </p>
+                    </div>
+                    <div className="home-preview-record muted">
+                      <span className="home-preview-block-label">Planned modules</span>
+                      <strong>Rankings, papers, repos</strong>
+                      <p>Use this space to expose publication context and cross-run comparisons without forcing users into submission flows.</p>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
 
-          {!user && !isLoading ? (
-            <div className="empty-state">Login to view your submission history.</div>
-          ) : submissions.length === 0 ? (
-            <div className="empty-state">No submissions yet.</div>
-          ) : (
-            <div className="recent-list-grid">
-              {submissions.map((submission) => (
-                <Link key={submission.id} to={`/submissions/${submission.id}`} className="recent-card">
-                  <div className="recent-card-top">
-                    <div>
-                      <div className="recent-card-title">{submissionTitle(submission)}</div>
-                      <div className="recent-card-subtitle">{submission.id}</div>
-                    </div>
-                    <div
-                      className={`test-badge ${submission.status === "PASSED" ? "pass" : submission.status === "FAILED" ? "fail" : "pending"}`}
-                    >
-                      {submission.status}
-                    </div>
-                  </div>
-                  <div className="recent-card-meta">
-                    <span>{submission.requirement_id}</span>
-                    <span>{submission.runtime}</span>
-                    <span>{new Date(submission.created_at).toLocaleString()}</span>
-                  </div>
-                  <div className="recent-card-score-row">
-                    <span className="recent-card-score-label">Score</span>
-                    <span className="recent-card-score-value">
-                      {submission.score == null ? "--" : submission.score.toFixed(1)}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+          <div className="home-quick-column">
+            <div className="home-quick-card">
+              <div className="home-preview-label">Current data</div>
+              <div className="home-quick-list">
+                <div className="home-quick-item">
+                  <span>Requirements</span>
+                  <strong>{requirements.length}</strong>
+                </div>
+                <div className="home-quick-item">
+                  <span>Competitions</span>
+                  <strong>{competitions.length}</strong>
+                </div>
+                <div className="home-quick-item">
+                  <span>Recent runs</span>
+                  <strong>{submissions.length}</strong>
+                </div>
+              </div>
             </div>
-          )}
+
+            <div className="home-quick-card">
+              <div className="home-preview-label">Design direction</div>
+              <p className="home-quick-note">
+                This homepage is now organized as three destination cards with hover and focus previews, so the user understands where to go before entering deeper pages.
+              </p>
+            </div>
+          </div>
         </section>
       </div>
     </div>

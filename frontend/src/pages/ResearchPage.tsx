@@ -1,21 +1,22 @@
-import { PlayCircleOutlined } from "@ant-design/icons";
+import { ReadOutlined } from "@ant-design/icons";
 
-export default function PlaygroundPage() {
+export default function ResearchPage() {
   return (
     <div className="page playground-page">
       <div className="playground-wrap">
         <div className="playground-card">
-          <div className="playground-visual">
+          <div className="playground-visual research-visual">
             <div className="ring" />
             <div className="ring" />
             <div className="ring" />
             <div className="core">
-              <PlayCircleOutlined />
+              <ReadOutlined />
             </div>
           </div>
-          <h2>Playground</h2>
+          <h2>Research</h2>
           <p>
-            A freeform environment to experiment with agents, iterate on prompts, and debug outputs. No scoring, no leaderboard.
+            A dedicated surface for rankings, benchmark findings, linked papers, repos, and evaluation evidence.
+            This page is front-end scaffolding for now.
           </p>
           <button className="btn-outline" disabled type="button">
             Coming Soon

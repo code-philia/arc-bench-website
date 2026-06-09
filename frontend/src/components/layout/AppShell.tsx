@@ -1,5 +1,5 @@
 import { message } from "antd";
-import { BulbOutlined, CodeOutlined, MoonOutlined, PlayCircleOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
+import { HomeOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
@@ -13,20 +13,15 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { to: "/", label: "Home", icon: <TrophyOutlined />, matches: ["/"] },
+  { to: "/", label: "Home", icon: <HomeOutlined />, matches: ["/"] },
+  { to: "/playground", label: "Playground", icon: <PlayCircleOutlined />, matches: ["/playground"] },
   {
     to: "/requirements",
-    label: "Competition",
-    icon: <CodeOutlined />,
-    matches: ["/requirements", "/competitions/:competitionId"],
+    label: "Competation",
+    icon: <TrophyOutlined />,
+    matches: ["/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
   },
-  {
-    to: "/requirements/12306",
-    label: "Task Detail",
-    icon: <BulbOutlined />,
-    matches: ["/requirements/:requirementId"],
-  },
-  { to: "/playground", label: "Playground", icon: <PlayCircleOutlined />, matches: ["/playground"] },
+  { to: "/research", label: "Research", icon: <ReadOutlined />, matches: ["/research"] },
 ];
 
 function isNavItemActive(pathname: string, item: NavItem) {

@@ -5,6 +5,7 @@ import CompetitionDetailPage from "../pages/CompetitionDetailPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import PlaygroundPage from "../pages/PlaygroundPage";
+import ResearchPage from "../pages/ResearchPage";
 import RegisterPage from "../pages/RegisterPage";
 import RequirementDetailPage from "../pages/RequirementDetailPage";
 import RequirementsPage from "../pages/RequirementsPage";
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { path: "requirements/:requirementId", element: <RequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },
+      { path: "research", element: <ResearchPage /> },
     ],
   },
 ]);
