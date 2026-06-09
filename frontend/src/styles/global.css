@@ -1684,6 +1684,257 @@ button {
   padding: 32px 0 80px;
 }
 
+.competition-home-page {
+  padding: 0 34px 56px;
+}
+
+.competition-home-shell {
+  padding-top: 12px;
+}
+
+.competition-home-breadcrumb {
+  padding: 8px 0 24px;
+}
+
+.competition-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 34px;
+  align-items: start;
+}
+
+.competition-heroes-panel,
+.competition-bank-shell {
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: 0 20px 52px rgba(16, 25, 41, 0.08);
+}
+
+.competition-heroes-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 26px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.competition-panel-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.competition-heroes-header h1 {
+  margin: 10px 0 8px;
+  font-size: 1.56rem;
+  line-height: 1.15;
+}
+
+.competition-heroes-header p {
+  margin: 0;
+  max-width: 560px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.competition-hero-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 245, 0.92));
+  text-align: right;
+}
+
+.competition-hero-summary strong {
+  color: var(--text);
+  font-size: 0.96rem;
+}
+
+.competition-hero-summary-model {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.competition-heroes-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 26px;
+  border-bottom: 1px solid var(--border);
+}
+
+.competition-heroes-sorter {
+  white-space: nowrap;
+}
+
+.competition-heroes-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 26px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(247, 250, 252, 0.96), rgba(255, 255, 255, 0.86));
+}
+
+.competition-overview-card {
+  display: grid;
+  gap: 6px;
+  min-height: 84px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.competition-overview-card.accent {
+  border-color: rgba(63, 136, 197, 0.28);
+  background: rgba(63, 136, 197, 0.08);
+}
+
+.competition-overview-card span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.competition-overview-card strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 1.1rem;
+}
+
+.competition-heroes-table-wrap {
+  padding: 0 0 8px;
+}
+
+.competition-heroes-table tbody tr.is-top {
+  background: linear-gradient(90deg, rgba(122, 180, 72, 0.08), transparent 60%);
+}
+
+.competition-user-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.competition-user-cell strong {
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.competition-user-cell span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.competition-bank-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.competition-bank-list {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.competition-bank-state {
+  min-height: 240px;
+  margin: 18px;
+}
+
+.competition-bank-item {
+  display: grid;
+  gap: 14px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.competition-bank-item:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-light);
+  box-shadow: 0 16px 30px rgba(16, 25, 41, 0.08);
+}
+
+.competition-bank-item.web {
+  border-left: 4px solid rgba(63, 136, 197, 0.7);
+}
+
+.competition-bank-item.mobile {
+  border-left: 4px solid rgba(84, 192, 153, 0.72);
+}
+
+.competition-bank-item.mixed {
+  border-left: 4px solid rgba(223, 164, 77, 0.72);
+}
+
+.competition-bank-item-main h2 {
+  margin: 12px 0 8px;
+  font-size: 1.1rem;
+}
+
+.competition-bank-item-main p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.competition-bank-item-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.competition-bank-meta-block {
+  display: grid;
+  gap: 4px;
+}
+
+.competition-bank-meta-block span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.competition-bank-meta-block strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.88rem;
+}
+
+.competition-bank-arrow {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.competition-bank-foot {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .competition-hero,
 .competition-detail-hero {
   display: grid;
@@ -3150,6 +3401,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .competition-home-grid {
+    grid-template-columns: 1fr;
+  }
+
   .recent-list-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3186,6 +3441,11 @@ button {
   .home-page,
   .library-page,
   .submission-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .competition-home-page {
     padding-left: 16px;
     padding-right: 16px;
   }
@@ -3261,6 +3521,17 @@ button {
   }
 
   .competition-list-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .competition-heroes-header,
+  .competition-heroes-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .competition-heroes-overview,
+  .competition-bank-item-meta {
     grid-template-columns: 1fr;
   }
 
