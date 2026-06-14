@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import AppShell from "../components/layout/AppShell";
+import ApiDocPage from "../pages/ApiDocPage";
 import CompetitionDetailPage from "../pages/CompetitionDetailPage";
 import CreateTaskPage from "../pages/CreateTaskPage";
 import HomePage from "../pages/HomePage";
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "requirements", element: <RequirementsPage /> },
+      { path: "api-doc", element: <ApiDocPage /> },
       { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },
       { path: "requirements/:requirementId", element: <RequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },

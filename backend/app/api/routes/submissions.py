@@ -110,4 +110,5 @@ def get_submission_logs(
     if stderr_path:
         with stderr_path.open("r", encoding="utf-8") as stderr_file:
             stderr = stderr_file.read()
-    return SubmissionLogs(events=events, stdout=stdout, stderr=stderr)
+    visual_events = service.read_visual_events(submission)
+    return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events)

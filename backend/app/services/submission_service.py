@@ -15,7 +15,7 @@ from app.core.enums import RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
-from app.schemas.submission import StepState, SubmissionDetail, SubmissionSummary
+from app.schemas.submission import StepState, SubmissionDetail, SubmissionSummary, SubmissionVisualEvent
 from app.services.runtime_path_service import RuntimePathService
 
 
@@ -280,6 +280,50 @@ class SubmissionService:
                 }
             )
         return events
+
+    def read_visual_events(self, submission: Submission) -> list[SubmissionVisualEvent]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            return []
+
+        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        if not runner_events_path.exists():
+            return []
+
+        visual_events: list[SubmissionVisualEvent] = []
+        for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            if str(parsed.get("type", "")).strip() != "requirement_state":
+                continue
+
+            node_id = str(parsed.get("node_id", "")).strip()
+            phase = str(parsed.get("phase", "")).strip()
+            status = str(parsed.get("status", "")).strip()
+            timestamp = str(parsed.get("timestamp", "")).strip()
+            message = str(parsed.get("message", "")).strip() or None
+
+            if not node_id or phase not in {"design", "implement", "test"} or status not in {"completed", "passed", "failed"} or not timestamp:
+                continue
+
+            visual_events.append(
+                SubmissionVisualEvent(
+                    type="requirement_state",
+                    node_id=node_id,
+                    phase=phase,
+                    status=status,
+                    timestamp=timestamp,
+                    message=message,
+                )
+            )
+        return visual_events
 
     def read_event_lines(self, submission: Submission) -> list[str]:
         return [

@@ -11,7 +11,7 @@ import {
 } from "@ant-design/icons";
 import { Tooltip } from "antd";
 import dagre from "@dagrejs/dagre";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Handle,
   MarkerType,
@@ -25,12 +25,15 @@ import {
 } from "@xyflow/react";
 
 import { findNodeById, type RequirementNode } from "../../lib/taskTree";
+import type { RequirementVisualState } from "../../lib/types";
 
 type FlowNodeData = {
   label: string;
   title: string;
   type: RequirementNode["type"];
   selected: boolean;
+  visualState: RequirementVisualState;
+  pulse: boolean;
 };
 
 type RequirementTreeCanvasProps = {
@@ -46,6 +49,10 @@ type RequirementTreeCanvasProps = {
   onAddSibling?: () => void;
   onDeleteNode?: () => void;
   renderDetailContent?: (node: RequirementNode) => React.ReactNode;
+  nodeStates?: Record<string, RequirementVisualState>;
+  focusNodeId?: string | null;
+  pulseNodeId?: string | null;
+  showLegend?: boolean;
 };
 
 const NODE_WIDTH = 124;
@@ -58,7 +65,12 @@ function collectTreeNodes(root: RequirementNode, parentId: string | null = null)
   ];
 }
 
-function buildFlowFromTree(tree: RequirementNode, selectedNodeId: string | null): { nodes: Node<FlowNodeData>[]; edges: Edge[] } {
+function buildFlowFromTree(
+  tree: RequirementNode,
+  selectedNodeId: string | null,
+  nodeStates: Record<string, RequirementVisualState>,
+  pulseNodeId: string | null,
+): { nodes: Node<FlowNodeData>[]; edges: Edge[] } {
   const items = collectTreeNodes(tree);
   const graph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   graph.setGraph({
@@ -106,6 +118,8 @@ function buildFlowFromTree(tree: RequirementNode, selectedNodeId: string | null)
         title: node.name,
         type: node.type,
         selected: selectedNodeId === node.id,
+        visualState: nodeStates[node.id] ?? "default",
+        pulse: pulseNodeId === node.id,
       },
       draggable: false,
     };
@@ -116,11 +130,39 @@ function buildFlowFromTree(tree: RequirementNode, selectedNodeId: string | null)
 
 function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
   return (
-    <div className={`task-flow-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""}`}>
+    <div
+      className={`task-flow-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
+    >
       <Handle type="target" position={Position.Left} className="task-flow-handle" isConnectable={false} />
       <strong>{data.label}</strong>
       <span>{data.title}</span>
       <Handle type="source" position={Position.Right} className="task-flow-handle" isConnectable={false} />
+    </div>
+  );
+}
+
+function RequirementStateLegend() {
+  return (
+    <div className="task-flow-legend">
+      <div className="task-flow-legend-title">Legend</div>
+      <div className="task-flow-legend-list">
+        <div className="task-flow-legend-item">
+          <span className="task-flow-legend-swatch design" />
+          <span>Design Done</span>
+        </div>
+        <div className="task-flow-legend-item">
+          <span className="task-flow-legend-swatch implement" />
+          <span>Implementation Done</span>
+        </div>
+        <div className="task-flow-legend-item">
+          <span className="task-flow-legend-swatch test-passed" />
+          <span>Test Passed</span>
+        </div>
+        <div className="task-flow-legend-item">
+          <span className="task-flow-legend-swatch test-failed" />
+          <span>Test Failed</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -210,9 +252,17 @@ function TreeCanvasInner({
   onAddSibling,
   onDeleteNode,
   renderDetailContent,
+  nodeStates = {},
+  focusNodeId = null,
+  pulseNodeId = null,
+  showLegend = false,
 }: RequirementTreeCanvasProps) {
   const reactFlow = useReactFlow();
-  const flow = useMemo(() => buildFlowFromTree(tree, selectedNodeId), [selectedNodeId, tree]);
+  const lastFocusKeyRef = useRef<string | null>(null);
+  const flow = useMemo(
+    () => buildFlowFromTree(tree, selectedNodeId, nodeStates, pulseNodeId),
+    [nodeStates, pulseNodeId, selectedNodeId, tree],
+  );
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
 
   useEffect(() => {
@@ -221,6 +271,29 @@ function TreeCanvasInner({
     }, 30);
     return () => window.clearTimeout(timer);
   }, [reactFlow, tree]);
+
+  useEffect(() => {
+    if (!focusNodeId) {
+      return;
+    }
+    const focusKey = `${focusNodeId}:${pulseNodeId ?? ""}`;
+    if (lastFocusKeyRef.current === focusKey) {
+      return;
+    }
+    lastFocusKeyRef.current = focusKey;
+    const target = flow.nodes.find((node) => node.id === focusNodeId);
+    if (!target) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      reactFlow.setCenter(
+        target.position.x + NODE_WIDTH / 2,
+        target.position.y + NODE_HEIGHT / 2,
+        { zoom: 1.25, duration: 420 },
+      );
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [flow.nodes, focusNodeId, pulseNodeId, reactFlow]);
 
   const detailContent = selectedNode
     ? (renderDetailContent ? renderDetailContent(selectedNode) : <ReadonlyNodeDetail node={selectedNode} />)
@@ -273,6 +346,7 @@ function TreeCanvasInner({
         </div>
 
         <div className="task-flow-shell">
+          {showLegend ? <RequirementStateLegend /> : null}
           <ReactFlow
             nodes={flow.nodes}
             edges={flow.edges}
@@ -297,6 +371,10 @@ function TreeCanvasInner({
                 width: 22,
                 height: 22,
                 color: "#145c4c",
+              },
+              style: {
+                stroke: "#677784",
+                strokeWidth: 1.3,
               },
             }}
           />

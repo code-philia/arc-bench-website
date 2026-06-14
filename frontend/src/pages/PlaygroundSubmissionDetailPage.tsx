@@ -7,7 +7,7 @@ import SubmissionResultCard from "../components/submissions/SubmissionResultCard
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { requirementMarkdownToTree } from "../lib/taskTree";
-import type { RequirementDetail, SubmissionDetail, SubmissionLogs } from "../lib/types";
+import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -37,6 +37,22 @@ function normalizeTaskType(value: string) {
   return "web";
 }
 
+function toVisualState(event: SubmissionVisualEvent): RequirementVisualState {
+  if (event.phase === "design") {
+    return "design";
+  }
+  if (event.phase === "implement") {
+    return "implement";
+  }
+  if (event.phase === "test" && event.status === "passed") {
+    return "test-passed";
+  }
+  if (event.phase === "test" && event.status === "failed") {
+    return "test-failed";
+  }
+  return "default";
+}
+
 export default function PlaygroundSubmissionDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
   const taskType = normalizeTaskType(rawTaskType);
@@ -51,7 +67,10 @@ export default function PlaygroundSubmissionDetailPage() {
   const [stdioTab, setStdioTab] = useState<"stdout" | "stderr">("stdout");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
   const [detailExpanded, setDetailExpanded] = useState(true);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [pulseNodeId, setPulseNodeId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const seenVisualKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setLoadError(null);
@@ -105,6 +124,39 @@ export default function PlaygroundSubmissionDetailPage() {
     return requirementMarkdownToTree(requirement.requirements_markdown);
   }, [requirement]);
 
+  const nodeStates = useMemo(() => {
+    const nextState: Record<string, RequirementVisualState> = {};
+    for (const event of logs?.visual_events ?? []) {
+      nextState[event.node_id] = toVisualState(event);
+    }
+    return nextState;
+  }, [logs]);
+
+  useEffect(() => {
+    const events = logs?.visual_events ?? [];
+    if (events.length === 0) {
+      return;
+    }
+    const newest = [...events].reverse().find((event) => {
+      const key = `${event.timestamp}:${event.node_id}:${event.phase}:${event.status}:${event.message ?? ""}`;
+      if (seenVisualKeysRef.current.has(key)) {
+        return false;
+      }
+      seenVisualKeysRef.current.add(key);
+      return true;
+    });
+    if (!newest) {
+      return;
+    }
+    setActiveTab("canvas");
+    setSelectedNodeId(newest.node_id);
+    setDetailExpanded(true);
+    setFocusNodeId(newest.node_id);
+    setPulseNodeId(newest.node_id);
+    const timer = window.setTimeout(() => setPulseNodeId((current) => (current === newest.node_id ? null : current)), 1400);
+    return () => window.clearTimeout(timer);
+  }, [logs]);
+
   if (loading) {
     return (
       <div className="page centered">
@@ -145,11 +197,7 @@ export default function PlaygroundSubmissionDetailPage() {
             <h1>{submission.display_name || submission.id}</h1>
             <div className="playground-submission-inline-meta">
               <span>{submission.id}</span>
-              <span>Created: {formatDateTime(submission.created_at)}</span>
-              <span>Started: {formatDateTime(submission.started_at)}</span>
               <span>Duration: {formatDuration(submission.started_at, submission.finished_at)}</span>
-              <span>{resultSummary(submission)}</span>
-              <span>Score: {submission.score?.toFixed(1) ?? "--"}</span>
             </div>
           </div>
 
@@ -194,6 +242,10 @@ export default function PlaygroundSubmissionDetailPage() {
                     onDetailExpandedChange={setDetailExpanded}
                     mode="readonly"
                     detailPlacement="right"
+                    nodeStates={nodeStates}
+                    focusNodeId={focusNodeId}
+                    pulseNodeId={pulseNodeId}
+                    showLegend
                   />
                 </div>
               ) : (

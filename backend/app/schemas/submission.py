@@ -3,6 +3,15 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class SubmissionVisualEvent(BaseModel):
+    type: str
+    node_id: str
+    phase: str
+    status: str
+    timestamp: str
+    message: str | None = None
+
+
 class StepState(BaseModel):
     key: str
     title: str
@@ -46,3 +55,4 @@ class SubmissionLogs(BaseModel):
     events: str
     stdout: str
     stderr: str
+    visual_events: list[SubmissionVisualEvent] = Field(default_factory=list)

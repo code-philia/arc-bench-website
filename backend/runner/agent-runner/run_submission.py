@@ -15,6 +15,7 @@ SUBMISSION_DIR = WORKSPACE_ROOT / "submission"
 TEMPLATE_DIR = WORKSPACE_ROOT / "template"
 TASK_DIR = WORKSPACE_ROOT / "task"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
+SDK_DIR = WORKSPACE_ROOT / "sdk"
 PROMPT_PATH = WORKSPACE_ROOT / "prompt" / "task_prompt.txt"
 SPEC_PATH = WORKSPACE_ROOT / "runner-spec.json"
 ARTIFACTS_DIR = WORKSPACE_ROOT / "artifacts"
@@ -148,6 +149,10 @@ def run_generation_agent(stdout_file, stderr_file) -> None:
         "ARCBENCH_TASK_DIR": str(TASK_DIR),
         "ARCBENCH_SUBMISSION_DIR": str(SUBMISSION_DIR),
         "ARCBENCH_OUTPUT_DIR": str(TEMPLATE_DIR),
+        "ARCBENCH_ARTIFACTS_DIR": str(ARTIFACTS_DIR),
+        "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
+        "ARCBENCH_SDK_DIR": str(SDK_DIR),
+        "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
     completed = run_command(
         command,

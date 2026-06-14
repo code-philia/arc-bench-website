@@ -86,7 +86,19 @@ export type SubmissionLogs = {
   events: string;
   stdout: string;
   stderr: string;
+  visual_events: SubmissionVisualEvent[];
 };
+
+export type SubmissionVisualEvent = {
+  type: "requirement_state";
+  node_id: string;
+  phase: "design" | "implement" | "test";
+  status: "completed" | "passed" | "failed";
+  timestamp: string;
+  message: string | null;
+};
+
+export type RequirementVisualState = "default" | "design" | "implement" | "test-passed" | "test-failed";
 
 export type UserTaskSummary = {
   id: string;

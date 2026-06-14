@@ -1,5 +1,5 @@
 import { message } from "antd";
-import { HomeOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
+import { ApiOutlined, HomeOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
@@ -35,6 +35,7 @@ const navItems: NavItem[] = [
     matches: ["/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
   },
   { to: "/research", label: "Research", icon: <ReadOutlined />, matches: ["/research"] },
+  { to: "/api-doc", label: "API Doc", icon: <ApiOutlined />, matches: ["/api-doc"] },
 ];
 
 function isNavItemActive(pathname: string, item: NavItem) {
