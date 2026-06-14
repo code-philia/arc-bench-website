@@ -162,34 +162,7 @@ export default function ResearchPage() {
           <span className="sep">/</span>
           <span className="current">Overview</span>
         </div>
-
-        <section className="research-hero-panel">
-          <div className="research-hero-copy">
-            <div className="competition-panel-kicker">
-              <ReadOutlined /> Research Index
-            </div>
-            <h1>Agents and benchmarks worth tracking</h1>
-            <p>
-              A compact reference surface for related agent systems and benchmark suites. The page stays lightweight and readable, with direct links to papers and repositories where available.
-            </p>
-          </div>
-
-          <div className="research-hero-metrics">
-            <div className="competition-overview-card">
-              <span>Agents</span>
-              <strong>{agentEntries.length}</strong>
-            </div>
-            <div className="competition-overview-card">
-              <span>Benchmarks</span>
-              <strong>{benchmarkEntries.length}</strong>
-            </div>
-            <div className="competition-overview-card accent">
-              <span>Linked artifacts</span>
-              <strong>{agentEntries.length + benchmarkEntries.length}</strong>
-            </div>
-          </div>
-        </section>
-
+        
         <div className="research-grid">
           <section className="research-column-panel leaderboard-card leaderboard-card-clean">
             <div className="research-panel-header">
