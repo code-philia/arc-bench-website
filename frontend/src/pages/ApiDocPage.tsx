@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState, type ReactNode } from "react";
 
 type DocTabKey = "python" | "javascript" | "typescript";
 
@@ -47,9 +47,84 @@ const tabLabels: Record<DocTabKey, string> = {
   typescript: "TypeScript",
 };
 
+const PY_KEYWORDS = new Set([
+  "import", "from", "def", "class", "return", "if", "else", "elif",
+  "for", "while", "try", "except", "None", "True", "False", "as",
+  "in", "not", "and", "or", "with", "pass", "raise", "yield", "lambda",
+]);
+
+const JS_KEYWORDS = new Set([
+  "import", "from", "export", "const", "let", "var", "function",
+  "return", "if", "else", "for", "while", "try", "catch", "throw",
+  "new", "class", "extends", "async", "await", "of", "in", "typeof",
+  "instanceof", "default", "switch", "case", "break", "continue",
+  "null", "undefined", "true", "false",
+]);
+
+function tokenToToken(kind: string, text: string): ReactNode {
+  return <span className={`code-token code-${kind}`}>{text}</span>;
+}
+
+function highlightLine(line: string, lang: DocTabKey): ReactNode[] {
+  const tokens: ReactNode[] = [];
+  const keywords = lang === "python" ? PY_KEYWORDS : JS_KEYWORDS;
+  let i = 0;
+
+  while (i < line.length) {
+    // Comments
+    if (line[i] === "#" && lang === "python") {
+      tokens.push(tokenToToken("comment", line.slice(i)));
+      break;
+    }
+    if (line[i] === "/" && line[i + 1] === "/") {
+      tokens.push(tokenToToken("comment", line.slice(i)));
+      break;
+    }
+
+    // Strings
+    const quote = line[i];
+    if (quote === '"' || quote === "'" || quote === "`") {
+      let j = i + 1;
+      while (j < line.length && line[j] !== quote) {
+        if (line[j] === "\\") j++;
+        j++;
+      }
+      if (j < line.length) j++;
+      tokens.push(tokenToToken("string", line.slice(i, j)));
+      i = j;
+      continue;
+    }
+
+    // Words
+    if (/[a-zA-Z_]/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      const word = line.slice(i, j);
+      if (keywords.has(word)) {
+        tokens.push(tokenToToken("keyword", word));
+      } else if (j < line.length && line[j] === "(") {
+        tokens.push(tokenToToken("function", word));
+      } else {
+        tokens.push(<span>{word}</span>);
+      }
+      i = j;
+      continue;
+    }
+
+    tokens.push(<span>{line[i]}</span>);
+    i++;
+  }
+
+  return tokens;
+}
+
 export default function ApiDocPage() {
   const [activeTab, setActiveTab] = useState<DocTabKey>("python");
   const activeCode = useMemo(() => codeExamples[activeTab], [activeTab]);
+  const highlighted = useMemo(() => {
+    const lines = activeCode.split(/\r?\n/);
+    return lines.map((line) => highlightLine(line, activeTab));
+  }, [activeCode, activeTab]);
 
   return (
     <div className="page api-doc-page">
@@ -200,19 +275,24 @@ export default function ApiDocPage() {
 
             <section id="examples" className="api-doc-section-block">
               <h2>Examples</h2>
-              <div className="api-doc-tabs" role="tablist" aria-label="Language examples">
-                {(Object.keys(tabLabels) as DocTabKey[]).map((tabKey) => (
-                  <button
-                    key={tabKey}
-                    type="button"
-                    className={`api-doc-tab${activeTab === tabKey ? " active" : ""}`}
-                    onClick={() => setActiveTab(tabKey)}
-                  >
-                    {tabLabels[tabKey]}
-                  </button>
-                ))}
+              <div className="api-doc-code-block">
+                <div className="api-doc-code-toolbar">
+                  <span className="api-doc-code-lang-label">{tabLabels[activeTab]}</span>
+                  <div className="api-doc-code-tabs" role="tablist" aria-label="Language examples">
+                    {(Object.keys(tabLabels) as DocTabKey[]).map((tabKey) => (
+                      <button
+                        key={tabKey}
+                        type="button"
+                        className={`api-doc-code-tab${activeTab === tabKey ? " active" : ""}`}
+                        onClick={() => setActiveTab(tabKey)}
+                      >
+                        {tabLabels[tabKey]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <pre className="api-doc-code"><code>{highlighted.map((line, i) => <div key={i} className="code-line">{line.length ? line : " "}</div>)}</code></pre>
               </div>
-              <pre className="api-doc-code"><code>{activeCode}</code></pre>
             </section>
 
             <section id="runtime" className="api-doc-section-block">
@@ -233,3 +313,4 @@ export default function ApiDocPage() {
     </div>
   );
 }
+

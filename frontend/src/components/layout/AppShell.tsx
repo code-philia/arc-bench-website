@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   },
   {
     to: "/requirements",
-    label: "Competation",
+    label: "Competition",
     icon: <TrophyOutlined />,
     matches: ["/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
   },
