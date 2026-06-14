@@ -1,34 +1,17 @@
 import {
-  ApartmentOutlined,
   CaretRightOutlined,
-  DownOutlined,
   DeleteOutlined,
-  MinusOutlined,
   PlusOutlined,
-  RadarChartOutlined,
   SaveOutlined,
-  ShareAltOutlined,
   UploadOutlined,
-  UpOutlined,
 } from "@ant-design/icons";
-import { message, Modal, Tooltip } from "antd";
-import dagre from "@dagrejs/dagre";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
-  ReactFlowProvider,
-  useReactFlow,
-  type Edge,
-  type Node,
-  type NodeProps,
-} from "@xyflow/react";
+import { message, Modal } from "antd";
+import { useMemo, useRef, useState } from "react";
 import "@xyflow/react/dist/style.css";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
 import MarkdownDocument from "../components/requirements/MarkdownDocument";
 import { api } from "../lib/api";
 import {
@@ -51,21 +34,11 @@ type CreateTaskFormState = {
   taskType: "web" | "mobile" | "kernel" | "mixed";
 };
 
-type FlowNodeData = {
-  label: string;
-  title: string;
-  type: RequirementNode["type"];
-  selected: boolean;
-};
-
 type ChapterItem = {
   id: string;
   title: string;
   children: ChapterItem[];
 };
-
-const NODE_WIDTH = 124;
-const NODE_HEIGHT = 48;
 
 function slugifyFileName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "task";
@@ -88,13 +61,6 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
-function collectTreeNodes(root: RequirementNode, parentId: string | null = null): Array<{ node: RequirementNode; parentId: string | null }> {
-  return [
-    { node: root, parentId },
-    ...root.children.flatMap((child) => collectTreeNodes(child, root.id)),
-  ];
-}
-
 function buildChapterTree(node: RequirementNode): ChapterItem {
   return {
     id: slugifyHeading(`${node.id} ${node.name}`),
@@ -108,152 +74,6 @@ function collectExpandedIds(node: RequirementNode): Record<string, boolean> {
     [slugifyHeading(`${node.id} ${node.name}`)]: true,
     ...Object.assign({}, ...node.children.map(collectExpandedIds)),
   };
-}
-
-function buildFlowFromTree(tree: RequirementNode, selectedNodeId: string | null): { nodes: Node<FlowNodeData>[]; edges: Edge[] } {
-  const items = collectTreeNodes(tree);
-  const graph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({
-    rankdir: "LR",
-    nodesep: 34,
-    ranksep: 66,
-    marginx: 32,
-    marginy: 32,
-  });
-
-  items.forEach(({ node }) => {
-    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  });
-
-  const edges: Edge[] = items
-    .filter((item) => item.parentId)
-    .map((item) => {
-      const parentId = item.parentId as string;
-      graph.setEdge(parentId, item.node.id);
-      return {
-        id: `${parentId}-${item.node.id}`,
-        source: parentId,
-        target: item.node.id,
-        type: "straight",
-        animated: false,
-        zIndex: 1,
-      };
-    });
-
-  dagre.layout(graph);
-
-  const nodes: Node<FlowNodeData>[] = items.map(({ node }) => {
-    const positioned = graph.node(node.id);
-    return {
-      id: node.id,
-      type: "requirementNode",
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-      position: {
-        x: positioned.x - NODE_WIDTH / 2,
-        y: positioned.y - NODE_HEIGHT / 2,
-      },
-      data: {
-        label: node.id,
-        title: node.name,
-        type: node.type,
-        selected: selectedNodeId === node.id,
-      },
-      draggable: false,
-    };
-  });
-
-  return { nodes, edges };
-}
-
-function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
-  return (
-    <div className={`task-flow-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""}`}>
-      <Handle type="target" position={Position.Left} className="task-flow-handle" isConnectable={false} />
-      <strong>{data.label}</strong>
-      <span>{data.title}</span>
-      <Handle type="source" position={Position.Right} className="task-flow-handle" isConnectable={false} />
-    </div>
-  );
-}
-
-function FlowCanvas({
-  tree,
-  selectedNodeId,
-  onSelectNode,
-  onReady,
-}: {
-  tree: RequirementNode;
-  selectedNodeId: string | null;
-  onSelectNode: (nodeId: string | null) => void;
-  onReady: (instance: ReturnType<typeof useReactFlow>) => void;
-}) {
-  const reactFlow = useReactFlow();
-  const flow = useMemo(() => buildFlowFromTree(tree, selectedNodeId), [selectedNodeId, tree]);
-
-  useEffect(() => {
-    onReady(reactFlow);
-  }, [onReady, reactFlow]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      reactFlow.fitView({ padding: 0.22, duration: 300, maxZoom: 1.15 });
-    }, 30);
-    return () => window.clearTimeout(timer);
-  }, [reactFlow, tree]);
-
-  return (
-    <ReactFlow
-      nodes={flow.nodes}
-      edges={flow.edges}
-      onNodeClick={(_, node) => onSelectNode(node.id)}
-      onPaneClick={() => onSelectNode(null)}
-      fitView
-      panOnDrag
-      zoomOnScroll
-      zoomOnPinch
-      zoomOnDoubleClick={false}
-      selectionOnDrag={false}
-      nodesDraggable={false}
-      nodesConnectable={false}
-      minZoom={0.2}
-      maxZoom={1.8}
-      nodeTypes={{ requirementNode: RequirementFlowNode }}
-      className="task-flow-canvas"
-      defaultEdgeOptions={{
-        type: "straight",
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 22,
-          height: 22,
-          color: "#145c4c",
-        },
-      }}
-    />
-  );
-}
-
-function CreateTaskCanvas({
-  tree,
-  selectedNodeId,
-  onSelectNode,
-  onReady,
-}: {
-  tree: RequirementNode;
-  selectedNodeId: string | null;
-  onSelectNode: (nodeId: string | null) => void;
-  onReady: (instance: ReturnType<typeof useReactFlow>) => void;
-}) {
-  return (
-    <ReactFlowProvider>
-      <FlowCanvas
-        tree={tree}
-        selectedNodeId={selectedNodeId}
-        onSelectNode={onSelectNode}
-        onReady={onReady}
-      />
-    </ReactFlowProvider>
-  );
 }
 
 function ChapterTree({
@@ -297,7 +117,6 @@ export default function CreateTaskPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const uploadRef = useRef<HTMLInputElement | null>(null);
-  const flowRef = useRef<ReturnType<typeof useReactFlow> | null>(null);
   const [tree, setTree] = useState<RequirementNode>(createDefaultTaskTree);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
   const [detailExpanded, setDetailExpanded] = useState(true);
@@ -393,18 +212,6 @@ export default function CreateTaskPage() {
     setDetailExpanded(false);
   };
 
-  const handleFitView = () => {
-    flowRef.current?.fitView({ padding: 0.22, duration: 260, maxZoom: 1.15 });
-  };
-
-  const handleZoomIn = () => {
-    flowRef.current?.zoomIn({ duration: 180 });
-  };
-
-  const handleZoomOut = () => {
-    flowRef.current?.zoomOut({ duration: 180 });
-  };
-
   const handleCreateTask = async () => {
     if (!user) {
       navigate("/login", { state: { from: "/playground/create-task" } });
@@ -495,86 +302,30 @@ export default function CreateTaskPage() {
           </section>
 
           <section className="create-task-editor-panel create-task-editor-panel-locked">
-            <div className="task-flow-toolbar">
-              <Tooltip title="Add child node">
-                <button type="button" className="icon-tool-btn" onClick={handleAddChild}>
-                  <ApartmentOutlined />
-                </button>
-              </Tooltip>
-              <Tooltip title="Add sibling node">
-                <button type="button" className="icon-tool-btn" onClick={handleAddSibling}>
-                  <ShareAltOutlined />
-                </button>
-              </Tooltip>
-              <Tooltip title="Delete selected node">
-                <button type="button" className="icon-tool-btn danger" onClick={handleDeleteNode}>
-                  <DeleteOutlined />
-                </button>
-              </Tooltip>
-              <div className="task-flow-toolbar-divider" />
-              <Tooltip title="Zoom in">
-                <button type="button" className="icon-tool-btn" onClick={handleZoomIn}>
-                  <PlusOutlined />
-                </button>
-              </Tooltip>
-              <Tooltip title="Zoom out">
-                <button type="button" className="icon-tool-btn" onClick={handleZoomOut}>
-                  <MinusOutlined />
-                </button>
-              </Tooltip>
-              <Tooltip title="Center graph">
-                <button type="button" className="icon-tool-btn" onClick={handleFitView}>
-                  <RadarChartOutlined />
-                </button>
-              </Tooltip>
-            </div>
-
-            <div className="task-flow-shell">
-              <CreateTaskCanvas
-                tree={tree}
-                selectedNodeId={selectedNodeId}
-                onSelectNode={(nodeId) => {
-                  setSelectedNodeId(nodeId);
-                  setDetailExpanded(Boolean(nodeId));
-                }}
-                onReady={(instance) => {
-                  flowRef.current = instance;
-                }}
-              />
-            </div>
-
-            {selectedNode ? (
-              <div className={`create-task-detail-drawer ${detailExpanded ? "expanded" : "collapsed"}`}>
-                <div className="create-task-detail-top">
-                  <div>
-                    <strong>{selectedNode.id}</strong>
-                    <span>{selectedNode.name}</span>
-                  </div>
-                  <div className="create-task-detail-actions">
-                    <div className={`task-node-chip ${selectedNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
-                      {selectedNode.type}
-                    </div>
-                    <button
-                      type="button"
-                      className="icon-only-btn"
-                      onClick={() => setDetailExpanded((current) => !current)}
-                    >
-                      {detailExpanded ? <DownOutlined /> : <UpOutlined />}
-                    </button>
-                  </div>
-                </div>
-
-                {detailExpanded ? (
-                  <>
+            <RequirementTreeCanvas
+              tree={tree}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={(nodeId) => {
+                setSelectedNodeId(nodeId);
+                setDetailExpanded(Boolean(nodeId));
+              }}
+              detailExpanded={detailExpanded}
+              onDetailExpandedChange={setDetailExpanded}
+              mode="editable"
+              onAddChild={handleAddChild}
+              onAddSibling={handleAddSibling}
+              onDeleteNode={handleDeleteNode}
+              renderDetailContent={(node) => (
+                <>
                     <div className="create-task-detail-grid">
                       <label className="field-stack">
                         <span>Requirement ID</span>
                         <input
                           className="text-input"
-                          value={selectedNode.id}
+                          value={node.id}
                           onChange={(event) => {
                             const nextId = event.target.value;
-                            updateSelectedNode((node) => ({ ...node, id: nextId }));
+                            updateSelectedNode((currentNode) => ({ ...currentNode, id: nextId }));
                             setSelectedNodeId(nextId);
                           }}
                         />
@@ -584,8 +335,8 @@ export default function CreateTaskPage() {
                         <span>Title</span>
                         <input
                           className="text-input"
-                          value={selectedNode.name}
-                          onChange={(event) => updateSelectedNode((node) => ({ ...node, name: event.target.value }))}
+                          value={node.name}
+                          onChange={(event) => updateSelectedNode((currentNode) => ({ ...currentNode, name: event.target.value }))}
                         />
                       </label>
 
@@ -593,14 +344,14 @@ export default function CreateTaskPage() {
                         <span>Type</span>
                         <select
                           className="text-input"
-                          value={selectedNode.type}
+                          value={node.type}
                           onChange={(event) =>
-                            updateSelectedNode((node) => ({
-                              ...node,
+                            updateSelectedNode((currentNode) => ({
+                              ...currentNode,
                               type: event.target.value as RequirementNode["type"],
-                              children: event.target.value === "ATOMIC" ? [] : node.children,
+                              children: event.target.value === "ATOMIC" ? [] : currentNode.children,
                               scenarios:
-                                node.scenarios.length > 0 ? node.scenarios : [{ name: "New scenario", steps: [] }],
+                                currentNode.scenarios.length > 0 ? currentNode.scenarios : [{ name: "New scenario", steps: [] }],
                             }))
                           }
                         >
@@ -614,10 +365,10 @@ export default function CreateTaskPage() {
                         <input
                           className="text-input"
                           placeholder="REQ-1, REQ-2"
-                          value={selectedNode.dependencies.join(", ")}
+                          value={node.dependencies.join(", ")}
                           onChange={(event) =>
-                            updateSelectedNode((node) => ({
-                              ...node,
+                            updateSelectedNode((currentNode) => ({
+                              ...currentNode,
                               dependencies: event.target.value
                                 .split(",")
                                 .map((item) => item.trim())
@@ -633,21 +384,21 @@ export default function CreateTaskPage() {
                       <textarea
                         className="text-area"
                         rows={4}
-                        value={selectedNode.description}
-                        onChange={(event) => updateSelectedNode((node) => ({ ...node, description: event.target.value }))}
+                        value={node.description}
+                        onChange={(event) => updateSelectedNode((currentNode) => ({ ...currentNode, description: event.target.value }))}
                       />
                     </label>
 
                     <div className="scenario-editor compact">
                       <div className="scenario-editor-head">
-                        <strong>{selectedNode.scenarios.length} scenarios</strong>
+                        <strong>{node.scenarios.length} scenarios</strong>
                         <button
                           type="button"
                           className="mini-btn"
                           onClick={() =>
-                            updateSelectedNode((node) => ({
-                              ...node,
-                              scenarios: [...node.scenarios, { name: `Scenario ${node.scenarios.length + 1}`, steps: [] }],
+                            updateSelectedNode((currentNode) => ({
+                              ...currentNode,
+                              scenarios: [...currentNode.scenarios, { name: `Scenario ${currentNode.scenarios.length + 1}`, steps: [] }],
                             }))
                           }
                         >
@@ -655,16 +406,16 @@ export default function CreateTaskPage() {
                         </button>
                       </div>
 
-                      {selectedNode.scenarios.map((scenario, scenarioIndex) => (
-                        <div key={`${selectedNode.id}-scenario-${scenarioIndex}`} className="scenario-card">
+                      {node.scenarios.map((scenario, scenarioIndex) => (
+                        <div key={`${node.id}-scenario-${scenarioIndex}`} className="scenario-card">
                           <div className="scenario-card-top">
                             <input
                               className="text-input"
                               value={scenario.name}
                               onChange={(event) =>
-                                updateSelectedNode((node) => ({
-                                  ...node,
-                                  scenarios: node.scenarios.map((item, index) =>
+                                updateSelectedNode((currentNode) => ({
+                                  ...currentNode,
+                                  scenarios: currentNode.scenarios.map((item, index) =>
                                     index === scenarioIndex ? { ...item, name: event.target.value } : item,
                                   ),
                                 }))
@@ -674,9 +425,9 @@ export default function CreateTaskPage() {
                               type="button"
                               className="icon-only-btn"
                               onClick={() =>
-                                updateSelectedNode((node) => ({
-                                  ...node,
-                                  scenarios: node.scenarios.filter((_, index) => index !== scenarioIndex),
+                                updateSelectedNode((currentNode) => ({
+                                  ...currentNode,
+                                  scenarios: currentNode.scenarios.filter((_, index) => index !== scenarioIndex),
                                 }))
                               }
                             >
@@ -691,9 +442,9 @@ export default function CreateTaskPage() {
                                   className="text-input scenario-keyword"
                                   value={step.keyword}
                                   onChange={(event) =>
-                                    updateSelectedNode((node) => ({
-                                      ...node,
-                                      scenarios: node.scenarios.map((item, index) =>
+                                    updateSelectedNode((currentNode) => ({
+                                      ...currentNode,
+                                      scenarios: currentNode.scenarios.map((item, index) =>
                                         index === scenarioIndex
                                           ? {
                                               ...item,
@@ -717,9 +468,9 @@ export default function CreateTaskPage() {
                                   className="text-input"
                                   value={step.content}
                                   onChange={(event) =>
-                                    updateSelectedNode((node) => ({
-                                      ...node,
-                                      scenarios: node.scenarios.map((item, index) =>
+                                    updateSelectedNode((currentNode) => ({
+                                      ...currentNode,
+                                      scenarios: currentNode.scenarios.map((item, index) =>
                                         index === scenarioIndex
                                           ? {
                                               ...item,
@@ -738,9 +489,9 @@ export default function CreateTaskPage() {
                                   type="button"
                                   className="icon-only-btn"
                                   onClick={() =>
-                                    updateSelectedNode((node) => ({
-                                      ...node,
-                                      scenarios: node.scenarios.map((item, index) =>
+                                    updateSelectedNode((currentNode) => ({
+                                      ...currentNode,
+                                      scenarios: currentNode.scenarios.map((item, index) =>
                                         index === scenarioIndex
                                           ? {
                                               ...item,
@@ -761,9 +512,9 @@ export default function CreateTaskPage() {
                             type="button"
                             className="mini-btn"
                             onClick={() =>
-                              updateSelectedNode((node) => ({
-                                ...node,
-                                scenarios: node.scenarios.map((item, index) =>
+                              updateSelectedNode((currentNode) => ({
+                                ...currentNode,
+                                scenarios: currentNode.scenarios.map((item, index) =>
                                   index === scenarioIndex
                                     ? {
                                         ...item,
@@ -779,10 +530,9 @@ export default function CreateTaskPage() {
                         </div>
                       ))}
                     </div>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
+                </>
+              )}
+            />
           </section>
         </div>
       </div>

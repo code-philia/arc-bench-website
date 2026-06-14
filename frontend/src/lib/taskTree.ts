@@ -285,6 +285,206 @@ export function parseTaskTreeYaml(yamlContent: string): RequirementNode {
   return normalizeNode(parsed, "ROOT");
 }
 
+function parseDependenciesBlock(lines: string[]): string[] {
+  const markerIndex = lines.findIndex((line) => line.trim() === "**Dependencies:**");
+  if (markerIndex >= 0) {
+    const collected: string[] = [];
+    for (let index = markerIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index].trim();
+      if (!line) {
+        continue;
+      }
+      if (line.startsWith("**")) {
+        break;
+      }
+      collected.push(line);
+    }
+    const raw = collected.join(" ");
+    if (!raw || raw.toLowerCase() === "none") {
+      return [];
+    }
+    return raw.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+
+  const inlineLine = lines.find((line) => line.trim().startsWith("**Dependencies:**"));
+  if (!inlineLine) {
+    return [];
+  }
+  const raw = inlineLine.replace("**Dependencies:**", "").trim();
+  if (!raw || raw.toLowerCase() === "none") {
+    return [];
+  }
+  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function parseScenariosBlock(lines: string[]): RequirementScenario[] {
+  const markerIndex = lines.findIndex((line) => line.trim() === "**Scenarios:**");
+  if (markerIndex === -1) {
+    return [];
+  }
+
+  const scenarios: RequirementScenario[] = [];
+  let currentScenario: RequirementScenario | null = null;
+
+  for (let index = markerIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) {
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      break;
+    }
+    if (line.startsWith("### ")) {
+      break;
+    }
+    if (line.startsWith("#### ")) {
+      break;
+    }
+    if (line.startsWith("- ") && !line.startsWith("- **")) {
+      if (currentScenario) {
+        scenarios.push(currentScenario);
+      }
+      currentScenario = {
+        name: line.slice(2).trim(),
+        steps: [],
+      };
+      continue;
+    }
+    const stepMatch = /^-\s+\*\*(GIVEN|WHEN|THEN|AND)\*\*[:\s]+(.+)$/.exec(line);
+    if (stepMatch) {
+      if (!currentScenario) {
+        currentScenario = {
+          name: `Scenario ${scenarios.length + 1}`,
+          steps: [],
+        };
+      }
+      currentScenario.steps.push({
+        keyword: stepMatch[1],
+        content: stepMatch[2].trim(),
+      });
+    }
+  }
+
+  if (currentScenario) {
+    scenarios.push(currentScenario);
+  }
+
+  return scenarios;
+}
+
+function extractDescriptionLines(lines: string[]): string[] {
+  const output: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (output.length > 0 && output[output.length - 1] !== "") {
+        output.push("");
+      }
+      continue;
+    }
+    if (trimmed.startsWith("**Dependencies:**")) {
+      break;
+    }
+    if (trimmed === "**Dependencies:**") {
+      break;
+    }
+    if (trimmed.startsWith("**Scenarios:**")) {
+      break;
+    }
+    output.push(trimmed);
+  }
+  while (output[output.length - 1] === "") {
+    output.pop();
+  }
+  return output;
+}
+
+export function requirementMarkdownToTree(markdown: string): RequirementNode {
+  const normalized = markdown.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const titleLine = lines.find((line) => line.startsWith("# "));
+  const rootTitle = titleLine ? titleLine.slice(2).trim() : "Imported Requirement";
+
+  const root: RequirementNode = {
+    id: "ROOT",
+    name: rootTitle || "Imported Requirement",
+    type: "FOLDER",
+    description: "",
+    dependencies: [],
+    children: [],
+    scenarios: [],
+  };
+
+  const rootBody: string[] = [];
+  const nodeMap = new Map<string, RequirementNode>();
+  nodeMap.set(root.id, root);
+
+  type Section = {
+    level: 2 | 3;
+    id: string;
+    name: string;
+    body: string[];
+  };
+
+  const sections: Section[] = [];
+  let currentSection: Section | null = null;
+
+  for (const line of lines) {
+    if (line.startsWith("# ")) {
+      continue;
+    }
+    const sectionMatch = /^(##|###)\s+(REQ-[^\s]+)\s+(.+)$/.exec(line.trim());
+    if (sectionMatch) {
+      if (currentSection) {
+        sections.push(currentSection);
+      }
+      currentSection = {
+        level: sectionMatch[1].length as 2 | 3,
+        id: sectionMatch[2].trim(),
+        name: sectionMatch[3].trim(),
+        body: [],
+      };
+      continue;
+    }
+
+    if (currentSection) {
+      currentSection.body.push(line);
+    } else {
+      rootBody.push(line);
+    }
+  }
+
+  if (currentSection) {
+    sections.push(currentSection);
+  }
+
+  root.description = extractDescriptionLines(rootBody).join("\n").trim();
+
+  sections.forEach((section) => {
+    const node: RequirementNode = {
+      id: section.id,
+      name: section.name,
+      type: "ATOMIC",
+      description: extractDescriptionLines(section.body).join("\n").trim(),
+      dependencies: parseDependenciesBlock(section.body),
+      children: [],
+      scenarios: parseScenariosBlock(section.body),
+    };
+
+    nodeMap.set(node.id, node);
+
+    const parentId = section.level === 2
+      ? "ROOT"
+      : section.id.split(".").slice(0, -1).join(".");
+
+    const parentNode = nodeMap.get(parentId) ?? root;
+    parentNode.children.push(node);
+    parentNode.type = "FOLDER";
+  });
+
+  return root;
+}
+
 function renderScenarioYaml(scenario: RequirementScenario, indent: number): string[] {
   const pad = " ".repeat(indent);
   const lines = [`${pad}- name: ${quoteYaml(scenario.name)}`];

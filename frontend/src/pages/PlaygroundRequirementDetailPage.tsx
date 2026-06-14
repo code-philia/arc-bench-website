@@ -407,9 +407,12 @@ export default function PlaygroundRequirementDetailPage() {
                 </thead>
                 <tbody>
                   {submissions.slice(0, 5).map((record) => (
-                    <tr key={record.id} onClick={() => navigate(`/submissions/${record.id}`)}>
+                    <tr
+                      key={record.id}
+                      onClick={() => navigate(`/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`)}
+                    >
                       <td>
-                        <Link className="inline-link" to={`/submissions/${record.id}`}>
+                        <Link className="inline-link" to={`/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`}>
                           {record.display_name || record.id}
                         </Link>
                         {record.display_name ? <div className="table-sub mono-sub">{record.id}</div> : null}

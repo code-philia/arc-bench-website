@@ -9,6 +9,7 @@ import MyTaskDetailPage from "../pages/MyTaskDetailPage";
 import MyTasksPage from "../pages/MyTasksPage";
 import PlaygroundPage from "../pages/PlaygroundPage";
 import PlaygroundRequirementDetailPage from "../pages/PlaygroundRequirementDetailPage";
+import PlaygroundSubmissionDetailPage from "../pages/PlaygroundSubmissionDetailPage";
 import PlaygroundTaskListPage from "../pages/PlaygroundTaskListPage";
 import ResearchPage from "../pages/ResearchPage";
 import RegisterPage from "../pages/RegisterPage";
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: "playground", element: <PlaygroundPage /> },
       { path: "playground/task-bank/:taskType", element: <PlaygroundTaskListPage /> },
       { path: "playground/task-bank/:taskType/:requirementId", element: <PlaygroundRequirementDetailPage /> },
+      { path: "playground/task-bank/:taskType/:requirementId/submissions/:submissionId", element: <PlaygroundSubmissionDetailPage /> },
       { path: "playground/create-task", element: <CreateTaskPage /> },
       { path: "playground/my-tasks", element: <MyTasksPage /> },
       { path: "playground/my-tasks/:taskId", element: <MyTaskDetailPage /> },

@@ -343,6 +343,13 @@ button {
   padding: 0 32px 80px;
 }
 
+.submission-page-locked {
+  height: calc(100vh - 60px);
+  min-height: calc(100vh - 60px);
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
 .nav-auth-link {
   display: inline-flex;
   align-items: center;
@@ -3151,11 +3158,17 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
+.submission-hero-locked {
+  flex: 0 0 auto;
+  max-width: 1280px;
+  padding: 14px 0 10px;
+}
+
 .submission-hero-main {
   min-width: 0;
   flex: 1;
   display: grid;
-  gap: 18px;
+  gap: 6px;
 }
 
 .submission-hero-side {
@@ -3165,8 +3178,8 @@ button {
 }
 
 .submission-hero h1 {
-  margin: 4px 0 8px;
-  font-size: 1.8rem;
+  margin: 4px 0 0;
+  font-size: 1.5rem;
   letter-spacing: -0.02em;
 }
 
@@ -3176,12 +3189,12 @@ button {
 }
 
 .submission-model-row {
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
 .submission-score {
   color: var(--accent);
-  font-size: 2rem;
+  font-size: 1.7rem;
   font-weight: 700;
 }
 
@@ -3191,12 +3204,21 @@ button {
   gap: 12px;
 }
 
+.playground-submission-meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .submission-meta-card {
   min-width: 0;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
+}
+
+.playground-submission-meta-grid .submission-meta-card {
+  padding: 9px 10px;
 }
 
 .submission-meta-label {
@@ -3212,6 +3234,25 @@ button {
   font-size: 0.84rem;
   line-height: 1.45;
   word-break: break-word;
+}
+
+.playground-submission-meta-grid .submission-meta-label {
+  font-size: 0.63rem;
+}
+
+.playground-submission-meta-grid .submission-meta-value {
+  margin-top: 4px;
+  font-size: 0.76rem;
+  line-height: 1.32;
+}
+
+.playground-submission-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 .submission-alert-wrap {
@@ -3234,11 +3275,70 @@ button {
   align-items: stretch;
 }
 
+.submission-grid-locked {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  max-width: 1280px;
+}
+
+.playground-submission-page {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
 .submission-grid .action-section {
   min-width: 0;
   background: var(--bg);
   display: flex;
   flex-direction: column;
+}
+
+.submission-status-panel,
+.submission-detail-panel {
+  min-height: 0;
+}
+
+.submission-status-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.playground-submission-page .submission-grid {
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+}
+
+.playground-submission-workspace {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+}
+
+.playground-submission-sidebar {
+  padding: 18px 18px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.playground-submission-main {
+  padding: 0;
+}
+
+.playground-submission-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.playground-submission-heading h1 {
+  margin: 0;
+  font-size: 1.34rem;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
 }
 
 .submission-grid .action-section:first-child {
@@ -3251,6 +3351,12 @@ button {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.playground-submission-tab-panel {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
 
 .log-panel {
@@ -3269,6 +3375,140 @@ button {
 
 .detail-tab-panel .test-list {
   max-height: none;
+}
+
+.playground-canvas-panel,
+.stdio-shell {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.playground-canvas-panel .task-flow-toolbar {
+  top: 12px;
+}
+
+.playground-canvas-panel .task-flow-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.playground-canvas-panel .create-task-detail-drawer {
+  max-height: none;
+}
+
+.nested-tabs {
+  flex: 0 0 auto;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.stdio-shell .log-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.readonly-node-detail,
+.readonly-scenario-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.readonly-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.readonly-detail-card {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 126, 101, 0.14);
+  border-radius: 10px;
+  background: #fafdfb;
+}
+
+.readonly-detail-card span,
+.readonly-detail-label {
+  color: #597365;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.readonly-detail-card strong {
+  color: #122119;
+  font-size: 0.82rem;
+}
+
+.readonly-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.readonly-detail-body {
+  padding: 9px 10px;
+  border: 1px solid rgba(0, 126, 101, 0.12);
+  border-radius: 10px;
+  background: #fafdfb;
+  color: #274238;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.readonly-detail-body.empty {
+  color: #6d8178;
+}
+
+.readonly-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.readonly-scenario-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(0, 126, 101, 0.12);
+  border-radius: 10px;
+  background: #fafdfb;
+}
+
+.readonly-scenario-card strong {
+  color: #122119;
+  font-size: 0.8rem;
+}
+
+.readonly-scenario-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.readonly-scenario-step {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: #274238;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.readonly-scenario-step span {
+  color: #0f7d61;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .playground-page {
@@ -3777,6 +4017,31 @@ button {
     height: auto;
   }
 
+  .submission-grid-locked {
+    height: auto;
+  }
+
+  .playground-submission-page .submission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-tree-layout.detail-right {
+    flex-direction: column;
+  }
+
+  .create-task-detail-drawer.detail-placement-right,
+  .create-task-detail-drawer.detail-placement-right.expanded,
+  .create-task-detail-drawer.detail-placement-right.collapsed {
+    width: 100%;
+    height: auto;
+    max-height: 40%;
+    padding-left: 16px;
+    padding-right: 16px;
+    border-left: 0;
+    border-top: 1px solid rgba(0, 126, 101, 0.18);
+    overflow: auto;
+  }
+
   .readme-panel {
     border-right: 0;
     border-bottom: 1px solid var(--border);
@@ -3945,6 +4210,12 @@ button {
     overflow: auto;
   }
 
+  .submission-page-locked {
+    height: auto;
+    min-height: calc(100vh - 60px);
+    overflow: auto;
+  }
+
   .readme-header,
   .doc-tabs,
   .action-section {
@@ -3979,6 +4250,10 @@ button {
     max-width: 100%;
   }
 
+  .readonly-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .submission-hero {
     align-items: flex-start;
     flex-direction: column;
@@ -3990,6 +4265,18 @@ button {
 
   .submission-meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playground-submission-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playground-submission-inline-meta {
+    gap: 6px 12px;
+  }
+
+  .playground-submission-sidebar {
+    padding: 16px;
   }
 
   .submission-score {
@@ -4276,6 +4563,30 @@ button {
   overflow: hidden;
 }
 
+.requirement-tree-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.requirement-tree-layout.detail-bottom {
+  flex-direction: column;
+}
+
+.requirement-tree-layout.detail-right {
+  flex-direction: row;
+}
+
+.requirement-tree-canvas-region {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .task-flow-toolbar {
   position: absolute;
   top: 10px;
@@ -4402,6 +4713,29 @@ button {
 
 .create-task-detail-drawer.collapsed {
   max-height: 50px;
+  overflow: hidden;
+}
+
+.create-task-detail-drawer.detail-placement-right {
+  width: 0;
+  height: 100%;
+  max-height: none;
+  padding: 0;
+  border-top: 0;
+  border-left: 1px solid rgba(0, 126, 101, 0.18);
+  overflow: hidden;
+}
+
+.create-task-detail-drawer.detail-placement-right.expanded {
+  width: 336px;
+  padding: 10px 12px 12px;
+  overflow: auto;
+}
+
+.create-task-detail-drawer.detail-placement-right.collapsed {
+  width: 52px;
+  max-height: none;
+  padding: 8px 10px;
   overflow: hidden;
 }
 

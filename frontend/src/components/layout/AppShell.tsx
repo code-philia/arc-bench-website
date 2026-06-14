@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
       "/playground",
       "/playground/task-bank/:taskType",
       "/playground/task-bank/:taskType/:requirementId",
+      "/playground/task-bank/:taskType/:requirementId/submissions/:submissionId",
       "/playground/create-task",
       "/playground/my-tasks",
       "/playground/my-tasks/:taskId",
