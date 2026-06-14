@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.api.routes import auth, health, requirements, submissions
+from app.api.routes import auth, health, requirements, submissions, user_tasks
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -27,11 +27,13 @@ app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(requirements.router, prefix=settings.api_prefix)
 app.include_router(requirements.competition_router, prefix=settings.api_prefix)
 app.include_router(submissions.router, prefix=settings.api_prefix)
+app.include_router(user_tasks.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")
 def on_startup() -> None:
     settings.user_submissions_root.mkdir(parents=True, exist_ok=True)
+    settings.user_tasks_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

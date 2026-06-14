@@ -2,8 +2,11 @@ import { createBrowserRouter } from "react-router-dom";
 
 import AppShell from "../components/layout/AppShell";
 import CompetitionDetailPage from "../pages/CompetitionDetailPage";
+import CreateTaskPage from "../pages/CreateTaskPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
+import MyTaskDetailPage from "../pages/MyTaskDetailPage";
+import MyTasksPage from "../pages/MyTasksPage";
 import PlaygroundPage from "../pages/PlaygroundPage";
 import ResearchPage from "../pages/ResearchPage";
 import RegisterPage from "../pages/RegisterPage";
@@ -24,6 +27,9 @@ export const router = createBrowserRouter([
       { path: "requirements/:requirementId", element: <RequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },
+      { path: "playground/create-task", element: <CreateTaskPage /> },
+      { path: "playground/my-tasks", element: <MyTasksPage /> },
+      { path: "playground/my-tasks/:taskId", element: <MyTaskDetailPage /> },
       { path: "research", element: <ResearchPage /> },
     ],
   },

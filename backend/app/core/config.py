@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
     templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"
     user_submissions_root: Path = ROOT_DIR / "runtime" / "user-submissions"
+    user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"
     session_secret: str = "arcbench-dev-session-secret"

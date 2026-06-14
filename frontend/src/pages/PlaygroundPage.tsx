@@ -50,8 +50,7 @@ const taskBankItems: TaskBankItem[] = [
     description: "Tasks created by yourself",
     badge: "MIXED",
     tone: "mixed",
-    href: "/playground",
-    disabled: true,
+    href: "/playground/my-tasks",
   },
 ];
 
@@ -99,7 +98,7 @@ export default function PlaygroundPage() {
               </div>
             </Link>
 
-            <button type="button" className="playground-entry-card home-surface-card research is-static" disabled>
+            <Link to="/playground/create-task" className="playground-entry-card home-surface-card research active">
               <div className="home-surface-main">
                 <div className="home-surface-icon research">
                   <FileTextOutlined />
@@ -116,7 +115,7 @@ export default function PlaygroundPage() {
               <div className="home-surface-support playground-entry-support">
                 <p>Design your own app requirements and upload project material for future task generation workflows.</p>
               </div>
-            </button>
+            </Link>
           </section>
 
           <aside className="playground-bank" aria-label="Task bank">

@@ -7,6 +7,8 @@ import type {
   SubmissionDetail,
   SubmissionLogs,
   SubmissionSummary,
+  UserTaskDetail,
+  UserTaskSummary,
 } from "./types";
 
 const API_BASE = "/api";
@@ -133,6 +135,27 @@ export const api = {
   startSubmission(submissionId: string) {
     return request<SubmissionDetail>(`/submissions/${submissionId}/start`, {
       method: "POST",
+    });
+  },
+  listMyTasks() {
+    return request<UserTaskSummary[]>("/my-tasks");
+  },
+  getMyTask(taskId: string) {
+    return request<UserTaskDetail>(`/my-tasks/${taskId}`);
+  },
+  createMyTask(payload: {
+    title: string;
+    task_type: "web" | "mobile" | "kernel" | "mixed";
+    summary: string;
+    root_requirement_id: string;
+    node_count: number;
+    atomic_count: number;
+    yaml_content: string;
+    markdown_content: string;
+  }) {
+    return request<UserTaskDetail>("/my-tasks", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   },
 };

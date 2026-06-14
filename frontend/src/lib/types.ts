@@ -88,6 +88,23 @@ export type SubmissionLogs = {
   stderr: string;
 };
 
+export type UserTaskSummary = {
+  id: string;
+  title: string;
+  task_type: "web" | "mobile" | "kernel" | "mixed";
+  summary: string;
+  root_requirement_id: string;
+  node_count: number;
+  atomic_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserTaskDetail = UserTaskSummary & {
+  yaml_content: string;
+  markdown_content: string;
+};
+
 export type UserSummary = {
   id: string;
   email: string;

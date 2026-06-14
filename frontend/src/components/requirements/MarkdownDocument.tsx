@@ -18,7 +18,7 @@ export function extractHeadings(markdown: string): Heading[] {
   return markdown
     .split("\n")
     .flatMap((line) => {
-      const match = /^(##|###)\s+(.+)$/.exec(line.trim());
+      const match = /^(##)\s+(.+)$/.exec(line.trim());
       if (!match) {
         return [];
       }
@@ -41,10 +41,15 @@ export default function MarkdownDocument({
   assetsBaseUrl: string;
   referencesBaseUrl: string;
 }) {
-  const rewrittenMarkdown = markdown
-    .replaceAll("(./reference/", `(${referencesBaseUrl}/`)
-    .replaceAll("(./assets/", `(${assetsBaseUrl}/`)
-    .replaceAll("(assets/", `(${assetsBaseUrl}/`);
+  let rewrittenMarkdown = markdown;
+  if (referencesBaseUrl) {
+    rewrittenMarkdown = rewrittenMarkdown.replaceAll("(./reference/", `(${referencesBaseUrl}/`);
+  }
+  if (assetsBaseUrl) {
+    rewrittenMarkdown = rewrittenMarkdown
+      .replaceAll("(./assets/", `(${assetsBaseUrl}/`)
+      .replaceAll("(assets/", `(${assetsBaseUrl}/`);
+  }
 
   return (
     <div className="readme-content">
