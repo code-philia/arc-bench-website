@@ -145,15 +145,11 @@ export default function PlaygroundSubmissionDetailPage() {
             <h1>{submission.display_name || submission.id}</h1>
             <div className="playground-submission-inline-meta">
               <span>{submission.id}</span>
-              <span>{submission.requirement_id}</span>
-              <span>{submission.runtime}</span>
-              <span>{submission.status}</span>
-              <span>{submission.model_name || "No model"}</span>
-              <span>Created {formatDateTime(submission.created_at)}</span>
-              <span>Started {formatDateTime(submission.started_at)}</span>
-              <span>Duration {formatDuration(submission.started_at, submission.finished_at)}</span>
+              <span>Created: {formatDateTime(submission.created_at)}</span>
+              <span>Started: {formatDateTime(submission.started_at)}</span>
+              <span>Duration: {formatDuration(submission.started_at, submission.finished_at)}</span>
               <span>{resultSummary(submission)}</span>
-              <span>Score {submission.score?.toFixed(1) ?? "--"}</span>
+              <span>Score: {submission.score?.toFixed(1) ?? "--"}</span>
             </div>
           </div>
 
