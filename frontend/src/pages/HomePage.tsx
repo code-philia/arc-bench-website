@@ -112,25 +112,6 @@ export default function HomePage() {
             <h1 className="home-stage-title">
               A benchmark workspace for <span className="gradient">building</span>, <span className="gradient">competing</span>, and <span className="gradient">studying</span> agent behavior.
             </h1>
-
-            <p className="home-stage-description">
-              Start from the surface that matches your goal. The homepage acts as a routing layer: each area has a distinct intent, a clearer preview, and lighter interaction before deeper workflows.
-            </p>
-
-            <div className="home-stage-metrics">
-              <div className="home-stage-metric">
-                <span className="home-stage-metric-value">{requirements.length}</span>
-                <span className="home-stage-metric-label">Requirements</span>
-              </div>
-              <div className="home-stage-metric">
-                <span className="home-stage-metric-value">{competitions.length}</span>
-                <span className="home-stage-metric-label">Tracks</span>
-              </div>
-              <div className="home-stage-metric">
-                <span className="home-stage-metric-value">{totalTests}</span>
-                <span className="home-stage-metric-label">Tests</span>
-              </div>
-            </div>
           </div>
 
           <div className="home-surface-grid" role="tablist" aria-label="Homepage surfaces">
@@ -151,14 +132,6 @@ export default function HomePage() {
 
                   <div className="home-surface-support">
                     <p>{surface.description}</p>
-                    <div className="home-surface-stats">
-                      {surface.stats.map((stat) => (
-                        <div key={stat.label} className="home-surface-stat">
-                          <strong>{stat.value}</strong>
-                          <span>{stat.label}</span>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </>
               );
@@ -186,108 +159,6 @@ export default function HomePage() {
                 </button>
               );
             })}
-          </div>
-        </section>
-
-        <section className="home-preview-band">
-          <div className="home-preview-panel">
-            <div className="home-preview-header">
-              <div>
-                <div className="home-preview-label">Surface Preview</div>
-                <h3>{activeCard.title}</h3>
-              </div>
-              {activeCard.comingSoon ? <span className="home-preview-chip">Planned</span> : <span className="home-preview-chip active">Available</span>}
-            </div>
-
-            <div className="home-preview-content">
-              {activeSurface === "playground" ? (
-                <>
-                  <div className="home-preview-block">
-                    <span className="home-preview-block-label">Focus</span>
-                    <strong>Interactive requirement design and exploratory submission setup</strong>
-                  </div>
-                  <div className="home-preview-list">
-                    <div className="home-preview-item">
-                      <CodeOutlined />
-                      <span>Enter from a drafting-first workflow before pushing agents into scored evaluation.</span>
-                    </div>
-                    <div className="home-preview-item">
-                      <CodeOutlined />
-                      <span>Keep the entry lightweight and closer to requirement authoring, test inspection, and structure learning.</span>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-
-              {activeSurface === "competition" ? (
-                <>
-                  <div className="home-preview-grid">
-                    <div className="home-preview-record">
-                      <span className="home-preview-block-label">Featured track</span>
-                      <strong>{featuredCompetition?.title ?? "No competition data"}</strong>
-                      <p>{featuredCompetition?.summary ?? "Competition summaries will appear here once data is available."}</p>
-                    </div>
-                    <div className="home-preview-record">
-                      <span className="home-preview-block-label">Task snapshot</span>
-                      <strong>{featuredRequirement?.title ?? "No task loaded"}</strong>
-                      <p>{featuredRequirement?.summary ?? "Task examples can be previewed here to help users choose an entry path."}</p>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-
-              {activeSurface === "research" ? (
-                <>
-                  <div className="home-preview-block">
-                    <span className="home-preview-block-label">Intent</span>
-                    <strong>Evidence-oriented browsing for benchmark outcomes, artifacts, and research context</strong>
-                  </div>
-                  <div className="home-preview-grid compact">
-                    <div className="home-preview-record">
-                      <span className="home-preview-block-label">Latest run</span>
-                      <strong>{featuredSubmission ? submissionTitle(featuredSubmission) : "No recent run"}</strong>
-                      <p>
-                        {featuredSubmission
-                          ? `${featuredSubmission.status} on ${featuredSubmission.requirement_id}`
-                          : "Once research views are added, benchmark run evidence can be surfaced here."}
-                      </p>
-                    </div>
-                    <div className="home-preview-record muted">
-                      <span className="home-preview-block-label">Planned modules</span>
-                      <strong>Rankings, papers, repos</strong>
-                      <p>Use this space to expose publication context and cross-run comparisons without forcing users into submission flows.</p>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="home-quick-column">
-            <div className="home-quick-card">
-              <div className="home-preview-label">Current data</div>
-              <div className="home-quick-list">
-                <div className="home-quick-item">
-                  <span>Requirements</span>
-                  <strong>{requirements.length}</strong>
-                </div>
-                <div className="home-quick-item">
-                  <span>Competitions</span>
-                  <strong>{competitions.length}</strong>
-                </div>
-                <div className="home-quick-item">
-                  <span>Recent runs</span>
-                  <strong>{submissions.length}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="home-quick-card">
-              <div className="home-preview-label">Design direction</div>
-              <p className="home-quick-note">
-                This homepage is now organized as three destination cards with hover and focus previews, so the user understands where to go before entering deeper pages.
-              </p>
-            </div>
           </div>
         </section>
       </div>

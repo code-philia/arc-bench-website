@@ -3247,10 +3247,7 @@ button {
 }
 
 .playground-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
+  padding: 0 34px 56px;
 }
 
 .auth-page {
@@ -3301,85 +3298,199 @@ button {
   font-size: 0.86rem;
 }
 
-.playground-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(100vh - 124px);
+.playground-shell {
+  padding-top: 12px;
 }
 
-.playground-card {
-  max-width: 480px;
+.playground-breadcrumb {
+  padding: 8px 0 28px;
+}
+
+.playground-home-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.playground-actions {
+  display: grid;
+  gap: 34px;
+  padding-top: 56px;
+}
+
+.playground-entry-card {
+  min-height: 176px;
+}
+
+.playground-entry-card.active {
+  transform: translateX(0);
+}
+
+.playground-entry-card.is-static {
+  cursor: default;
+}
+
+.playground-entry-text h2 {
+  font-size: clamp(2rem, 2vw, 2rem);
+}
+
+.playground-entry-support {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.playground-entry-support p {
+  max-width: none;
+}
+
+.playground-bank {
+  min-width: 0;
+}
+
+.playground-bank-shell {
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--bg);
+}
+
+.playground-bank-title {
+  padding: 20px 28px 18px;
+  border-bottom: 1px solid var(--border-light);
   text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
 }
 
-.playground-visual {
-  position: relative;
-  width: 120px;
-  height: 120px;
-  margin: 0 auto 32px;
+.playground-bank-list {
+  display: grid;
 }
 
-.playground-visual .ring {
-  position: absolute;
-  inset: 0;
-  border: 2px solid var(--border);
-  border-radius: 50%;
-  animation: ring-pulse 3s ease-in-out infinite;
-}
-
-.playground-visual .ring:nth-child(2) {
-  inset: 15px;
-  border-color: var(--border-light);
-  animation-delay: 0.5s;
-}
-
-.playground-visual .ring:nth-child(3) {
-  inset: 30px;
-  border-color: var(--accent-dim);
-  animation-delay: 1s;
-}
-
-.playground-visual .core {
-  position: absolute;
-  inset: 42px;
+.playground-bank-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--accent-glow);
-  font-size: 1.2rem;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 106px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg);
+  transition: background var(--transition);
 }
 
-.research-visual .core {
-  color: var(--accent);
+.playground-bank-item:last-child {
+  border-bottom: 0;
 }
 
-@keyframes ring-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-
-  50% {
-    transform: scale(1.05);
-    opacity: 1;
-  }
+.playground-bank-item:not(.is-disabled):hover,
+.playground-bank-item:not(.is-disabled):focus-visible {
+  background: var(--bg-elevated);
 }
 
-.playground-card h2 {
-  margin: 0 0 10px;
-  font-size: 1.6rem;
+.playground-bank-item.is-disabled {
+  color: var(--text-dim);
+}
+
+.playground-bank-item-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.playground-bank-item-copy h2 {
+  margin: 0;
+  font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
-.playground-card p {
-  margin: 0 0 28px;
+.playground-bank-item-copy p {
+  margin: 0;
   color: var(--text-dim);
   font-size: 0.9rem;
-  line-height: 1.6;
+  line-height: 1.45;
+}
+
+.playground-bank-badge {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 20px;
+  padding: 0 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.playground-bank-badge.web {
+  color: #7aa7dd;
+  border-color: rgba(122, 167, 221, 0.45);
+  background: rgba(122, 167, 221, 0.08);
+}
+
+.playground-bank-badge.mobile {
+  color: #df9e71;
+  border-color: rgba(223, 158, 113, 0.45);
+  background: rgba(223, 158, 113, 0.08);
+}
+
+.playground-bank-badge.kernel {
+  color: #97b87d;
+  border-color: rgba(151, 184, 125, 0.45);
+  background: rgba(151, 184, 125, 0.08);
+}
+
+.playground-bank-badge.mixed {
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
+.playground-bank-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 980px) {
+  .playground-home-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .playground-actions {
+    padding-top: 0;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .playground-page {
+    padding: 0 18px 32px;
+  }
+
+  .playground-bank-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .playground-bank-badge {
+    justify-self: start;
+  }
+
+  .playground-entry-card {
+    min-height: 0;
+  }
 }
 
 .research-page {
