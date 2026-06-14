@@ -2264,11 +2264,23 @@ button {
   padding: 0;
 }
 
+.detail-page-locked {
+  height: calc(100vh - 60px);
+  min-height: calc(100vh - 60px);
+  overflow: hidden;
+}
+
 .detail-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;
   gap: 0;
   min-height: calc(100vh - 60px);
+}
+
+.detail-layout-locked {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .readme-panel {
@@ -2553,6 +2565,19 @@ button {
   flex-direction: column;
   min-height: 0;
   padding: 20px 24px;
+}
+
+.action-panel-locked {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.action-section-locked {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .env-selector {
@@ -3748,6 +3773,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .detail-layout-locked {
+    height: auto;
+  }
+
   .readme-panel {
     border-right: 0;
     border-bottom: 1px solid var(--border);
@@ -3908,6 +3937,12 @@ button {
 
   .task-table-wrap {
     overflow-x: auto;
+  }
+
+  .detail-page-locked {
+    height: auto;
+    min-height: calc(100vh - 60px);
+    overflow: auto;
   }
 
   .readme-header,

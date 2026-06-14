@@ -13,18 +13,25 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { to: "/", label: "Home", icon: <HomeOutlined />, matches: ["/"] },
+  // { to: "/", label: "Home", icon: <HomeOutlined />, matches: ["/"] },
+  {
+    to: "/playground",
+    label: "Playground",
+    icon: <PlayCircleOutlined />,
+    matches: [
+      "/playground",
+      "/playground/task-bank/:taskType",
+      "/playground/task-bank/:taskType/:requirementId",
+      "/playground/create-task",
+      "/playground/my-tasks",
+      "/playground/my-tasks/:taskId",
+    ],
+  },
   {
     to: "/requirements",
     label: "Competation",
     icon: <TrophyOutlined />,
     matches: ["/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
-  },
-  {
-    to: "/playground",
-    label: "Playground",
-    icon: <PlayCircleOutlined />,
-    matches: ["/playground", "/playground/create-task", "/playground/my-tasks", "/playground/my-tasks/:taskId"],
   },
   { to: "/research", label: "Research", icon: <ReadOutlined />, matches: ["/research"] },
 ];

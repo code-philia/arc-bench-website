@@ -24,7 +24,7 @@ const taskBankItems: TaskBankItem[] = [
     description: "Full-stack web tasks backed by executable Playwright suites",
     badge: "WEB",
     tone: "web",
-    href: "/requirements",
+    href: "/playground/task-bank/web",
   },
   {
     key: "mobile",
@@ -32,8 +32,7 @@ const taskBankItems: TaskBankItem[] = [
     description: "Coming task packs for mobile agent evaluation workflows",
     badge: "MOBILE",
     tone: "mobile",
-    href: "/playground",
-    disabled: true,
+    href: "/playground/task-bank/mobile",
   },
   {
     key: "kernel",
@@ -41,8 +40,7 @@ const taskBankItems: TaskBankItem[] = [
     description: "Planned system-level task tracks for operator-style agents",
     badge: "KERNEL",
     tone: "kernel",
-    href: "/playground",
-    disabled: true,
+    href: "/playground/task-bank/kernel",
   },
   {
     key: "mixed",
