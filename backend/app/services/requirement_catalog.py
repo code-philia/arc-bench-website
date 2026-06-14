@@ -107,39 +107,10 @@ class RequirementCatalogService:
                 )
             )
 
-        if rows:
-            competitions.append(
-                CompetitionSummary(
-                    id="public",
-                    title="Public Benchmark",
-                    type="mixed",
-                    summary="Downloadable benchmark pack with requirement docs, tests, and demo assets.",
-                    task_count=len(rows),
-                    total_tests=sum(item.total_tests for item in rows),
-                    is_public=True,
-                )
-            )
-
         return competitions
 
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
         rows = self._list_requirement_rows()
-        if competition_id == "public":
-            tasks = [self._to_competition_task(row, base_url, is_public=True) for row in rows]
-            return CompetitionDetail(
-                id="public",
-                title="Public Benchmark",
-                type="mixed",
-                summary="Downloadable benchmark pack with requirement docs, tests, and demo assets.",
-                task_count=len(tasks),
-                total_tests=sum(task.total_tests for task in tasks),
-                is_public=True,
-                downloads=CompetitionTaskDownloadLinks(
-                    full_bundle=f"{base_url}/api/competitions/public/download",
-                ),
-                tasks=tasks,
-            )
-
         competition_tasks = [row for row in rows if row.category == competition_id]
         if not competition_tasks:
             raise LookupError(f"Competition '{competition_id}' not found")
