@@ -247,12 +247,6 @@ export default function CreateTaskPage() {
   return (
     <div className="page create-task-page create-task-page-locked">
       <div className="create-task-shell create-task-shell-locked">
-        <div className="breadcrumb create-task-breadcrumb">
-          <span>Playground</span>
-          <span className="sep">/</span>
-          <span className="current">Design Requirement</span>
-        </div>
-
         <div className="create-task-layout create-task-layout-locked">
           <section className="create-task-preview-panel create-task-preview-panel-locked">
             <div className="create-task-preview-inner create-task-preview-inner-locked">
@@ -312,6 +306,8 @@ export default function CreateTaskPage() {
               detailExpanded={detailExpanded}
               onDetailExpandedChange={setDetailExpanded}
               mode="editable"
+              detailPlacement="right"
+              showDetailToggle={false}
               onAddChild={handleAddChild}
               onAddSibling={handleAddSibling}
               onDeleteNode={handleDeleteNode}

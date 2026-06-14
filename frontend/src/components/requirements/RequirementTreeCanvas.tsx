@@ -41,6 +41,7 @@ type RequirementTreeCanvasProps = {
   onDetailExpandedChange: (expanded: boolean) => void;
   mode?: "editable" | "readonly";
   detailPlacement?: "bottom" | "right";
+  showDetailToggle?: boolean;
   onAddChild?: () => void;
   onAddSibling?: () => void;
   onDeleteNode?: () => void;
@@ -204,6 +205,7 @@ function TreeCanvasInner({
   onDetailExpandedChange,
   mode = "readonly",
   detailPlacement = "bottom",
+  showDetailToggle = true,
   onAddChild,
   onAddSibling,
   onDeleteNode,
@@ -312,13 +314,15 @@ function TreeCanvasInner({
               <div className={`task-node-chip ${selectedNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
                 {selectedNode.type}
               </div>
-              <button
-                type="button"
-                className="icon-only-btn"
-                onClick={() => onDetailExpandedChange(!detailExpanded)}
-              >
-                {detailExpanded ? <DownOutlined /> : <UpOutlined />}
-              </button>
+              {showDetailToggle ? (
+                <button
+                  type="button"
+                  className="icon-only-btn"
+                  onClick={() => onDetailExpandedChange(!detailExpanded)}
+                >
+                  {detailExpanded ? <DownOutlined /> : <UpOutlined />}
+                </button>
+              ) : null}
             </div>
           </div>
 
