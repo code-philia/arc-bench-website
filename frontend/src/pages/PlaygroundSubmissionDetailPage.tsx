@@ -8,6 +8,7 @@ import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { requirementMarkdownToTree } from "../lib/taskTree";
 import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
+import { useQuickStart } from "../quickstart/QuickStartContext";
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -71,8 +72,28 @@ export default function PlaygroundSubmissionDetailPage() {
   const [pulseNodeId, setPulseNodeId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const seenVisualKeysRef = useRef<Set<string>>(new Set());
+  const quickStart = useQuickStart();
+  const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
 
   useEffect(() => {
+    quickStart.syncStepForRoute();
+  }, [quickStart, submissionId]);
+
+  useEffect(() => {
+    if (useQuickStartSubmission && quickStart.mode === "mock" && quickStart.mockSubmission) {
+      setSubmission(quickStart.mockSubmission.submission);
+      setLogs(quickStart.mockSubmission.logs);
+      api.getRequirement(requirementId)
+        .then(setRequirement)
+        .catch((error: Error) => {
+          setRequirement(null);
+          setLoadError(error.message);
+          setLoadErrorStatus(error instanceof ApiError ? error.status : null);
+        })
+        .finally(() => setLoading(false));
+      return () => undefined;
+    }
+
     setLoadError(null);
     setLoadErrorStatus(null);
     Promise.all([
@@ -105,7 +126,7 @@ export default function PlaygroundSubmissionDetailPage() {
         window.clearInterval(pollRef.current);
       }
     };
-  }, [requirementId, submissionId]);
+  }, [quickStart.mockSubmission, quickStart.mode, requirementId, submissionId, useQuickStartSubmission]);
 
   useEffect(() => {
     if (!submission || !pollRef.current) {
@@ -125,12 +146,26 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [requirement]);
 
   const nodeStates = useMemo(() => {
+    if (useQuickStartSubmission && quickStart.canvasDemo.active) {
+      return quickStart.canvasDemo.nodeStates;
+    }
     const nextState: Record<string, RequirementVisualState> = {};
     for (const event of logs?.visual_events ?? []) {
       nextState[event.node_id] = toVisualState(event);
     }
     return nextState;
-  }, [logs]);
+  }, [logs, quickStart.canvasDemo.active, quickStart.canvasDemo.nodeStates, useQuickStartSubmission]);
+
+  useEffect(() => {
+    if (!useQuickStartSubmission || !quickStart.canvasDemo.active) {
+      return;
+    }
+    setActiveTab("canvas");
+    setSelectedNodeId(quickStart.canvasDemo.selectedNodeId);
+    setDetailExpanded(quickStart.canvasDemo.detailExpanded);
+    setFocusNodeId(quickStart.canvasDemo.currentNodeId);
+    setPulseNodeId(quickStart.canvasDemo.currentNodeId);
+  }, [quickStart.canvasDemo, useQuickStartSubmission]);
 
   useEffect(() => {
     const events = logs?.visual_events ?? [];
@@ -230,22 +265,34 @@ export default function PlaygroundSubmissionDetailPage() {
           <div className="detail-tab-panel playground-submission-tab-panel">
             {activeTab === "canvas" ? (
               tree ? (
-                <div className="playground-canvas-panel">
+                <div className="playground-canvas-panel" data-quickstart-id="quickstart-submission-canvas">
                   <RequirementTreeCanvas
                     tree={tree}
-                    selectedNodeId={selectedNodeId}
+                    selectedNodeId={useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
+                      ? quickStart.canvasDemo.selectedNodeId
+                      : selectedNodeId}
                     onSelectNode={(nodeId) => {
                       setSelectedNodeId(nodeId);
                       setDetailExpanded(Boolean(nodeId));
+                      if (useQuickStartSubmission) {
+                        quickStart.setSelectedNode(nodeId);
+                        quickStart.setDetailExpanded(Boolean(nodeId));
+                      }
                     }}
-                    detailExpanded={detailExpanded}
-                    onDetailExpandedChange={setDetailExpanded}
+                    detailExpanded={useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded}
+                    onDetailExpandedChange={(expanded) => {
+                      setDetailExpanded(expanded);
+                      if (useQuickStartSubmission) {
+                        quickStart.setDetailExpanded(expanded);
+                      }
+                    }}
                     mode="readonly"
                     detailPlacement="right"
                     nodeStates={nodeStates}
-                    focusNodeId={focusNodeId}
-                    pulseNodeId={pulseNodeId}
+                    focusNodeId={useQuickStartSubmission ? quickStart.canvasDemo.currentNodeId : focusNodeId}
+                    pulseNodeId={useQuickStartSubmission ? quickStart.canvasDemo.currentNodeId : pulseNodeId}
                     showLegend
+                    detailTestId="quickstart-submission-node-detail"
                   />
                 </div>
               ) : (

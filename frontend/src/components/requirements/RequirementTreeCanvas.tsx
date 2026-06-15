@@ -53,6 +53,7 @@ type RequirementTreeCanvasProps = {
   focusNodeId?: string | null;
   pulseNodeId?: string | null;
   showLegend?: boolean;
+  detailTestId?: string;
 };
 
 const NODE_WIDTH = 124;
@@ -256,6 +257,7 @@ function TreeCanvasInner({
   focusNodeId = null,
   pulseNodeId = null,
   showLegend = false,
+  detailTestId,
 }: RequirementTreeCanvasProps) {
   const reactFlow = useReactFlow();
   const lastFocusKeyRef = useRef<string | null>(null);
@@ -382,7 +384,10 @@ function TreeCanvasInner({
       </div>
 
       {selectedNode ? (
-        <div className={`create-task-detail-drawer detail-placement-${detailPlacement} ${detailExpanded ? "expanded" : "collapsed"}`}>
+        <div
+          data-quickstart-id={detailTestId}
+          className={`create-task-detail-drawer detail-placement-${detailPlacement} ${detailExpanded ? "expanded" : "collapsed"}`}
+        >
           <div className="create-task-detail-top">
             <div>
               <strong>{selectedNode.id}</strong>

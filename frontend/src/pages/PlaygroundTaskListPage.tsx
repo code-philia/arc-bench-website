@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../lib/api";
 import type { RequirementSummary } from "../lib/types";
+import { QUICK_START_REQUIREMENT_ID, QUICK_START_TASK_TYPE } from "../quickstart/constants";
+import { useQuickStart } from "../quickstart/QuickStartContext";
 
 type PlaygroundTaskType = "web" | "mobile" | "kernel" | "mixed";
 
@@ -46,6 +48,11 @@ export default function PlaygroundTaskListPage() {
   const taskType = normalizeTaskType(rawTaskType);
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const quickStart = useQuickStart();
+
+  useEffect(() => {
+    quickStart.syncStepForRoute();
+  }, [quickStart, taskType]);
 
   useEffect(() => {
     if (!taskType) {
@@ -77,7 +84,18 @@ export default function PlaygroundTaskListPage() {
     return requirements.filter((item) => item.category === taskType);
   }, [requirements, taskType]);
 
-  const totalTests = useMemo(() => tasks.reduce((sum, task) => sum + task.total_tests, 0), [tasks]);
+  const orderedTasks = useMemo(() => {
+    if (taskType !== QUICK_START_TASK_TYPE) {
+      return tasks;
+    }
+    const priority = tasks.find((task) => task.id === QUICK_START_REQUIREMENT_ID);
+    if (!priority) {
+      return tasks;
+    }
+    return [priority, ...tasks.filter((task) => task.id !== QUICK_START_REQUIREMENT_ID)];
+  }, [taskType, tasks]);
+
+  const totalTests = useMemo(() => orderedTasks.reduce((sum, task) => sum + task.total_tests, 0), [orderedTasks]);
 
   if (!taskType) {
     return (
@@ -130,7 +148,7 @@ export default function PlaygroundTaskListPage() {
         </section>
 
         <section className="task-table-wrap competition-task-table-wrap">
-          {tasks.length === 0 ? (
+          {orderedTasks.length === 0 ? (
             <div className="empty-state">No tasks available for this type yet.</div>
           ) : (
             <table className="task-table">
@@ -145,9 +163,12 @@ export default function PlaygroundTaskListPage() {
                 </tr>
               </thead>
               <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.id} onClick={() => navigate(`/playground/task-bank/${taskType}/${task.id}`)}>
-                    <td className="task-id">{task.id}</td>
+                {orderedTasks.map((task, index) => (
+                  <tr
+                    key={task.id}
+                    onClick={() => navigate(`/playground/task-bank/${taskType}/${task.id}`)}
+                  >
+                    <td className="task-id" data-quickstart-id={index === 0 ? "quickstart-task-item" : undefined}>{task.id}</td>
                     <td>
                       <div className="task-name">
                         <Link className="inline-link" to={`/playground/task-bank/${taskType}/${task.id}`}>

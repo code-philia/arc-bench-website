@@ -8,6 +8,7 @@ import MarkdownDocument, { extractHeadings } from "../components/requirements/Ma
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
 import type { RequirementDetail, SubmissionDetail, SubmissionSummary } from "../lib/types";
+import { useQuickStart } from "../quickstart/QuickStartContext";
 
 function submissionBadgeClass(status: string) {
   if (status === "PASSED") return "pass";
@@ -54,6 +55,8 @@ export default function PlaygroundRequirementDetailPage() {
   const [submissionTab, setSubmissionTab] = useState<"submit" | "history">("submit");
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<number | null>(null);
+  const quickStart = useQuickStart();
+  const { active, prefill } = quickStart;
   const currentMarkdown = useMemo(() => {
     if (!requirement) {
       return "";
@@ -61,6 +64,10 @@ export default function PlaygroundRequirementDetailPage() {
     return activeDoc === "readme" ? requirement.requirements_markdown : requirement.prerequisites_markdown;
   }, [activeDoc, requirement]);
   const headings = useMemo(() => extractHeadings(currentMarkdown), [currentMarkdown]);
+
+  useEffect(() => {
+    quickStart.syncStepForRoute();
+  }, [quickStart, requirementId, taskType]);
 
   useEffect(() => {
     setLoading(true);
@@ -98,6 +105,18 @@ export default function PlaygroundRequirementDetailPage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    setRuntime(prefill.runtime);
+    setDisplayName(prefill.displayName);
+    setModelName(prefill.modelName);
+    if (prefill.file) {
+      setFile(prefill.file);
+    }
+  }, [active, prefill.displayName, prefill.file, prefill.modelName, prefill.runtime]);
 
   const beginPolling = (submissionId: string) => {
     if (pollRef.current) {
@@ -209,7 +228,7 @@ export default function PlaygroundRequirementDetailPage() {
             </button>
           </div>
           <div className="readme-body">
-            <aside className="toc">
+            <aside className="toc" data-quickstart-id="quickstart-contents">
               <div className="toc-title">Contents</div>
               {headings.length === 0 ? (
                 <div className="empty-state compact">No sections found.</div>
@@ -225,11 +244,13 @@ export default function PlaygroundRequirementDetailPage() {
                 ))
               )}
             </aside>
-            <MarkdownDocument
-              markdown={currentMarkdown}
-              assetsBaseUrl={requirement.assets_base_url}
-              referencesBaseUrl={requirement.references_base_url}
-            />
+            <div data-quickstart-id="quickstart-document" className="quickstart-document-anchor">
+              <MarkdownDocument
+                markdown={currentMarkdown}
+                assetsBaseUrl={requirement.assets_base_url}
+                referencesBaseUrl={requirement.references_base_url}
+              />
+            </div>
           </div>
         </section>
 
@@ -336,7 +357,13 @@ export default function PlaygroundRequirementDetailPage() {
                     </div>
                   ) : null}
                   {uploadError ? <div className="inline-alert error">{uploadError}</div> : null}
-                  <button className="btn-primary" type="button" disabled={!file || !user} onClick={handleUpload}>
+                  <button
+                    className="btn-primary"
+                    type="button"
+                    disabled={!file || !user}
+                    data-quickstart-id="quickstart-submit"
+                    onClick={handleUpload}
+                  >
                     Submit
                   </button>
                 </div>

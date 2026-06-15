@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
 import type { RequirementSummary } from "../lib/types";
+import { useQuickStart } from "../quickstart/QuickStartContext";
 
 type TaskCategory = "web" | "mobile" | "kernel" | "mixed";
 
@@ -55,6 +56,7 @@ const taskBankItems: TaskBankItem[] = [
 export default function PlaygroundPage() {
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const { start } = useQuickStart();
 
   useEffect(() => {
     api
@@ -77,7 +79,7 @@ export default function PlaygroundPage() {
 
         <div className="playground-home-grid">
           <section className="playground-actions" aria-label="Playground quick actions">
-            <Link to="/requirements" className="playground-entry-card home-surface-card playground active">
+            <button type="button" className="playground-entry-card home-surface-card playground active is-static" onClick={start}>
               <div className="home-surface-main">
                 <div className="home-surface-icon playground">
                   <PlayCircleOutlined />
@@ -94,7 +96,7 @@ export default function PlaygroundPage() {
               <div className="home-surface-support playground-entry-support">
                 <p>Learn about requirement tree, upload your agent, and run the benchmark workflow end to end.</p>
               </div>
-            </Link>
+            </button>
 
             <Link to="/playground/create-task" className="playground-entry-card home-surface-card research active">
               <div className="home-surface-main">
@@ -119,6 +121,7 @@ export default function PlaygroundPage() {
           <aside className="playground-bank" aria-label="Task bank">
             <div className="playground-bank-shell">
               <div className="playground-bank-title">Task Bank</div>
+              <div data-quickstart-id="playground-task-bank-anchor" className="quickstart-bank-anchor" aria-hidden="true" />
               <div className="playground-bank-list">
                 {taskBankItems.map((item) => {
                   const countText = item.key === "web" && !loading ? `${webTaskCount} tasks` : null;
@@ -136,7 +139,11 @@ export default function PlaygroundPage() {
                   }
 
                   return (
-                    <Link key={item.key} to={item.href} className={`playground-bank-item ${item.tone}`}>
+                    <Link
+                      key={item.key}
+                      to={item.href}
+                      className={`playground-bank-item ${item.tone}`}
+                    >
                       <div className="playground-bank-item-copy">
                         <div className={`playground-bank-badge ${item.tone}`}>{item.badge}</div>
                         <h2>{item.title}</h2>
