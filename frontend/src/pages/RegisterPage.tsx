@@ -1,6 +1,6 @@
 import { message } from "antd";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 
@@ -8,11 +8,14 @@ const PASSWORD_REQUIREMENT_TEXT = "Password must be 8-128 characters.";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { register } = useAuth();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const redirectTo = (location.state as { from?: string } | null)?.from || "/";
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -24,7 +27,7 @@ export default function RegisterPage() {
     try {
       await register({ email, username, password });
       message.success("Account created successfully.");
-      navigate("/", { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       message.error((error as Error).message);
     } finally {
