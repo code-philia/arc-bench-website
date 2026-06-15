@@ -1,94 +1,69 @@
 # Arc Bench Website
 
-This project consists of two parts:
-
-* `frontend`: Vite + React frontend
-* `backend`: FastAPI backend
-
-For local development and testing, it is recommended to start both the frontend and backend services.
-
 ## Requirements
 
-* Node.js 20+
-* Python 3.11+
+* Node.js 20+: For the frontend.
+* Python 3.11+: For the backend.
+* Docker: For running the application in a containerized environment.
 
-Available versions on the current machine:
-
-* Node.js `v20.20.2`
-* Python `3.13.12`
-
-## 1. Start the Backend
-
-Open a terminal and run:
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-After startup, the health check endpoint should be available at:
-
-```bash
-http://127.0.0.1:8000/api/health
-```
-
-## 2. Start the Frontend
+## 1. Compile the Frontend
 
 Open another terminal and run:
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build
 ```
 
+(Optional) For development purposes, you can start the frontend development server with:
+```bash
+npm run dev
+```
 The frontend will be available at:
 
 ```bash
 http://127.0.0.1:5173
 ```
 
-## 3. Frontend–Backend Integration
+## 2. Start the Backend
 
-* Frontend development server port: `5173`
-* Backend service port: `8000`
-* The frontend is configured to proxy `/api` requests to `http://127.0.0.1:8000`
+### Prepare the Python Environment
 
-Under normal circumstances, once both services are running, simply open the frontend URL to access the application.
-
-## 4. Single-Service Deployment (Serving Frontend via FastAPI)
-
-If the frontend has already been built using `npm run build` and the build artifacts are located in `frontend/dist`, FastAPI can serve:
-
-* Frontend pages
-* Frontend static assets
-* Backend `/api` endpoints
-
-Deployment steps:
+If you use conda, you can create a virtual environment with:
 
 ```bash
-cd frontend
-npm install
-npm run build
+conda create -n arcbench python=3.11 -y
+conda activate arcbench
 
-cd ../backend
+cd backend
+pip install -r requirements.txt
+```
+
+If you use venv, you can create a virtual environment with:
+
+```bash
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-After startup:
+If you use uv, you can create a virtual environment with:
 
-* `http://<SERVER_IP>:8000/` — Frontend homepage
-* `http://<SERVER_IP>:8000/api/health` — Backend health check
+```bash
+cd backend
+uv venv .venv
+uv pip install -r requirements.txt
+```
 
-Notes:
+### Start the Backend
 
-* FastAPI will directly serve the built files under `frontend/dist`
-* React Router routes will automatically fall back to `index.html` when the page is refreshed
-* Requests to `/api/...` will continue to be handled by the backend API
-* Do not use the `--reload` option in production environments
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+The website will be available at:
+
+```bash
+http://127.0.0.1:8000
+```
