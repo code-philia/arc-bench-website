@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.schemas.requirement import CompetitionDetail, CompetitionSummary, RequirementDetail, RequirementSummary
 from app.services.requirement_catalog import RequirementCatalogService
@@ -71,6 +72,18 @@ def download_public_task(requirement_id: str, download_kind: str, db: Session = 
         content=content,
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@competition_router.get("/public/demo-agent")
+def download_demo_agent() -> FileResponse:
+    demo_agent_path = get_settings().demo_agent_zip
+    if not demo_agent_path.is_file():
+        raise HTTPException(status_code=404, detail="Demo agent bundle not found")
+    return FileResponse(
+        demo_agent_path,
+        media_type="application/zip",
+        filename=demo_agent_path.name,
     )
 
 

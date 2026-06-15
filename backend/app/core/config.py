@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     requirements_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "requirements"
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
     templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"
+    demo_agent_zip: Path = ROOT_DIR / "runtime" / "demo" / "demo_agent.zip"
     user_submissions_root: Path = ROOT_DIR / "runtime" / "user-submissions"
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"

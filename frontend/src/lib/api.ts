@@ -94,6 +94,20 @@ export const api = {
   getCompetition(competitionId: string) {
     return request<CompetitionDetail>(`/competitions/${competitionId}`);
   },
+  async getDemoAgentFile() {
+    const response = await fetch(`${API_BASE}/competitions/public/demo-agent`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
+      throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get("Content-Disposition")
+      ?.match(/filename=\"?([^"]+)\"?/)
+      ?.[1] ?? "demo_agent.zip";
+    return new File([blob], filename, { type: "application/zip" });
+  },
   listRequirements() {
     return request<RequirementSummary[]>("/requirements");
   },
