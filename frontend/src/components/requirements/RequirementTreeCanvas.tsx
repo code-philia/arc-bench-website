@@ -4,6 +4,7 @@ import {
   DeleteOutlined,
   DownOutlined,
   MinusOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   RadarChartOutlined,
   ShareAltOutlined,
@@ -48,6 +49,7 @@ type RequirementTreeCanvasProps = {
   onAddChild?: () => void;
   onAddSibling?: () => void;
   onDeleteNode?: () => void;
+  onReindexIds?: () => void;
   renderDetailContent?: (node: RequirementNode) => React.ReactNode;
   nodeStates?: Record<string, RequirementVisualState>;
   focusNodeId?: string | null;
@@ -236,6 +238,7 @@ function TreeCanvasInner({
   onAddChild,
   onAddSibling,
   onDeleteNode,
+  onReindexIds,
   renderDetailContent,
   nodeStates = {},
   focusNodeId = null,
@@ -304,6 +307,11 @@ function TreeCanvasInner({
               <Tooltip title="Delete selected node">
                 <button type="button" className="icon-tool-btn danger" onClick={onDeleteNode}>
                   <DeleteOutlined />
+                </button>
+              </Tooltip>
+              <Tooltip title="Reindex requirement IDs">
+                <button type="button" className="icon-tool-btn" onClick={onReindexIds}>
+                  <OrderedListOutlined />
                 </button>
               </Tooltip>
               <div className="task-flow-toolbar-divider" />
