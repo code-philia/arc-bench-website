@@ -221,6 +221,16 @@ export default function CreateTaskPage() {
     message.success("Requirement IDs reindexed.");
   };
 
+  const handleConnectDependency = (sourceId: string, targetId: string) => {
+    setTree((current) => updateNodeInTree(current, sourceId, (node) => ({
+      ...node,
+      dependencies: Array.from(new Set([...node.dependencies, targetId])).filter((dependency) => dependency !== sourceId),
+    })));
+    setSelectedNodeId(sourceId);
+    setDetailExpanded(true);
+    message.success(`Dependency added: ${sourceId} -> ${targetId}`);
+  };
+
   const handleCreateTask = async () => {
     if (!user) {
       navigate("/login", { state: { from: "/playground/create-task" } });
@@ -321,6 +331,8 @@ export default function CreateTaskPage() {
               onAddSibling={handleAddSibling}
               onDeleteNode={handleDeleteNode}
               onReindexIds={handleReindexIds}
+              onConnectDependency={handleConnectDependency}
+              autoFitOnTreeChange={false}
               renderDetailContent={(node) => (
                 <>
                     <div className="create-task-detail-grid">

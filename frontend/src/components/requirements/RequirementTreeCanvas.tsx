@@ -3,6 +3,8 @@ import {
   CaretRightOutlined,
   DeleteOutlined,
   DownOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
   MinusOutlined,
   OrderedListOutlined,
   PlusOutlined,
@@ -12,14 +14,20 @@ import {
 } from "@ant-design/icons";
 import { Tooltip } from "antd";
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BaseEdge,
+  Connection,
+  ConnectionLineType,
   Handle,
   MarkerType,
   Position,
   ReactFlow,
   ReactFlowProvider,
+  ViewportPortal,
+  useStoreApi,
   useReactFlow,
+  type EdgeProps,
   type Edge,
   type Node,
   type NodeProps,
@@ -35,6 +43,13 @@ type FlowNodeData = {
   selected: boolean;
   visualState: RequirementVisualState;
   pulse: boolean;
+  dependencySourcesVisible: boolean;
+  dependencyTargetsVisible: boolean;
+};
+
+type FlowGraph = {
+  nodes: Node<FlowNodeData>[];
+  edges: Edge[];
 };
 
 type RequirementTreeCanvasProps = {
@@ -50,12 +65,14 @@ type RequirementTreeCanvasProps = {
   onAddSibling?: () => void;
   onDeleteNode?: () => void;
   onReindexIds?: () => void;
+  onConnectDependency?: (sourceId: string, targetId: string) => void;
   renderDetailContent?: (node: RequirementNode) => React.ReactNode;
   nodeStates?: Record<string, RequirementVisualState>;
   focusNodeId?: string | null;
   pulseNodeId?: string | null;
   showLegend?: boolean;
   detailTestId?: string;
+  autoFitOnTreeChange?: boolean;
 };
 
 const NODE_WIDTH = 124;
@@ -64,13 +81,48 @@ const HORIZONTAL_GAP = 72;
 const VERTICAL_GAP = 44;
 const FLOW_MARGIN_X = 32;
 const FLOW_MARGIN_Y = 32;
+const DEPENDENCY_EDGE_COLOR = "#d44949";
+const DEPENDENCY_EDGE_STROKE_WIDTH = 1.8;
+const DEPENDENCY_EDGE_DASHARRAY = "6 5";
+const DEPENDENCY_EDGE_CONTROL_OFFSET = 56;
+const DEPENDENCY_ARROW_SIZE = 7;
+
+function getEventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: number } | null {
+  if ("touches" in event) {
+    const touch = event.touches[0] ?? event.changedTouches[0];
+    return touch ? { x: touch.clientX, y: touch.clientY } : null;
+  }
+  return { x: event.clientX, y: event.clientY };
+}
+
+function buildDependencyPath(sourceX: number, sourceY: number, targetX: number, targetY: number): string {
+  const control1X = sourceX + DEPENDENCY_EDGE_CONTROL_OFFSET;
+  const control2X = targetX - DEPENDENCY_EDGE_CONTROL_OFFSET;
+  return [
+    `M ${sourceX} ${sourceY}`,
+    `C ${control1X} ${sourceY}, ${control2X} ${targetY}, ${targetX} ${targetY}`,
+  ].join(" ");
+}
+
+function buildDependencyArrowPath(targetX: number, targetY: number): string {
+  const arrowOffset = DEPENDENCY_ARROW_SIZE * 0.72;
+  return [
+    `M ${targetX - DEPENDENCY_ARROW_SIZE} ${targetY - arrowOffset}`,
+    `L ${targetX} ${targetY}`,
+    `L ${targetX - DEPENDENCY_ARROW_SIZE} ${targetY + arrowOffset}`,
+  ].join(" ");
+}
 
 function buildFlowFromTree(
   tree: RequirementNode,
   selectedNodeId: string | null,
   nodeStates: Record<string, RequirementVisualState>,
   pulseNodeId: string | null,
-): { nodes: Node<FlowNodeData>[]; edges: Edge[] } {
+  editable: boolean,
+  dependencySourcesVisible: boolean,
+  dependencyTargetsVisible: boolean,
+  showDependencies: boolean,
+): FlowGraph {
   const root = hierarchy(tree, (node) => node.children);
   const layout = createTreeLayout<RequirementNode>()
     .nodeSize([NODE_HEIGHT + VERTICAL_GAP, NODE_WIDTH + HORIZONTAL_GAP]);
@@ -80,7 +132,7 @@ function buildFlowFromTree(
   const minX = Math.min(...positionedNodes.map((node) => node.x));
   const minY = Math.min(...positionedNodes.map((node) => node.y));
 
-  const edges: Edge[] = positionedRoot.links().map((link) => ({
+  const structureEdges: Edge[] = positionedRoot.links().map((link) => ({
     id: `${link.source.data.id}-${link.target.data.id}`,
     source: link.source.data.id,
     target: link.target.data.id,
@@ -88,6 +140,33 @@ function buildFlowFromTree(
     animated: false,
     zIndex: 1,
   }));
+
+  const validNodeIds = new Set(positionedNodes.map((node) => node.data.id));
+  const dependencyEdges: Edge[] = [];
+
+  positionedNodes.forEach((positioned) => {
+    const sourceNode = positioned.data;
+    sourceNode.dependencies.forEach((dependencyId) => {
+      if (!validNodeIds.has(dependencyId) || dependencyId === sourceNode.id) {
+        return;
+      }
+      dependencyEdges.push({
+        id: `dependency-${sourceNode.id}-${dependencyId}`,
+        source: sourceNode.id,
+        target: dependencyId,
+        sourceHandle: "dependency-source",
+        targetHandle: "dependency-target",
+        type: "dependencyEdge",
+        animated: false,
+        zIndex: 3,
+        style: {
+          stroke: DEPENDENCY_EDGE_COLOR,
+          strokeWidth: DEPENDENCY_EDGE_STROKE_WIDTH,
+          strokeDasharray: DEPENDENCY_EDGE_DASHARRAY,
+        },
+      });
+    });
+  });
 
   const nodes: Node<FlowNodeData>[] = positionedNodes.map((positioned) => {
     const node = positioned.data;
@@ -107,12 +186,55 @@ function buildFlowFromTree(
         selected: selectedNodeId === node.id,
         visualState: nodeStates[node.id] ?? "default",
         pulse: pulseNodeId === node.id,
+        dependencySourcesVisible: editable && dependencySourcesVisible,
+        dependencyTargetsVisible,
       },
       draggable: false,
     };
   });
 
-  return { nodes, edges };
+  return {
+    nodes,
+    edges: showDependencies ? [...structureEdges, ...dependencyEdges] : structureEdges,
+  };
+}
+
+function DependencyEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  style,
+  selected,
+}: EdgeProps<Edge>) {
+  const path = buildDependencyPath(sourceX, sourceY, targetX, targetY);
+  const arrowPath = buildDependencyArrowPath(targetX, targetY);
+
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        style={{
+          stroke: DEPENDENCY_EDGE_COLOR,
+          strokeWidth: DEPENDENCY_EDGE_STROKE_WIDTH,
+          strokeDasharray: DEPENDENCY_EDGE_DASHARRAY,
+          ...style,
+        }}
+        interactionWidth={20}
+      />
+      <path
+        d={arrowPath}
+        fill="none"
+        stroke={DEPENDENCY_EDGE_COLOR}
+        strokeWidth={selected ? 2.2 : 1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        pointerEvents="none"
+      />
+    </>
+  );
 }
 
 function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
@@ -120,10 +242,24 @@ function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
     <div
       className={`task-flow-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
     >
-      <Handle type="target" position={Position.Left} className="task-flow-handle" isConnectable={false} />
+      {data.dependencyTargetsVisible ? <span className="task-flow-handle-visual dependency-target" aria-hidden="true" /> : null}
+      <Handle
+        id="dependency-target"
+        type="target"
+        position={Position.Left}
+        className={`task-flow-handle dependency-target ${data.dependencyTargetsVisible ? "visible" : ""}`}
+        isConnectable={data.dependencyTargetsVisible}
+      />
       <strong>{data.label}</strong>
       <span>{data.title}</span>
-      <Handle type="source" position={Position.Right} className="task-flow-handle" isConnectable={false} />
+      {data.dependencySourcesVisible ? <span className="task-flow-handle-visual dependency-source" aria-hidden="true" /> : null}
+      <Handle
+        id="dependency-source"
+        type="source"
+        position={Position.Right}
+        className={`task-flow-handle dependency-source ${data.dependencySourcesVisible ? "visible" : ""}`}
+        isConnectable={data.dependencySourcesVisible}
+      />
     </div>
   );
 }
@@ -239,27 +375,63 @@ function TreeCanvasInner({
   onAddSibling,
   onDeleteNode,
   onReindexIds,
+  onConnectDependency,
   renderDetailContent,
   nodeStates = {},
   focusNodeId = null,
   pulseNodeId = null,
   showLegend = false,
   detailTestId,
+  autoFitOnTreeChange = true,
 }: RequirementTreeCanvasProps) {
   const reactFlow = useReactFlow();
+  const storeApi = useStoreApi();
   const lastFocusKeyRef = useRef<string | null>(null);
-  const flow = useMemo(
-    () => buildFlowFromTree(tree, selectedNodeId, nodeStates, pulseNodeId),
-    [nodeStates, pulseNodeId, selectedNodeId, tree],
+  const hasInitializedViewRef = useRef(false);
+  const previewFrameRef = useRef<number | null>(null);
+  const previewPointRef = useRef<{ x: number; y: number } | null>(null);
+  const previewPathRef = useRef<SVGPathElement | null>(null);
+  const previewArrowPathRef = useRef<SVGPathElement | null>(null);
+  const previewSourcePointRef = useRef<{ x: number; y: number } | null>(null);
+  const [dependencyConnectionActive, setDependencyConnectionActive] = useState(false);
+  const [clickConnectionSourceId, setClickConnectionSourceId] = useState<string | null>(null);
+  const [showDependencies, setShowDependencies] = useState(mode === "editable");
+  const baseFlow = useMemo(
+    () => buildFlowFromTree(
+      tree,
+      selectedNodeId,
+      nodeStates,
+      pulseNodeId,
+      mode === "editable",
+      !dependencyConnectionActive,
+      dependencyConnectionActive,
+      showDependencies,
+    ),
+    [dependencyConnectionActive, mode, nodeStates, pulseNodeId, selectedNodeId, showDependencies, tree],
   );
+  const flow = baseFlow;
+  const edgeTypes = useMemo(() => ({ dependencyEdge: DependencyEdge }), []);
+  const nodeTypes = useMemo(() => ({ requirementNode: RequirementFlowNode }), []);
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
 
   useEffect(() => {
+    return () => {
+      if (previewFrameRef.current !== null) {
+        window.cancelAnimationFrame(previewFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasInitializedViewRef.current && !autoFitOnTreeChange) {
+      return;
+    }
+    hasInitializedViewRef.current = true;
     const timer = window.setTimeout(() => {
       reactFlow.fitView({ padding: 0.22, duration: 300, maxZoom: 1.15 });
     }, 30);
     return () => window.clearTimeout(timer);
-  }, [reactFlow, tree]);
+  }, [autoFitOnTreeChange, reactFlow, tree]);
 
   useEffect(() => {
     if (!focusNodeId) {
@@ -270,7 +442,7 @@ function TreeCanvasInner({
       return;
     }
     lastFocusKeyRef.current = focusKey;
-    const target = flow.nodes.find((node) => node.id === focusNodeId);
+    const target = baseFlow.nodes.find((node) => node.id === focusNodeId);
     if (!target) {
       return;
     }
@@ -282,11 +454,67 @@ function TreeCanvasInner({
       );
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [flow.nodes, focusNodeId, pulseNodeId, reactFlow]);
+  }, [baseFlow.nodes, focusNodeId, pulseNodeId, reactFlow]);
 
   const detailContent = selectedNode
     ? (renderDetailContent ? renderDetailContent(selectedNode) : <ReadonlyNodeDetail node={selectedNode} />)
     : null;
+
+  const handleConnectDependency = (connection: Connection) => {
+    if (!onConnectDependency || !connection.source || !connection.target || connection.source === connection.target) {
+      return;
+    }
+    onConnectDependency(connection.source, connection.target);
+  };
+
+  const cancelDependencyConnection = () => {
+    storeApi.getState().cancelConnection();
+    storeApi.setState({ connectionClickStartHandle: null });
+    setDependencyConnectionActive(false);
+    setClickConnectionSourceId(null);
+    previewPointRef.current = null;
+    previewSourcePointRef.current = null;
+    if (previewFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewFrameRef.current);
+      previewFrameRef.current = null;
+    }
+    if (previewPathRef.current) {
+      previewPathRef.current.setAttribute("d", "");
+    }
+    if (previewArrowPathRef.current) {
+      previewArrowPathRef.current.setAttribute("d", "");
+    }
+  };
+
+  const updateClickPreviewPath = (flowPoint: { x: number; y: number } | null) => {
+    if (!previewPathRef.current || !previewArrowPathRef.current) {
+      return;
+    }
+    const sourcePoint = previewSourcePointRef.current;
+    if (!sourcePoint || !flowPoint) {
+      previewPathRef.current.setAttribute("d", "");
+      previewArrowPathRef.current.setAttribute("d", "");
+      return;
+    }
+    const path = buildDependencyPath(sourcePoint.x, sourcePoint.y, flowPoint.x, flowPoint.y);
+    const arrowPath = buildDependencyArrowPath(flowPoint.x, flowPoint.y);
+    previewPathRef.current.setAttribute("d", path);
+    previewArrowPathRef.current.setAttribute("d", arrowPath);
+  };
+
+  const scheduleClickPreviewPointerUpdate = (clientPoint: { x: number; y: number }) => {
+    previewPointRef.current = clientPoint;
+    if (previewFrameRef.current !== null) {
+      return;
+    }
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null;
+      if (!previewPointRef.current) {
+        return;
+      }
+      updateClickPreviewPath(reactFlow.screenToFlowPosition(previewPointRef.current));
+    });
+  };
 
   return (
     <div className={`requirement-tree-layout detail-${detailPlacement}`}>
@@ -337,15 +565,45 @@ function TreeCanvasInner({
               <RadarChartOutlined />
             </button>
           </Tooltip>
+          <div className="task-flow-toolbar-divider toolbar-divider-right" />
+          <Tooltip title={showDependencies ? "Hide dependencies" : "Show dependencies"}>
+            <button
+              type="button"
+              className={`icon-tool-btn ${showDependencies ? "active" : ""}`}
+              onClick={() => setShowDependencies((current) => !current)}
+            >
+              {showDependencies ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+            </button>
+          </Tooltip>
         </div>
 
-        <div className="task-flow-shell">
+        <div
+          className="task-flow-shell"
+          onMouseMoveCapture={(event) => {
+            if (!clickConnectionSourceId) {
+              return;
+            }
+            scheduleClickPreviewPointerUpdate({ x: event.clientX, y: event.clientY });
+          }}
+        >
           {showLegend ? <RequirementStateLegend /> : null}
           <ReactFlow
             nodes={flow.nodes}
             edges={flow.edges}
-            onNodeClick={(_, node) => onSelectNode(node.id)}
-            onPaneClick={() => onSelectNode(null)}
+            onNodeClick={(event, node) => {
+              const target = event.target as HTMLElement | null;
+              if (target?.closest(".task-flow-handle")) {
+                return;
+              }
+              onSelectNode(node.id);
+            }}
+            onPaneClick={() => {
+              if (clickConnectionSourceId) {
+                cancelDependencyConnection();
+                return;
+              }
+              onSelectNode(null);
+            }}
             fitView
             panOnDrag
             zoomOnScroll
@@ -353,10 +611,71 @@ function TreeCanvasInner({
             zoomOnDoubleClick={false}
             selectionOnDrag={false}
             nodesDraggable={false}
-            nodesConnectable={false}
+            nodesConnectable={mode === "editable"}
+            connectOnClick={mode === "editable"}
             minZoom={0.2}
             maxZoom={1.8}
-            nodeTypes={{ requirementNode: RequirementFlowNode }}
+            onConnect={handleConnectDependency}
+            onConnectStart={() => {
+              if (mode === "editable") {
+                setDependencyConnectionActive(true);
+              }
+            }}
+            onConnectEnd={() => {
+              setDependencyConnectionActive(false);
+              previewPointRef.current = null;
+              previewSourcePointRef.current = null;
+              if (previewPathRef.current) {
+                previewPathRef.current.setAttribute("d", "");
+              }
+              if (previewArrowPathRef.current) {
+                previewArrowPathRef.current.setAttribute("d", "");
+              }
+            }}
+            onClickConnectStart={(event, params) => {
+              if (mode === "editable") {
+                setDependencyConnectionActive(true);
+                setClickConnectionSourceId(params.nodeId);
+                const sourceNode = baseFlow.nodes.find((node) => node.id === params.nodeId);
+                previewSourcePointRef.current = sourceNode
+                  ? {
+                      x: sourceNode.position.x + NODE_WIDTH,
+                      y: sourceNode.position.y + NODE_HEIGHT / 2,
+                    }
+                  : null;
+                const point = getEventClientPoint(event);
+                previewPointRef.current = point;
+                updateClickPreviewPath(point ? reactFlow.screenToFlowPosition(point) : null);
+              }
+            }}
+            onClickConnectEnd={() => {
+              setDependencyConnectionActive(false);
+              setClickConnectionSourceId(null);
+              previewPointRef.current = null;
+              previewSourcePointRef.current = null;
+              if (previewPathRef.current) {
+                previewPathRef.current.setAttribute("d", "");
+              }
+              if (previewArrowPathRef.current) {
+                previewArrowPathRef.current.setAttribute("d", "");
+              }
+            }}
+            connectionLineType={ConnectionLineType.SimpleBezier}
+            connectionLineStyle={{
+              stroke: "#d44949",
+              strokeWidth: 1.8,
+              strokeDasharray: "6 5",
+            }}
+            isValidConnection={(connection) =>
+              Boolean(
+                connection.source &&
+                connection.target &&
+                connection.source !== connection.target &&
+                connection.sourceHandle === "dependency-source" &&
+                connection.targetHandle === "dependency-target",
+              )}
+            edgeTypes={edgeTypes}
+            nodeTypes={nodeTypes}
             className="task-flow-canvas"
             defaultEdgeOptions={{
               type: "straight",
@@ -371,7 +690,22 @@ function TreeCanvasInner({
                 strokeWidth: 1.3,
               },
             }}
-          />
+          >
+            <ViewportPortal>
+              <svg className="task-flow-preview-overlay" aria-hidden="true">
+                <path
+                  ref={previewPathRef}
+                  className={`task-flow-preview-path ${clickConnectionSourceId ? "visible" : ""}`}
+                  d=""
+                />
+                <path
+                  ref={previewArrowPathRef}
+                  className={`task-flow-preview-arrow ${clickConnectionSourceId ? "visible" : ""}`}
+                  d=""
+                />
+              </svg>
+            </ViewportPortal>
+          </ReactFlow>
         </div>
       </div>
 
