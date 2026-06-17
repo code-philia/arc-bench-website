@@ -1,4 +1,4 @@
-import { ArrowRightOutlined, CheckCircleFilled } from "@ant-design/icons";
+import { ArrowRightOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 
 import { useQuickStart } from "./QuickStartContext";
@@ -31,7 +31,7 @@ function renderSnippet(code: string) {
 }
 
 export default function QuickStartOverlay() {
-  const { active, currentStep, advance } = useQuickStart();
+  const { active, currentStep, advance, finish } = useQuickStart();
   const [targetRect, setTargetRect] = useState<RectState | null>(null);
 
   useEffect(() => {
@@ -173,6 +173,14 @@ export default function QuickStartOverlay() {
 
       <div className={`quick-start-card arrow-${cardLayout.arrowDirection}`} style={cardLayout.style}>
         <span className="quick-start-arrow quick-start-card-arrow" aria-hidden="true" />
+        <button
+          type="button"
+          className="quick-start-close"
+          aria-label="Close quick start"
+          onClick={finish}
+        >
+          <CloseOutlined />
+        </button>
         <div className="quick-start-step">{currentStep.title}</div>
         <div className="quick-start-copy">{currentStep.message}</div>
         {currentStep.codeSnippet ? (
