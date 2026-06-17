@@ -10,7 +10,7 @@ import {
   UpOutlined,
 } from "@ant-design/icons";
 import { Tooltip } from "antd";
-import dagre from "@dagrejs/dagre";
+import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
 import { useEffect, useMemo, useRef } from "react";
 import {
   Handle,
@@ -58,13 +58,10 @@ type RequirementTreeCanvasProps = {
 
 const NODE_WIDTH = 124;
 const NODE_HEIGHT = 48;
-
-function collectTreeNodes(root: RequirementNode, parentId: string | null = null): Array<{ node: RequirementNode; parentId: string | null }> {
-  return [
-    { node: root, parentId },
-    ...root.children.flatMap((child) => collectTreeNodes(child, root.id)),
-  ];
-}
+const HORIZONTAL_GAP = 72;
+const VERTICAL_GAP = 44;
+const FLOW_MARGIN_X = 32;
+const FLOW_MARGIN_Y = 32;
 
 function buildFlowFromTree(
   tree: RequirementNode,
@@ -72,47 +69,34 @@ function buildFlowFromTree(
   nodeStates: Record<string, RequirementVisualState>,
   pulseNodeId: string | null,
 ): { nodes: Node<FlowNodeData>[]; edges: Edge[] } {
-  const items = collectTreeNodes(tree);
-  const graph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({
-    rankdir: "LR",
-    nodesep: 34,
-    ranksep: 66,
-    marginx: 32,
-    marginy: 32,
-  });
+  const root = hierarchy(tree, (node) => node.children);
+  const layout = createTreeLayout<RequirementNode>()
+    .nodeSize([NODE_HEIGHT + VERTICAL_GAP, NODE_WIDTH + HORIZONTAL_GAP]);
+  const positionedRoot = layout(root);
+  const positionedNodes = positionedRoot.descendants();
 
-  items.forEach(({ node }) => {
-    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  });
+  const minX = Math.min(...positionedNodes.map((node) => node.x));
+  const minY = Math.min(...positionedNodes.map((node) => node.y));
 
-  const edges: Edge[] = items
-    .filter((item) => item.parentId)
-    .map((item) => {
-      const parentId = item.parentId as string;
-      graph.setEdge(parentId, item.node.id);
-      return {
-        id: `${parentId}-${item.node.id}`,
-        source: parentId,
-        target: item.node.id,
-        type: "straight",
-        animated: false,
-        zIndex: 1,
-      };
-    });
+  const edges: Edge[] = positionedRoot.links().map((link) => ({
+    id: `${link.source.data.id}-${link.target.data.id}`,
+    source: link.source.data.id,
+    target: link.target.data.id,
+    type: "straight",
+    animated: false,
+    zIndex: 1,
+  }));
 
-  dagre.layout(graph);
-
-  const nodes: Node<FlowNodeData>[] = items.map(({ node }) => {
-    const positioned = graph.node(node.id);
+  const nodes: Node<FlowNodeData>[] = positionedNodes.map((positioned) => {
+    const node = positioned.data;
     return {
       id: node.id,
       type: "requirementNode",
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       position: {
-        x: positioned.x - NODE_WIDTH / 2,
-        y: positioned.y - NODE_HEIGHT / 2,
+        x: FLOW_MARGIN_X + (positioned.y - minY) - NODE_WIDTH / 2,
+        y: FLOW_MARGIN_Y + (positioned.x - minX) - NODE_HEIGHT / 2,
       },
       data: {
         label: node.id,
