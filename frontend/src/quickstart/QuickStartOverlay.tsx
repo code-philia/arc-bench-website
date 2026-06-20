@@ -15,6 +15,12 @@ type Point = {
   x: number;
   y: number;
 };
+type SpotlightPadding = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
 
 const VIEWPORT_MARGIN = 24;
 const VIEWPORT_TOP_MARGIN = 84;
@@ -33,6 +39,19 @@ function rectFromElement(element: HTMLElement): RectState {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function getSpotlightPadding(stepId?: string): SpotlightPadding {
+  if (stepId === "task-list-item") {
+    return { top: 10, right: 10, bottom: 2, left: 10 };
+  }
+
+  return {
+    top: HIGHLIGHT_PADDING,
+    right: HIGHLIGHT_PADDING,
+    bottom: HIGHLIGHT_PADDING,
+    left: HIGHLIGHT_PADDING,
+  };
 }
 
 function getTargetAnchor(rect: RectState, placement: Placement): Point {
@@ -134,6 +153,7 @@ export default function QuickStartOverlay() {
   const overlayLayout = useMemo(() => {
     const cardWidth = currentStep?.id === "submission-api-doc" ? 420 : 332;
     const cardHeight = currentStep?.id === "submission-api-doc" ? 280 : 180;
+    const spotlightPadding = getSpotlightPadding(currentStep?.id);
 
     if (!targetRect) {
       return {
@@ -208,10 +228,10 @@ export default function QuickStartOverlay() {
     const targetAnchor = getTargetAnchor(targetRect, bestPlacement);
     const cardAnchor = getCardAnchor(cardRect, bestPlacement);
     const spotlightStyle = {
-      top: targetRect.top - HIGHLIGHT_PADDING,
-      left: targetRect.left - HIGHLIGHT_PADDING,
-      width: targetRect.width + HIGHLIGHT_PADDING * 2,
-      height: targetRect.height + HIGHLIGHT_PADDING * 2,
+      top: targetRect.top - spotlightPadding.top,
+      left: targetRect.left - spotlightPadding.left,
+      width: targetRect.width + spotlightPadding.left + spotlightPadding.right,
+      height: targetRect.height + spotlightPadding.top + spotlightPadding.bottom,
     };
 
     return {

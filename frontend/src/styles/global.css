@@ -5218,23 +5218,6 @@ button {
   pointer-events: auto;
 }
 
-.quickstart-bank-anchor {
-  height: 10px;
-  width: 10px;
-  margin: 6px 0 2px 0;
-  pointer-events: none;
-}
-
-.quick-start-focus-hitbox {
-  position: absolute;
-  z-index: 3;
-  cursor: pointer;
-  background: transparent;
-  border-radius: 18px;
-  border: 0;
-  box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.42);
-}
-
 .quick-start-blocker {
   position: absolute;
   inset: 0;

@@ -19,7 +19,6 @@ export type QuickStartStep = {
   title: string;
   message: string;
   buttonLabel: string;
-  allowTargetClick?: boolean;
   codeSnippet?: string;
   preferredPlacement?: "left" | "right" | "up" | "down";
 };
