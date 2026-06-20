@@ -143,6 +143,7 @@ export default function PlaygroundPage() {
                       key={item.key}
                       to={item.href}
                       className={`playground-bank-item ${item.tone}`}
+                      data-quickstart-id={item.key === "web" ? "quickstart-task-type-web" : undefined}
                     >
                       <div className="playground-bank-item-copy">
                         <div className={`playground-bank-badge ${item.tone}`}>{item.badge}</div>

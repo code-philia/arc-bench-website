@@ -20,7 +20,7 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
   {
     id: "home-task-type",
     route: "/playground",
-    targetId: "playground-task-bank-anchor",
+    targetId: "quickstart-task-type-web",
     title: "Step 1/8",
     message: "Choose task type (web application).",
     buttonLabel: "Next",

@@ -5213,9 +5213,9 @@ button {
 
 .quick-start-overlay {
   position: fixed;
-  inset: 60px 0 0;
+  inset: 0;
   z-index: 120;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .quickstart-bank-anchor {
@@ -5227,41 +5227,61 @@ button {
 
 .quick-start-focus-hitbox {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   cursor: pointer;
   background: transparent;
+  border-radius: 18px;
+  border: 0;
+  box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.42);
 }
 
-.quick-start-arrow {
+.quick-start-spotlight {
   position: absolute;
-  width: 54px;
-  height: 16px;
-  background: linear-gradient(90deg, #3d77f3 0%, #3d77f3 68%, transparent 68%);
-  border-radius: 999px;
+  z-index: 2;
+  border-radius: 18px;
+  border: 2px solid rgba(77, 116, 214, 0.92);
+  box-shadow:
+    0 0 0 9999px rgba(17, 24, 39, 0.42),
+    0 0 0 8px rgba(77, 116, 214, 0.16),
+    0 12px 32px rgba(17, 24, 39, 0.22);
   pointer-events: none;
 }
 
-.quick-start-arrow::after {
-  content: "";
+.quick-start-connector {
   position: absolute;
-  right: -2px;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  border-top: 4px solid #3d77f3;
-  border-right: 4px solid #3d77f3;
-  transform: translateY(-50%) rotate(45deg);
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.quick-start-connector-path {
+  fill: none;
+  stroke: #4d74d6;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 8px 16px rgba(61, 119, 243, 0.18));
+}
+
+.quick-start-connector-dot {
+  fill: #4d74d6;
+  stroke: #ffffff;
+  stroke-width: 3;
 }
 
 .quick-start-card {
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   width: min(420px, calc(100vw - 32px));
   padding: 16px 16px 12px;
   border-radius: 18px;
   background: #ffffff;
   box-shadow: 0 18px 48px rgba(24, 39, 61, 0.34);
   color: #161f2b;
+  pointer-events: auto;
 }
 
 .quick-start-close {
@@ -5283,33 +5303,6 @@ button {
 .quick-start-close:hover {
   color: #1c2735;
   background: rgba(77, 116, 214, 0.08);
-}
-
-.quick-start-card-arrow {
-  z-index: 1;
-}
-
-.quick-start-card.arrow-right .quick-start-card-arrow {
-  right: -44px;
-  top: calc(50% - 8px);
-}
-
-.quick-start-card.arrow-left .quick-start-card-arrow {
-  left: -44px;
-  top: calc(50% - 8px);
-  transform: rotate(180deg);
-}
-
-.quick-start-card.arrow-down .quick-start-card-arrow {
-  left: calc(50% - 27px);
-  bottom: -36px;
-  transform: rotate(90deg);
-}
-
-.quick-start-card.arrow-up .quick-start-card-arrow {
-  left: calc(50% - 27px);
-  top: -36px;
-  transform: rotate(-90deg);
 }
 
 .quick-start-step {
@@ -5664,14 +5657,6 @@ button {
 
   .create-task-detail-grid {
     grid-template-columns: 1fr;
-  }
-
-  .quick-start-overlay {
-    inset: 60px 0 0;
-  }
-
-  .quick-start-arrow {
-    display: none;
   }
 
   .quick-start-card {
