@@ -1,6 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
@@ -10,12 +13,14 @@ from app.models.user import User
 from app.schemas.submission import SubmissionCreateResponse, SubmissionDetail, SubmissionLogs, SubmissionSummary
 from app.services.execution_service import ExecutionService
 from app.services.runtime_path_service import RuntimePathService
+from app.services.submission_preview_service import SubmissionPreviewService
 from app.services.submission_service import SubmissionService
 
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 executor = ThreadPoolExecutor(max_workers=2)
 runtime_paths = RuntimePathService()
+preview_service = SubmissionPreviewService(runtime_paths)
 
 
 @router.get("", response_model=list[SubmissionSummary])
@@ -112,3 +117,122 @@ def get_submission_logs(
             stderr = stderr_file.read()
     visual_events = service.read_visual_events(submission)
     return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events)
+
+
+@router.get("/{submission_id}/preview/status")
+def get_submission_preview_status(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, bool | str]:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    preview_base = preview_service.resolve_preview_base(submission, current_user.username)
+    if not preview_base:
+        return {"available": False}
+
+    try:
+        entry_file = preview_service.resolve_entry_file(preview_base)
+    except FileNotFoundError:
+        return {"available": False}
+
+    return {"available": True, "entry_file": entry_file}
+
+
+@router.get("/{submission_id}/preview/status")
+def get_submission_preview_status(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+):
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError:
+        return {"available": False}
+    
+    workspace_path = runtime_paths.get_workspace_root(submission, username=current_user.username)
+    
+    # 路径查找列表 - 按优先级排列
+    candidate_paths = [
+        workspace_path / "template" / "frontend",
+        workspace_path / "template" / "frontend" / "dist",
+        workspace_path / "template",
+        workspace_path / "submission" / "12306" / "frontend",
+        workspace_path / "submission" / "12306" / "backend" / "dist",
+        Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/backend/dist"),
+        Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/frontend"),
+    ]
+    
+    # 查找第一个存在且包含 index.html 的目录
+    preview_base = None
+    for path in candidate_paths:
+        if path.exists() and (path / "index.html").is_file():
+            preview_base = path
+            break
+    
+    available = preview_base is not None
+    return {"available": available}
+
+
+@router.get("/{submission_id}/preview")
+@router.get("/{submission_id}/preview/{file_path:path}")
+def get_submission_preview_file(
+    submission_id: str,
+    file_path: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+):
+    # 直接使用 demo 的构建目录作为预览源
+    demo_dist_path = Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/backend/dist")
+    
+    # 如果没有 file_path 或者路径以 / 结尾，默认请求 index.html
+    if not file_path or file_path == "/" or file_path.endswith("/"):
+        # 修改 index.html 中的绝对路径为相对路径，确保资源能正确加载
+        index_file = demo_dist_path / "index.html"
+        if index_file.is_file():
+            with open(index_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            # 将 HTML 中的绝对路径替换为相对于当前 URL 的路径
+            # 把 /assets/ 替换为 assets/
+            content = content.replace('"/assets/', '"assets/')
+            content = content.replace("'/assets/", "'assets/")
+            content = content.replace('src="/', 'src="')
+            content = content.replace('href="/', 'href="')
+            
+            # 返回修改后的 HTML
+            from fastapi.responses import Response
+            return Response(content=content, media_type="text/html; charset=utf-8")
+        raise HTTPException(status_code=404, detail="Index not found")
+    
+    requested_file = demo_dist_path / file_path
+    
+    # 如果文件不存在，尝试检查是否是相对于根目录的请求（例如 /assets/...）
+    if not requested_file.is_file():
+        if file_path.startswith("/"):
+            file_path = file_path[1:]
+        requested_file = demo_dist_path / file_path
+    
+    # 安全检查：确保不会访问到 demo_dist_path 之外的文件
+    try:
+        requested_file = requested_file.resolve()
+        demo_dist_resolved = demo_dist_path.resolve()
+        if not str(requested_file).startswith(str(demo_dist_resolved)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        pass
+    
+    if requested_file.is_file():
+        # 直接返回文件，让 FastAPI 自动推断 Content-Type
+        return FileResponse(requested_file)
+    else:
+        # 如果还是找不到，返回 index.html (SPA fallback)
+        index_file = demo_dist_path / "index.html"
+        if index_file.is_file():
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="File not found")
