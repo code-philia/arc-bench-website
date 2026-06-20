@@ -5215,7 +5215,7 @@ button {
   position: fixed;
   inset: 0;
   z-index: 120;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .quickstart-bank-anchor {
@@ -5233,6 +5233,13 @@ button {
   border-radius: 18px;
   border: 0;
   box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.42);
+}
+
+.quick-start-blocker {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .quick-start-spotlight {

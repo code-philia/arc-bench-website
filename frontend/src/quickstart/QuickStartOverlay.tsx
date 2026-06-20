@@ -226,12 +226,14 @@ export default function QuickStartOverlay() {
     return null;
   }
 
+  const isPositioned = Boolean(targetRect);
+
   return (
     <div className="quick-start-overlay" aria-hidden="false">
-      {overlayLayout.spotlightStyle ? (
+      {isPositioned && overlayLayout.spotlightStyle ? (
         <div className="quick-start-spotlight" style={overlayLayout.spotlightStyle} aria-hidden="true" />
       ) : null}
-      {overlayLayout.connectorPath && overlayLayout.targetAnchor ? (
+      {isPositioned && overlayLayout.connectorPath && overlayLayout.targetAnchor ? (
         <svg className="quick-start-connector" aria-hidden="true">
           <path className="quick-start-connector-path" d={overlayLayout.connectorPath} />
           <circle
@@ -242,36 +244,29 @@ export default function QuickStartOverlay() {
           />
         </svg>
       ) : null}
-      {targetRect && currentStep.allowTargetClick ? (
-        <button
-          type="button"
-          className="quick-start-focus-hitbox"
-          style={overlayLayout.spotlightStyle ?? undefined}
-          onClick={() => {
-            void advance();
-          }}
-        />
-      ) : null}
+      <div className="quick-start-blocker" aria-hidden="true" />
 
-      <div className="quick-start-card" style={overlayLayout.cardStyle}>
-        <button
-          type="button"
-          className="quick-start-close"
-          aria-label="Close quick start"
-          onClick={finish}
-        >
-          <CloseOutlined />
-        </button>
-        <div className="quick-start-step">{currentStep.title}</div>
-        <div className="quick-start-copy">{currentStep.message}</div>
-        {currentStep.codeSnippet ? (
-          <pre className="quick-start-code-block"><code>{renderSnippet(currentStep.codeSnippet)}</code></pre>
-        ) : null}
-        <button type="button" className="quick-start-next" onClick={() => void advance()}>
-          <span>{currentStep.buttonLabel}</span>
-          {currentStep.buttonLabel === "Done" ? <CheckCircleFilled /> : <ArrowRightOutlined />}
-        </button>
-      </div>
+      {isPositioned ? (
+        <div className="quick-start-card" style={overlayLayout.cardStyle}>
+          <button
+            type="button"
+            className="quick-start-close"
+            aria-label="Close quick start"
+            onClick={finish}
+          >
+            <CloseOutlined />
+          </button>
+          <div className="quick-start-step">{currentStep.title}</div>
+          <div className="quick-start-copy">{currentStep.message}</div>
+          {currentStep.codeSnippet ? (
+            <pre className="quick-start-code-block"><code>{renderSnippet(currentStep.codeSnippet)}</code></pre>
+          ) : null}
+          <button type="button" className="quick-start-next" onClick={() => void advance()}>
+            <span>{currentStep.buttonLabel}</span>
+            {currentStep.buttonLabel === "Done" ? <CheckCircleFilled /> : <ArrowRightOutlined />}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
