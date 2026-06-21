@@ -227,8 +227,8 @@ export default function PlaygroundRequirementDetailPage() {
               prerequisites.md
             </button>
           </div>
-          <div className="readme-body">
-            <aside className="toc" data-quickstart-id="quickstart-contents">
+          <div className="readme-body playground-readme-body">
+            <aside className="toc playground-readme-toc" data-quickstart-id="quickstart-contents">
               <div className="toc-title">Contents</div>
               {headings.length === 0 ? (
                 <div className="empty-state compact">No sections found.</div>
@@ -244,7 +244,10 @@ export default function PlaygroundRequirementDetailPage() {
                 ))
               )}
             </aside>
-            <div data-quickstart-id="quickstart-document" className="quickstart-document-anchor">
+            <div
+              data-quickstart-id="quickstart-document"
+              className="quickstart-document-anchor playground-readme-scroll"
+            >
               <MarkdownDocument
                 markdown={currentMarkdown}
                 assetsBaseUrl={requirement.assets_base_url}

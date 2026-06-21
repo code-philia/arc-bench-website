@@ -3667,6 +3667,33 @@ button {
   max-height: none;
 }
 
+.playground-readme-body {
+  align-items: stretch;
+}
+
+.playground-readme-toc {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.playground-readme-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.playground-readme-scroll .readme-content {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
 .nested-tabs {
   flex: 0 0 auto;
   padding-left: 0;
