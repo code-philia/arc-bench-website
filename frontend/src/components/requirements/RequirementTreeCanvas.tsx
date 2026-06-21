@@ -35,6 +35,7 @@ import {
 
 import { findNodeById, type RequirementNode } from "../../lib/taskTree";
 import type { RequirementVisualState } from "../../lib/types";
+import RequirementNodeDetailContent from "./RequirementNodeDetailContent";
 
 type FlowNodeData = {
   label: string;
@@ -290,78 +291,6 @@ function RequirementStateLegend() {
   );
 }
 
-function ReadonlyNodeDetail({ node }: { node: RequirementNode }) {
-  return (
-    <div className="readonly-node-detail">
-      <div className="readonly-detail-grid">
-        <div className="readonly-detail-card">
-          <span>Type</span>
-          <strong>{node.type}</strong>
-        </div>
-        <div className="readonly-detail-card">
-          <span>Children</span>
-          <strong>{node.children.length}</strong>
-        </div>
-        <div className="readonly-detail-card">
-          <span>Dependencies</span>
-          <strong>{node.dependencies.length}</strong>
-        </div>
-        <div className="readonly-detail-card">
-          <span>Scenarios</span>
-          <strong>{node.scenarios.length}</strong>
-        </div>
-      </div>
-
-      <div className="readonly-detail-section">
-        <div className="readonly-detail-label">Description</div>
-        <div className="readonly-detail-body">
-          {node.description || "No description available."}
-        </div>
-      </div>
-
-      {node.dependencies.length > 0 ? (
-        <div className="readonly-detail-section">
-          <div className="readonly-detail-label">Dependencies</div>
-          <div className="readonly-detail-tags">
-            {node.dependencies.map((dependency) => (
-              <span key={dependency} className="task-node-chip folder">
-                {dependency}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="readonly-detail-section">
-        <div className="readonly-detail-label">Scenarios</div>
-        {node.scenarios.length === 0 ? (
-          <div className="readonly-detail-body empty">No scenarios available.</div>
-        ) : (
-          <div className="readonly-scenario-list">
-            {node.scenarios.map((scenario, index) => (
-              <div key={`${node.id}-scenario-${index}`} className="readonly-scenario-card">
-                <strong>{scenario.name}</strong>
-                {scenario.steps.length === 0 ? (
-                  <div className="readonly-detail-body empty">No steps defined.</div>
-                ) : (
-                  <div className="readonly-scenario-steps">
-                    {scenario.steps.map((step, stepIndex) => (
-                      <div key={`${node.id}-scenario-${index}-step-${stepIndex}`} className="readonly-scenario-step">
-                        <span>{step.keyword}</span>
-                        <div>{step.content}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function TreeCanvasInner({
   tree,
   selectedNodeId,
@@ -457,7 +386,7 @@ function TreeCanvasInner({
   }, [baseFlow.nodes, focusNodeId, pulseNodeId, reactFlow]);
 
   const detailContent = selectedNode
-    ? (renderDetailContent ? renderDetailContent(selectedNode) : <ReadonlyNodeDetail node={selectedNode} />)
+    ? (renderDetailContent ? renderDetailContent(selectedNode) : <RequirementNodeDetailContent node={selectedNode} mode="readonly" />)
     : null;
 
   const handleConnectDependency = (connection: Connection) => {

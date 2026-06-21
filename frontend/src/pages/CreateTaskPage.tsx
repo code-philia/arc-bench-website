@@ -1,7 +1,5 @@
 import {
   CaretRightOutlined,
-  DeleteOutlined,
-  PlusOutlined,
   SaveOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
@@ -11,6 +9,7 @@ import "@xyflow/react/dist/style.css";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
 import MarkdownDocument from "../components/requirements/MarkdownDocument";
 import { api } from "../lib/api";
@@ -334,221 +333,12 @@ export default function CreateTaskPage() {
               onConnectDependency={handleConnectDependency}
               autoFitOnTreeChange={false}
               renderDetailContent={(node) => (
-                <>
-                    <div className="create-task-detail-grid">
-                      <label className="field-stack">
-                        <span>Requirement ID</span>
-                        <input
-                          className="text-input"
-                          value={node.id}
-                          onChange={(event) => {
-                            const nextId = event.target.value;
-                            updateSelectedNode((currentNode) => ({ ...currentNode, id: nextId }));
-                            setSelectedNodeId(nextId);
-                          }}
-                        />
-                      </label>
-
-                      <label className="field-stack">
-                        <span>Title</span>
-                        <input
-                          className="text-input"
-                          value={node.name}
-                          onChange={(event) => updateSelectedNode((currentNode) => ({ ...currentNode, name: event.target.value }))}
-                        />
-                      </label>
-
-                      <label className="field-stack">
-                        <span>Type</span>
-                        <select
-                          className="text-input"
-                          value={node.type}
-                          onChange={(event) =>
-                            updateSelectedNode((currentNode) => ({
-                              ...currentNode,
-                              type: event.target.value as RequirementNode["type"],
-                              children: event.target.value === "ATOMIC" ? [] : currentNode.children,
-                              scenarios:
-                                currentNode.scenarios.length > 0 ? currentNode.scenarios : [{ name: "New scenario", steps: [] }],
-                            }))
-                          }
-                        >
-                          <option value="FOLDER">FOLDER</option>
-                          <option value="ATOMIC">ATOMIC</option>
-                        </select>
-                      </label>
-
-                      <label className="field-stack">
-                        <span>Dependencies</span>
-                        <input
-                          className="text-input"
-                          placeholder="REQ-1, REQ-2"
-                          value={node.dependencies.join(", ")}
-                          onChange={(event) =>
-                            updateSelectedNode((currentNode) => ({
-                              ...currentNode,
-                              dependencies: event.target.value
-                                .split(",")
-                                .map((item) => item.trim())
-                                .filter(Boolean),
-                            }))
-                          }
-                        />
-                      </label>
-                    </div>
-
-                    <label className="field-stack">
-                      <span>Description</span>
-                      <textarea
-                        className="text-area"
-                        rows={4}
-                        value={node.description}
-                        onChange={(event) => updateSelectedNode((currentNode) => ({ ...currentNode, description: event.target.value }))}
-                      />
-                    </label>
-
-                    <div className="scenario-editor compact">
-                      <div className="scenario-editor-head">
-                        <strong>{node.scenarios.length} scenarios</strong>
-                        <button
-                          type="button"
-                          className="mini-btn"
-                          onClick={() =>
-                            updateSelectedNode((currentNode) => ({
-                              ...currentNode,
-                              scenarios: [...currentNode.scenarios, { name: `Scenario ${currentNode.scenarios.length + 1}`, steps: [] }],
-                            }))
-                          }
-                        >
-                          <PlusOutlined /> Add Scenario
-                        </button>
-                      </div>
-
-                      {node.scenarios.map((scenario, scenarioIndex) => (
-                        <div key={`${node.id}-scenario-${scenarioIndex}`} className="scenario-card">
-                          <div className="scenario-card-top">
-                            <input
-                              className="text-input"
-                              value={scenario.name}
-                              onChange={(event) =>
-                                updateSelectedNode((currentNode) => ({
-                                  ...currentNode,
-                                  scenarios: currentNode.scenarios.map((item, index) =>
-                                    index === scenarioIndex ? { ...item, name: event.target.value } : item,
-                                  ),
-                                }))
-                              }
-                            />
-                            <button
-                              type="button"
-                              className="icon-only-btn"
-                              onClick={() =>
-                                updateSelectedNode((currentNode) => ({
-                                  ...currentNode,
-                                  scenarios: currentNode.scenarios.filter((_, index) => index !== scenarioIndex),
-                                }))
-                              }
-                            >
-                              <DeleteOutlined />
-                            </button>
-                          </div>
-
-                          <div className="scenario-steps">
-                            {scenario.steps.map((step, stepIndex) => (
-                              <div key={`${scenarioIndex}-${stepIndex}`} className="scenario-step-row">
-                                <select
-                                  className="text-input scenario-keyword"
-                                  value={step.keyword}
-                                  onChange={(event) =>
-                                    updateSelectedNode((currentNode) => ({
-                                      ...currentNode,
-                                      scenarios: currentNode.scenarios.map((item, index) =>
-                                        index === scenarioIndex
-                                          ? {
-                                              ...item,
-                                              steps: item.steps.map((scenarioStep, nestedIndex) =>
-                                                nestedIndex === stepIndex
-                                                  ? { ...scenarioStep, keyword: event.target.value }
-                                                  : scenarioStep,
-                                              ),
-                                            }
-                                          : item,
-                                      ),
-                                    }))
-                                  }
-                                >
-                                  <option value="GIVEN">GIVEN</option>
-                                  <option value="WHEN">WHEN</option>
-                                  <option value="THEN">THEN</option>
-                                  <option value="AND">AND</option>
-                                </select>
-                                <input
-                                  className="text-input"
-                                  value={step.content}
-                                  onChange={(event) =>
-                                    updateSelectedNode((currentNode) => ({
-                                      ...currentNode,
-                                      scenarios: currentNode.scenarios.map((item, index) =>
-                                        index === scenarioIndex
-                                          ? {
-                                              ...item,
-                                              steps: item.steps.map((scenarioStep, nestedIndex) =>
-                                                nestedIndex === stepIndex
-                                                  ? { ...scenarioStep, content: event.target.value }
-                                                  : scenarioStep,
-                                              ),
-                                            }
-                                          : item,
-                                      ),
-                                    }))
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  className="icon-only-btn"
-                                  onClick={() =>
-                                    updateSelectedNode((currentNode) => ({
-                                      ...currentNode,
-                                      scenarios: currentNode.scenarios.map((item, index) =>
-                                        index === scenarioIndex
-                                          ? {
-                                              ...item,
-                                              steps: item.steps.filter((_, nestedIndex) => nestedIndex !== stepIndex),
-                                            }
-                                          : item,
-                                      ),
-                                    }))
-                                  }
-                                >
-                                  <DeleteOutlined />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-
-                          <button
-                            type="button"
-                            className="mini-btn"
-                            onClick={() =>
-                              updateSelectedNode((currentNode) => ({
-                                ...currentNode,
-                                scenarios: currentNode.scenarios.map((item, index) =>
-                                  index === scenarioIndex
-                                    ? {
-                                        ...item,
-                                        steps: [...item.steps, { keyword: "GIVEN", content: "" }],
-                                      }
-                                    : item,
-                                ),
-                              }))
-                            }
-                          >
-                            <PlusOutlined /> Add Step
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                </>
+                <RequirementNodeDetailContent
+                  node={node}
+                  mode="editable"
+                  onNodeChange={updateSelectedNode}
+                  onNodeIdChange={setSelectedNodeId}
+                />
               )}
             />
           </section>
