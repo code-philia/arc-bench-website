@@ -3705,108 +3705,6 @@ button {
   min-height: 0;
 }
 
-.readonly-node-detail,
-.readonly-scenario-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.readonly-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.readonly-detail-card {
-  display: grid;
-  gap: 4px;
-  padding: 8px 10px;
-  border: 1px solid rgba(0, 126, 101, 0.14);
-  border-radius: 10px;
-  background: #fafdfb;
-}
-
-.readonly-detail-card span,
-.readonly-detail-label {
-  color: #597365;
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.readonly-detail-card strong {
-  color: #122119;
-  font-size: 0.82rem;
-}
-
-.readonly-detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.readonly-detail-body {
-  padding: 9px 10px;
-  border: 1px solid rgba(0, 126, 101, 0.12);
-  border-radius: 10px;
-  background: #fafdfb;
-  color: #274238;
-  font-size: 0.76rem;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-
-.readonly-detail-body.empty {
-  color: #6d8178;
-}
-
-.readonly-detail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.readonly-scenario-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgba(0, 126, 101, 0.12);
-  border-radius: 10px;
-  background: #fafdfb;
-}
-
-.readonly-scenario-card strong {
-  color: #122119;
-  font-size: 0.8rem;
-}
-
-.readonly-scenario-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.readonly-scenario-step {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-  color: #274238;
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.readonly-scenario-step span {
-  color: #0f7d61;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
 .playground-page {
   padding: 0 34px 56px;
 }
@@ -5547,6 +5445,20 @@ button {
   margin-bottom: 6px;
 }
 
+.scenario-card-top.readonly {
+  align-items: baseline;
+}
+
+.scenario-card-top.readonly strong {
+  color: #122119;
+  font-size: 0.8rem;
+}
+
+.scenario-card-meta {
+  color: #597365;
+  font-size: 0.68rem;
+}
+
 .scenario-steps {
   display: flex;
   flex-direction: column;
@@ -5562,6 +5474,43 @@ button {
 
 .scenario-keyword {
   text-transform: uppercase;
+}
+
+.scenario-step-readonly {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 7px 8px;
+  border: 1px solid rgba(0, 126, 101, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.scenario-step-keyword {
+  color: #0f7d61;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.scenario-step-body {
+  color: #274238;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.scenario-empty-copy {
+  color: #6d8178;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.scenario-card-readonly-empty {
+  padding: 10px;
 }
 
 .icon-only-btn {

@@ -26,78 +26,79 @@ export default function RequirementNodeDetailContent({
 
   if (!editable) {
     return (
-      <div className="readonly-node-detail">
-        <div className="readonly-detail-grid">
-          <div className="readonly-detail-card">
+      <>
+        <div className="create-task-detail-grid">
+          <label className="field-stack">
             <span>Requirement ID</span>
-            <strong>{node.id}</strong>
-          </div>
-          <div className="readonly-detail-card">
+            <input className="text-input" value={node.id} readOnly />
+          </label>
+
+          <label className="field-stack">
+            <span>Title</span>
+            <input className="text-input" value={node.name} readOnly />
+          </label>
+
+          <label className="field-stack">
             <span>Type</span>
-            <strong>{node.type}</strong>
-          </div>
-          <div className="readonly-detail-card">
+            <input className="text-input" value={node.type} readOnly />
+          </label>
+
+          <label className="field-stack">
             <span>Dependencies</span>
-            <strong>{node.dependencies.length}</strong>
-          </div>
-          <div className="readonly-detail-card">
-            <span>Scenarios</span>
-            <strong>{node.scenarios.length}</strong>
-          </div>
+            <input
+              className="text-input"
+              value={node.dependencies.length > 0 ? node.dependencies.join(", ") : "No dependencies"}
+              readOnly
+            />
+          </label>
         </div>
 
-        <div className="readonly-detail-section">
-          <div className="readonly-detail-label">Title</div>
-          <div className="readonly-detail-body">{node.name || "Untitled requirement."}</div>
-        </div>
+        <label className="field-stack">
+          <span>Description</span>
+          <textarea
+            className="text-area"
+            rows={4}
+            value={node.description || "No description available."}
+            readOnly
+          />
+        </label>
 
-        <div className="readonly-detail-section">
-          <div className="readonly-detail-label">Description</div>
-          <div className="readonly-detail-body">
-            {node.description || "No description available."}
+        <div className="scenario-editor compact">
+          <div className="scenario-editor-head">
+            <strong>{node.scenarios.length} scenarios</strong>
           </div>
-        </div>
 
-        {node.dependencies.length > 0 ? (
-          <div className="readonly-detail-section">
-            <div className="readonly-detail-label">Dependencies</div>
-            <div className="readonly-detail-tags">
-              {node.dependencies.map((dependency) => (
-                <span key={dependency} className="task-node-chip folder">
-                  {dependency}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="readonly-detail-section">
-          <div className="readonly-detail-label">Scenarios</div>
           {node.scenarios.length === 0 ? (
-            <div className="readonly-detail-body empty">No scenarios available.</div>
-          ) : (
-            <div className="readonly-scenario-list">
-              {node.scenarios.map((scenario, scenarioIndex) => (
-                <div key={`${node.id}-scenario-${scenarioIndex}`} className="readonly-scenario-card">
-                  <strong>{scenario.name}</strong>
-                  {scenario.steps.length === 0 ? (
-                    <div className="readonly-detail-body empty">No steps defined.</div>
-                  ) : (
-                    <div className="readonly-scenario-steps">
-                      {scenario.steps.map((step, stepIndex) => (
-                        <div key={`${node.id}-scenario-${scenarioIndex}-step-${stepIndex}`} className="readonly-scenario-step">
-                          <span>{step.keyword}</span>
-                          <div>{step.content}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="scenario-card scenario-card-readonly-empty">
+              <div className="scenario-empty-copy">No scenarios available.</div>
             </div>
+          ) : (
+            node.scenarios.map((scenario, scenarioIndex) => (
+              <div key={`${node.id}-scenario-${scenarioIndex}`} className="scenario-card">
+                <div className="scenario-card-top readonly">
+                  <strong>{scenario.name}</strong>
+                  <span className="scenario-card-meta">
+                    {scenario.steps.length} step{scenario.steps.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {scenario.steps.length === 0 ? (
+                  <div className="scenario-empty-copy">No steps defined.</div>
+                ) : (
+                  <div className="scenario-steps">
+                    {scenario.steps.map((step, stepIndex) => (
+                      <div key={`${node.id}-scenario-${scenarioIndex}-step-${stepIndex}`} className="scenario-step-readonly">
+                        <span className="scenario-step-keyword">{step.keyword}</span>
+                        <div className="scenario-step-body">{step.content || "No step content."}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
-      </div>
+      </>
     );
   }
 
