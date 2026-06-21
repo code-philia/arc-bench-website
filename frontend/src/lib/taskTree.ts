@@ -685,6 +685,46 @@ export function buildNewChildNode(parent: RequirementNode): RequirementNode {
   };
 }
 
+export type ReindexedTaskTreeResult = {
+  tree: RequirementNode;
+  idMap: Record<string, string>;
+};
+
+function cloneWithReindexedIds(
+  node: RequirementNode,
+  nextId: string,
+  idMap: Record<string, string>,
+): RequirementNode {
+  idMap[node.id] = nextId;
+  return {
+    ...node,
+    id: nextId,
+    children: node.children.map((child, index) =>
+      cloneWithReindexedIds(
+        child,
+        nextId === "ROOT" ? `REQ-${index + 1}` : `${nextId}.${index + 1}`,
+        idMap,
+      )),
+  };
+}
+
+function remapDependencies(node: RequirementNode, idMap: Record<string, string>): RequirementNode {
+  return {
+    ...node,
+    dependencies: node.dependencies.map((dependency) => idMap[dependency] ?? dependency),
+    children: node.children.map((child) => remapDependencies(child, idMap)),
+  };
+}
+
+export function reindexRequirementTree(root: RequirementNode): ReindexedTaskTreeResult {
+  const idMap: Record<string, string> = {};
+  const reindexedTree = cloneWithReindexedIds(root, "ROOT", idMap);
+  return {
+    tree: remapDependencies(reindexedTree, idMap),
+    idMap,
+  };
+}
+
 export function summarizeTaskTree(root: RequirementNode) {
   let nodeCount = 0;
   let atomicCount = 0;

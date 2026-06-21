@@ -22,6 +22,7 @@ import {
   findNodeById,
   parseTaskTreeYaml,
   removeNodeFromTree,
+  reindexRequirementTree,
   RequirementNode,
   summarizeTaskTree,
   taskTreeToMarkdown,
@@ -212,6 +213,24 @@ export default function CreateTaskPage() {
     setDetailExpanded(false);
   };
 
+  const handleReindexIds = () => {
+    const { tree: reindexedTree, idMap } = reindexRequirementTree(tree);
+    setTree(reindexedTree);
+    setExpandedChapters(collectExpandedIds(reindexedTree));
+    setSelectedNodeId((current) => (current ? (idMap[current] ?? current) : current));
+    message.success("Requirement IDs reindexed.");
+  };
+
+  const handleConnectDependency = (sourceId: string, targetId: string) => {
+    setTree((current) => updateNodeInTree(current, sourceId, (node) => ({
+      ...node,
+      dependencies: Array.from(new Set([...node.dependencies, targetId])).filter((dependency) => dependency !== sourceId),
+    })));
+    setSelectedNodeId(sourceId);
+    setDetailExpanded(true);
+    message.success(`Dependency added: ${sourceId} -> ${targetId}`);
+  };
+
   const handleCreateTask = async () => {
     if (!user) {
       navigate("/login", { state: { from: "/playground/create-task" } });
@@ -311,6 +330,9 @@ export default function CreateTaskPage() {
               onAddChild={handleAddChild}
               onAddSibling={handleAddSibling}
               onDeleteNode={handleDeleteNode}
+              onReindexIds={handleReindexIds}
+              onConnectDependency={handleConnectDependency}
+              autoFitOnTreeChange={false}
               renderDetailContent={(node) => (
                 <>
                     <div className="create-task-detail-grid">

@@ -20,11 +20,10 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
   {
     id: "home-task-type",
     route: "/playground",
-    targetId: "playground-task-bank-anchor",
+    targetId: "quickstart-task-type-web",
     title: "Step 1/8",
     message: "Choose task type (web application).",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "left",
   },
   {
@@ -34,7 +33,6 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     title: "Step 2/8",
     message: "Choose one task (railway ticket booking system).",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "up",
   },
   {
@@ -44,7 +42,6 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     title: "Step 3/8",
     message: "Requirements are presented in a tree structure, allowing you to select and view a specific requirement node.",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "right",
   },
   {
@@ -63,7 +60,6 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     title: "Step 5/8",
     message: "Upload your agent code, fill in the required information, and click Submit (we have pre-filled it here).",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "left",
   },
   {

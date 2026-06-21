@@ -121,7 +121,6 @@ export default function PlaygroundPage() {
           <aside className="playground-bank" aria-label="Task bank">
             <div className="playground-bank-shell">
               <div className="playground-bank-title">Task Bank</div>
-              <div data-quickstart-id="playground-task-bank-anchor" className="quickstart-bank-anchor" aria-hidden="true" />
               <div className="playground-bank-list">
                 {taskBankItems.map((item) => {
                   const countText = item.key === "web" && !loading ? `${webTaskCount} tasks` : null;
@@ -143,6 +142,7 @@ export default function PlaygroundPage() {
                       key={item.key}
                       to={item.href}
                       className={`playground-bank-item ${item.tone}`}
+                      data-quickstart-id={item.key === "web" ? "quickstart-task-type-web" : undefined}
                     >
                       <div className="playground-bank-item-copy">
                         <div className={`playground-bank-badge ${item.tone}`}>{item.badge}</div>
