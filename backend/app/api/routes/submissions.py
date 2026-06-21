@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
@@ -112,3 +114,85 @@ def get_submission_logs(
             stderr = stderr_file.read()
     visual_events = service.read_visual_events(submission)
     return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events)
+
+
+@router.get("/{submission_id}/preview/status")
+def get_submission_preview_status(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, bool | str]:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError:
+        return {"available": False}
+
+    workspace_path = runtime_paths.get_workspace_root(submission, username=current_user.username)
+    candidate_paths = [
+        workspace_path / "template" / "frontend",
+        workspace_path / "template" / "frontend" / "dist",
+        workspace_path / "template",
+        workspace_path / "submission" / "12306" / "frontend",
+        workspace_path / "submission" / "12306" / "backend" / "dist",
+        Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/backend/dist"),
+        Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/frontend"),
+    ]
+
+    preview_base = None
+    for path in candidate_paths:
+        if path.exists() and (path / "index.html").is_file():
+            preview_base = path
+            break
+
+    available = preview_base is not None
+    return {"available": available}
+
+
+@router.get("/{submission_id}/preview")
+@router.get("/{submission_id}/preview/{file_path:path}")
+def get_submission_preview_file(
+    submission_id: str,
+    file_path: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+):
+    demo_dist_path = Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/backend/dist")
+
+    if not file_path or file_path == "/" or file_path.endswith("/"):
+        index_file = demo_dist_path / "index.html"
+        if index_file.is_file():
+            with open(index_file, "r", encoding="utf-8") as file:
+                content = file.read()
+
+            content = content.replace('"/assets/', '"assets/')
+            content = content.replace("'/assets/", "'assets/")
+            content = content.replace('src="/', 'src="')
+            content = content.replace('href="/', 'href="')
+
+            from fastapi.responses import Response
+
+            return Response(content=content, media_type="text/html; charset=utf-8")
+        raise HTTPException(status_code=404, detail="Index not found")
+
+    requested_file = demo_dist_path / file_path
+    if not requested_file.is_file():
+        if file_path.startswith("/"):
+            file_path = file_path[1:]
+        requested_file = demo_dist_path / file_path
+
+    try:
+        requested_file = requested_file.resolve()
+        demo_dist_resolved = demo_dist_path.resolve()
+        if not str(requested_file).startswith(str(demo_dist_resolved)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        pass
+
+    if requested_file.is_file():
+        return FileResponse(requested_file)
+
+    index_file = demo_dist_path / "index.html"
+    if index_file.is_file():
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="File not found")

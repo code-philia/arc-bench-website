@@ -37,7 +37,10 @@ export default function SubmissionDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"results" | "events" | "stdout" | "stderr">("results");
+  const [previewAvailable, setPreviewAvailable] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(true);
   const pollRef = useRef<number | null>(null);
+  const previewUrl = submission ? api.getSubmissionPreviewUrl(submissionId) : "";
 
   useEffect(() => {
     setLoadError(null);
@@ -77,6 +80,49 @@ export default function SubmissionDetailPage() {
       pollRef.current = null;
     }
   }, [submission]);
+
+  useEffect(() => {
+    if (!submission) {
+      setPreviewAvailable(false);
+      setPreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+
+    const checkPreview = () => {
+      api.getSubmissionPreviewStatus(submissionId)
+        .then((status) => {
+          if (cancelled) {
+            return;
+          }
+          setPreviewAvailable(status.available);
+          setPreviewLoading(false);
+        })
+        .catch(() => {
+          if (cancelled) {
+            return;
+          }
+          setPreviewAvailable(false);
+          setPreviewLoading(false);
+        });
+    };
+
+    checkPreview();
+
+    if (["PENDING", "RUNNING"].includes(submission.status)) {
+      const previewPoll = window.setInterval(checkPreview, 3000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(previewPoll);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submission, submissionId]);
 
   if (loading) {
     return (
@@ -195,6 +241,40 @@ export default function SubmissionDetailPage() {
               <pre className="log-panel">{logs?.stdout || "No stdout yet."}</pre>
             ) : (
               <pre className="log-panel">{logs?.stderr || "No stderr yet."}</pre>
+            )}
+          </div>
+        </section>
+
+        <section className="action-section">
+          <div className="action-section-header">
+            <div className="action-section-title">Live Website Preview</div>
+            {previewAvailable ? (
+              <a className="inline-link" href={previewUrl} target="_blank" rel="noreferrer">
+                Open
+              </a>
+            ) : null}
+          </div>
+          <div className="detail-tab-panel">
+            {previewLoading ? (
+              <div className="results-empty">
+                <div className="loading-state">Loading preview...</div>
+              </div>
+            ) : previewAvailable ? (
+              <iframe
+                key={submissionId}
+                src={previewUrl}
+                title="Live Website Preview"
+                className="playground-preview-iframe"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+              />
+            ) : (
+              <div className="results-empty">
+                <div className="empty-state">
+                  {["PENDING", "RUNNING"].includes(submission.status)
+                    ? "The website preview will appear after implementation artifacts are generated."
+                    : "This submission does not include previewable frontend artifacts."}
+                </div>
+              </div>
             )}
           </div>
         </section>
