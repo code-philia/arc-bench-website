@@ -70,6 +70,7 @@ def start_submission(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if submission.status != SubmissionStatus.PENDING.value:
         raise HTTPException(status_code=409, detail="Submission is already running or completed")
+    HostDemoPreviewService.start_async()
     service.append_step_event(submission_id, step_key="deploy_agent", message="Submission accepted and queued", status="info")
     background_tasks.add_task(ExecutionService(db).run_submission, submission_id)
     return service.to_detail(submission)

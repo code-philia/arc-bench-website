@@ -6,6 +6,7 @@ import RequirementTreeCanvas from "../components/requirements/RequirementTreeCan
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
+import { checkHostDemoPreview } from "../lib/preview";
 import { requirementMarkdownToTree } from "../lib/taskTree";
 import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
@@ -157,12 +158,12 @@ export default function PlaygroundSubmissionDetailPage() {
     setPreviewLoading(true);
 
     const checkPreview = () => {
-      api.getSubmissionPreviewStatus(submissionId)
-        .then((status) => {
+      checkHostDemoPreview(previewUrl)
+        .then((available) => {
           if (cancelled) {
             return;
           }
-          setPreviewAvailable(status.available);
+          setPreviewAvailable(available);
           setPreviewLoading(false);
         })
         .catch(() => {
@@ -187,7 +188,7 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [submission, submissionId]);
+  }, [previewUrl, submission]);
 
   const tree = useMemo(() => {
     if (!requirement) {

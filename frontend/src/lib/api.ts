@@ -154,9 +154,6 @@ export const api = {
   getSubmissionPreviewUrl(submissionId: string) {
     return `${API_BASE}/submissions/${submissionId}/preview/`;
   },
-  getSubmissionPreviewStatus(submissionId: string) {
-    return request<{ available: boolean; entry_file?: string }>(`/submissions/${submissionId}/preview/status`);
-  },
   listMyTasks() {
     return request<UserTaskSummary[]>("/my-tasks");
   },

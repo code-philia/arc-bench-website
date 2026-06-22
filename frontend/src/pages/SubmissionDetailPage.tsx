@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
+import { checkHostDemoPreview } from "../lib/preview";
 import type { SubmissionDetail, SubmissionLogs } from "../lib/types";
 
 function formatDateTime(value: string | null) {
@@ -92,12 +93,12 @@ export default function SubmissionDetailPage() {
     setPreviewLoading(true);
 
     const checkPreview = () => {
-      api.getSubmissionPreviewStatus(submissionId)
-        .then((status) => {
+      checkHostDemoPreview(previewUrl)
+        .then((available) => {
           if (cancelled) {
             return;
           }
-          setPreviewAvailable(status.available);
+          setPreviewAvailable(available);
           setPreviewLoading(false);
         })
         .catch(() => {
@@ -122,7 +123,7 @@ export default function SubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [submission, submissionId]);
+  }, [previewUrl, submission]);
 
   if (loading) {
     return (

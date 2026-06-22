@@ -287,12 +287,9 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
       setDemoSubmissionId(started.id);
       return started;
     } catch (error) {
-      const fallback = buildMockSubmission();
-      setMode("mock");
-      setMockSubmission(fallback);
-      setDemoSubmissionId(fallback.submission.id);
-      message.warning("Demo submission fallback enabled.");
-      return fallback.submission;
+      const errorMessage = error instanceof Error ? error.message : "Failed to start quick start submission.";
+      message.error(errorMessage);
+      throw error;
     }
   }, [loadDemoAgent, prefill.file]);
 
@@ -347,7 +344,12 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     }
 
     if (currentStep.id === "detail-submit") {
-      const submission = await ensureRealSubmission();
+      let submission;
+      try {
+        submission = await ensureRealSubmission();
+      } catch {
+        return;
+      }
       const nextStepIndex = stepIndex + 1;
       const nextStep = QUICK_START_STEPS[nextStepIndex];
       if (nextStep) {

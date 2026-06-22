@@ -20,23 +20,46 @@ class HostDemoPreviewService:
 
     _lock = threading.Lock()
     _backend_process: subprocess.Popen[str] | None = None
+    _bootstrap_thread: threading.Thread | None = None
+    _bootstrap_error: str | None = None
+
+    @classmethod
+    def start_async(cls) -> None:
+        with cls._lock:
+            if cls._is_backend_running():
+                cls._bootstrap_error = None
+                return
+            if cls._bootstrap_thread is not None and cls._bootstrap_thread.is_alive():
+                return
+            cls._bootstrap_error = None
+            cls._bootstrap_thread = threading.Thread(target=cls._bootstrap, name="host-demo-preview", daemon=True)
+            cls._bootstrap_thread.start()
 
     @classmethod
     def ensure_ready(cls, timeout_seconds: int = 120) -> bool:
-        with cls._lock:
-            try:
-                cls._build_frontend()
-                if cls._is_backend_running():
-                    return True
-                cls._start_backend()
-            except Exception:
-                return False
-
+        cls.start_async()
         return cls._wait_until_ready(timeout_seconds)
 
     @classmethod
     def preview_url(cls) -> str:
         return cls.PREVIEW_URL
+
+    @classmethod
+    def last_error(cls) -> str | None:
+        with cls._lock:
+            return cls._bootstrap_error
+
+    @classmethod
+    def _bootstrap(cls) -> None:
+        try:
+            cls._build_frontend()
+            with cls._lock:
+                if not cls._is_backend_running():
+                    cls._start_backend()
+                cls._bootstrap_error = None
+        except Exception as exc:  # noqa: BLE001
+            with cls._lock:
+                cls._bootstrap_error = str(exc)
 
     @classmethod
     def _build_frontend(cls) -> None:
@@ -81,6 +104,11 @@ class HostDemoPreviewService:
         while time.time() < deadline:
             if cls._check_health():
                 return True
+            with cls._lock:
+                bootstrap_thread = cls._bootstrap_thread
+                bootstrap_error = cls._bootstrap_error
+            if bootstrap_error and (bootstrap_thread is None or not bootstrap_thread.is_alive()):
+                return False
             time.sleep(1)
         return False
 
