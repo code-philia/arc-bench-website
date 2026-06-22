@@ -84,14 +84,14 @@ export default function PlaygroundSubmissionDetailPage() {
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
-  const previewUrl = "http://127.0.0.1:3000";
+  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
   const previewPanelWidth = previewMinimized ? "80px" : "33.333vw";
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
-      const available = await checkHostDemoPreview(previewUrl);
+      const available = await checkHostDemoPreview(submissionId);
       setPreviewAvailable(available);
       if (available) {
         setPreviewFrameVersion((current) => current + 1);
@@ -187,7 +187,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setPreviewLoading(true);
 
     const checkPreview = () => {
-      checkHostDemoPreview(previewUrl)
+      checkHostDemoPreview(submissionId)
         .then((available) => {
           if (cancelled) {
             return;
@@ -217,7 +217,7 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewAvailable, previewUrl, submission]);
+  }, [previewAvailable, submission, submissionId]);
 
   const tree = useMemo(() => {
     if (!requirement) {

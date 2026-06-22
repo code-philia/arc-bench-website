@@ -124,6 +124,9 @@ export const api = {
   getSubmissionLogs(submissionId: string) {
     return request<SubmissionLogs>(`/submissions/${submissionId}/logs`);
   },
+  getSubmissionPreviewStatus(submissionId: string) {
+    return request<{ available: boolean; entry_file?: string }>(`/submissions/${submissionId}/preview/status`);
+  },
   async createSubmission(
     requirementId: string,
     runtime: string,

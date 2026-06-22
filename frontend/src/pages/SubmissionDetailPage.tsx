@@ -42,13 +42,13 @@ export default function SubmissionDetailPage() {
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const pollRef = useRef<number | null>(null);
-  const previewUrl = "http://127.0.0.1:3000";
+  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
-      const available = await checkHostDemoPreview(previewUrl);
+      const available = await checkHostDemoPreview(submissionId);
       setPreviewAvailable(available);
       if (available) {
         setPreviewFrameVersion((current) => current + 1);
@@ -120,7 +120,7 @@ export default function SubmissionDetailPage() {
     setPreviewLoading(true);
 
     const checkPreview = () => {
-      checkHostDemoPreview(previewUrl)
+      checkHostDemoPreview(submissionId)
         .then((available) => {
           if (cancelled) {
             return;
@@ -150,7 +150,7 @@ export default function SubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewAvailable, previewUrl, submission]);
+  }, [previewAvailable, submission, submissionId]);
 
   if (loading) {
     return (

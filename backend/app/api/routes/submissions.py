@@ -133,7 +133,7 @@ def get_submission_preview_status(
     available = HostDemoPreviewService.ensure_ready()
     if not available:
         return {"available": False}
-    return {"available": True, "entry_file": HostDemoPreviewService.preview_url()}
+    return {"available": True, "entry_file": f"/api/submissions/{submission_id}/preview/"}
 
 
 @router.get("/{submission_id}/preview")
