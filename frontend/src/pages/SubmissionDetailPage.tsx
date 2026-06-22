@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
-import { checkHostDemoPreview } from "../lib/preview";
+import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
 import type { SubmissionDetail, SubmissionLogs } from "../lib/types";
 
 function formatDateTime(value: string | null) {
@@ -42,13 +42,13 @@ export default function SubmissionDetailPage() {
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const pollRef = useRef<number | null>(null);
-  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
+  const previewUrl = getHostDemoPreviewBase();
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
-      const available = await checkHostDemoPreview(submissionId);
+      const available = await checkHostDemoPreview(previewUrl);
       setPreviewAvailable(available);
       if (available) {
         setPreviewFrameVersion((current) => current + 1);
@@ -120,7 +120,7 @@ export default function SubmissionDetailPage() {
     setPreviewLoading(true);
 
     const checkPreview = () => {
-      checkHostDemoPreview(submissionId)
+      checkHostDemoPreview(previewUrl)
         .then((available) => {
           if (cancelled) {
             return;
@@ -150,7 +150,7 @@ export default function SubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewAvailable, submission, submissionId]);
+  }, [previewAvailable, previewUrl, submission]);
 
   if (loading) {
     return (

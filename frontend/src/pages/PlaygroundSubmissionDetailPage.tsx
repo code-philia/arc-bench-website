@@ -6,7 +6,7 @@ import RequirementTreeCanvas from "../components/requirements/RequirementTreeCan
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
-import { checkHostDemoPreview } from "../lib/preview";
+import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
 import { requirementMarkdownToTree } from "../lib/taskTree";
 import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
@@ -84,14 +84,14 @@ export default function PlaygroundSubmissionDetailPage() {
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
-  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
+  const previewUrl = getHostDemoPreviewBase();
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
   const previewPanelWidth = previewMinimized ? "80px" : "33.333vw";
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
-      const available = await checkHostDemoPreview(submissionId);
+      const available = await checkHostDemoPreview(previewUrl);
       setPreviewAvailable(available);
       if (available) {
         setPreviewFrameVersion((current) => current + 1);
@@ -187,7 +187,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setPreviewLoading(true);
 
     const checkPreview = () => {
-      checkHostDemoPreview(submissionId)
+      checkHostDemoPreview(previewUrl)
         .then((available) => {
           if (cancelled) {
             return;
@@ -217,7 +217,7 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewAvailable, submission, submissionId]);
+  }, [previewAvailable, previewUrl, submission]);
 
   const tree = useMemo(() => {
     if (!requirement) {

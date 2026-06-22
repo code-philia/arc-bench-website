@@ -1,6 +1,14 @@
-import { api } from "./api";
+export function getHostDemoPreviewBase(): string {
+  const configuredBase = import.meta.env.VITE_HOST_DEMO_PREVIEW_BASE?.trim();
+  const base = configuredBase && configuredBase.length > 0 ? configuredBase : "/demo-preview";
+  return base.endsWith("/") ? base.slice(0, -1) : base;
+}
 
-export async function checkHostDemoPreview(submissionId: string): Promise<boolean> {
-  const response = await api.getSubmissionPreviewStatus(submissionId);
-  return response.available;
+export async function checkHostDemoPreview(previewUrl: string): Promise<boolean> {
+  const normalizedBase = previewUrl.endsWith("/") ? previewUrl.slice(0, -1) : previewUrl;
+  const response = await fetch(`${normalizedBase}/api/health`, {
+    method: "GET",
+    credentials: "include",
+  });
+  return response.ok;
 }
