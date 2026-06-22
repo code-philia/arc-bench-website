@@ -11,18 +11,19 @@ type HeroRow = {
   username: string;
   model: string;
   track: Exclude<LeaderboardTrack, "all">;
-  avgTokenEfficiency: number;
+  totalTotalM: number;
+  runtimeSeconds: number;
   avgPassRate: number;
 };
 
 const heroRows: HeroRow[] = [
-  { username: "arc_alice", model: "Claude Sonnet 4", track: "web", avgTokenEfficiency: 84.8, avgPassRate: 89.2 },
-  { username: "browsersmith", model: "GPT-4.1", track: "web", avgTokenEfficiency: 82.3, avgPassRate: 86.1 },
-  { username: "mobileforge", model: "Gemini 2.5 Pro", track: "mobile", avgTokenEfficiency: 79.2, avgPassRate: 84.4 },
-  { username: "kernel_lane", model: "DeepSeek V3", track: "kernel", avgTokenEfficiency: 81.1, avgPassRate: 85.2 },
-  { username: "operator_xu", model: "Claude 3.5 Sonnet", track: "web", avgTokenEfficiency: 78.5, avgPassRate: 82.9 },
-  { username: "mobilepilot", model: "Gemini Flash", track: "mobile", avgTokenEfficiency: 76.4, avgPassRate: 79.8 },
-  { username: "ops_nova", model: "Qwen 3 Coder", track: "kernel", avgTokenEfficiency: 74.6, avgPassRate: 77.5 },
+  { username: "arc_alice", model: "Claude Sonnet 4", track: "web", totalTotalM: 842.6, runtimeSeconds: 33215, avgPassRate: 89.2 },
+  { username: "browsersmith", model: "GPT-4.1", track: "web", totalTotalM: 801.4, runtimeSeconds: 30108, avgPassRate: 86.1 },
+  { username: "mobileforge", model: "Gemini 2.5 Pro", track: "mobile", totalTotalM: 765.9, runtimeSeconds: 38842, avgPassRate: 84.4 },
+  { username: "kernel_lane", model: "DeepSeek V3", track: "kernel", totalTotalM: 789.3, runtimeSeconds: 42736, avgPassRate: 85.2 },
+  { username: "operator_xu", model: "Claude 3.5 Sonnet", track: "web", totalTotalM: 733.7, runtimeSeconds: 29561, avgPassRate: 82.9 },
+  { username: "mobilepilot", model: "Gemini Flash", track: "mobile", totalTotalM: 698.2, runtimeSeconds: 27429, avgPassRate: 79.8 },
+  { username: "ops_nova", model: "Qwen 3 Coder", track: "kernel", totalTotalM: 672.5, runtimeSeconds: 44105, avgPassRate: 77.5 },
 ];
 
 const rankBadges = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
@@ -48,6 +49,14 @@ function bankMetaLabel(type: string) {
   return "Browse";
 }
 
+function formatRuntime(seconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainder = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(remainder).padStart(2, "0")}s`;
+}
+
 export default function RequirementsPage() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +73,7 @@ export default function RequirementsPage() {
   const leaderboardRows = useMemo(() => {
     const filtered = activeTrack === "all" ? heroRows : heroRows.filter((row) => row.track === activeTrack);
     const sorted = [...filtered].sort((a, b) => {
-      return b.avgPassRate - a.avgPassRate || b.avgTokenEfficiency - a.avgTokenEfficiency;
+      return b.avgPassRate - a.avgPassRate || b.totalTotalM - a.totalTotalM;
     });
     return sorted.map((row, index) => ({ ...row, rank: index + 1 }));
   }, [activeTrack]);
@@ -117,10 +126,11 @@ export default function RequirementsPage() {
                 <thead>
                   <tr>
                     <th style={{ width: "84px" }}>Rank</th>
-                    <th>User</th>
-                    <th style={{ width: "220px" }}>Model</th>
-                    <th style={{ width: "148px" }}>Avg. Pass Rate</th>
-                    <th style={{ width: "148px" }}>Avg. Token Eff.</th>
+                    <th style={{ width: "168px" }}>User</th>
+                    <th style={{ width: "240px" }}>Model</th>
+                    <th style={{ width: "156px" }}>Avg. Pass Rate</th>
+                    <th style={{ width: "168px" }}>TOTAL TOKEN</th>
+                    <th style={{ width: "176px" }}>RUNTIME</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -144,7 +154,8 @@ export default function RequirementsPage() {
                         </div>
                       </td>
                       <td>{row.avgPassRate.toFixed(1)}%</td>
-                      <td>{row.avgTokenEfficiency.toFixed(1)}%</td>
+                      <td>{row.totalTotalM.toFixed(1)}M</td>
+                      <td>{formatRuntime(row.runtimeSeconds)}</td>
                     </tr>
                   ))}
                 </tbody>

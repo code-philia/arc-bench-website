@@ -86,7 +86,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const previewUrl = "http://127.0.0.1:3000";
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
-  const previewPanelWidth = previewMinimized ? "80px" : "min(520px, 42vw)";
+  const previewPanelWidth = previewMinimized ? "80px" : "33.333vw";
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
