@@ -360,7 +360,10 @@ export default function PlaygroundSubmissionDetailPage() {
           <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
             {activeTab === "canvas" ? (
               tree ? (
-                <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+                <div
+                  data-quickstart-id="quickstart-submission-canvas"
+                  style={{ flex: 1, position: "relative", overflow: "hidden" }}
+                >
                   <RequirementTreeCanvas
                     tree={tree}
                     selectedNodeId={useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
@@ -387,6 +390,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     focusNodeId={useQuickStartSubmission ? quickStart.canvasDemo.currentNodeId : focusNodeId}
                     pulseNodeId={useQuickStartSubmission ? quickStart.canvasDemo.currentNodeId : pulseNodeId}
                     showLegend
+                    detailTestId="quickstart-submission-node-detail"
                   />
                 </div>
               ) : (
