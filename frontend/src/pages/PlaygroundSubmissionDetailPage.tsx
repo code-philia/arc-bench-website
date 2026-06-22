@@ -77,9 +77,11 @@ export default function PlaygroundSubmissionDetailPage() {
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+  const [previewAvailable, setPreviewAvailable] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(true);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
-  const previewUrl = "http://localhost:5173";
+  const previewUrl = "http://127.0.0.1:3000";
 
   useEffect(() => {
     quickStart.syncStepForRoute();
@@ -143,6 +145,49 @@ export default function PlaygroundSubmissionDetailPage() {
       pollRef.current = null;
     }
   }, [submission]);
+
+  useEffect(() => {
+    if (!submission) {
+      setPreviewAvailable(false);
+      setPreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+
+    const checkPreview = () => {
+      api.getSubmissionPreviewStatus(submissionId)
+        .then((status) => {
+          if (cancelled) {
+            return;
+          }
+          setPreviewAvailable(status.available);
+          setPreviewLoading(false);
+        })
+        .catch(() => {
+          if (cancelled) {
+            return;
+          }
+          setPreviewAvailable(false);
+          setPreviewLoading(false);
+        });
+    };
+
+    checkPreview();
+
+    if (["PENDING", "RUNNING"].includes(submission.status)) {
+      const previewPoll = window.setInterval(checkPreview, 3000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(previewPoll);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submission, submissionId]);
 
   const tree = useMemo(() => {
     if (!requirement) {
@@ -439,7 +484,7 @@ export default function PlaygroundSubmissionDetailPage() {
                   Live Website Preview
                 </span>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  {submission ? (
+                  {submission && previewAvailable ? (
                     <a
                       href={previewUrl}
                       target="_blank"
@@ -545,7 +590,17 @@ export default function PlaygroundSubmissionDetailPage() {
 
           {!previewMinimized ? (
             <div style={{ flex: 1, position: "relative", background: "white", overflow: "hidden" }}>
-              {submission ? (
+              {previewLoading ? (
+                <div style={{
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#64748b",
+                }}>
+                  Loading preview...
+                </div>
+              ) : submission && previewAvailable ? (
                 <iframe
                   key={submissionId}
                   src={previewUrl}
@@ -574,9 +629,13 @@ export default function PlaygroundSubmissionDetailPage() {
                   gap: "12px",
                 }}>
                   <div>
-                    <div style={{ fontWeight: 600, color: "#334155" }}>No submission selected</div>
+                    <div style={{ fontWeight: 600, color: "#334155" }}>
+                      {submission ? "Preview not available yet" : "No submission selected"}
+                    </div>
                     <div style={{ fontSize: "0.875rem", marginTop: "4px", color: "#64748b" }}>
-                      Select a submission to view its preview
+                      {submission
+                        ? "Waiting for host demo backend to build and start."
+                        : "Select a submission to view its preview"}
                     </div>
                   </div>
                 </div>

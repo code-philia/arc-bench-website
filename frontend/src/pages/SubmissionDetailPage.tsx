@@ -40,7 +40,7 @@ export default function SubmissionDetailPage() {
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const pollRef = useRef<number | null>(null);
-  const previewUrl = submission ? api.getSubmissionPreviewUrl(submissionId) : "";
+  const previewUrl = "http://127.0.0.1:3000";
 
   useEffect(() => {
     setLoadError(null);

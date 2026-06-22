@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.submission import SubmissionCreateResponse, SubmissionDetail, SubmissionLogs, SubmissionSummary
 from app.services.execution_service import ExecutionService
+from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_service import SubmissionService
 
@@ -128,25 +129,10 @@ def get_submission_preview_status(
     except LookupError:
         return {"available": False}
 
-    workspace_path = runtime_paths.get_workspace_root(submission, username=current_user.username)
-    candidate_paths = [
-        workspace_path / "template" / "frontend",
-        workspace_path / "template" / "frontend" / "dist",
-        workspace_path / "template",
-        workspace_path / "submission" / "12306" / "frontend",
-        workspace_path / "submission" / "12306" / "backend" / "dist",
-        Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/backend/dist"),
-        Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/frontend"),
-    ]
-
-    preview_base = None
-    for path in candidate_paths:
-        if path.exists() and (path / "index.html").is_file():
-            preview_base = path
-            break
-
-    available = preview_base is not None
-    return {"available": available}
+    available = HostDemoPreviewService.ensure_ready()
+    if not available:
+        return {"available": False}
+    return {"available": True, "entry_file": HostDemoPreviewService.preview_url()}
 
 
 @router.get("/{submission_id}/preview")
@@ -157,7 +143,10 @@ def get_submission_preview_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ):
-    demo_dist_path = Path("D:/research/arc/arc-bench-website-main/runtime/demo/12306/backend/dist")
+    if not HostDemoPreviewService.ensure_ready():
+        raise HTTPException(status_code=503, detail="Host demo preview is not ready")
+
+    demo_dist_path = HostDemoPreviewService.BACKEND_DIR / "dist"
 
     if not file_path or file_path == "/" or file_path.endswith("/"):
         index_file = demo_dist_path / "index.html"
