@@ -40,8 +40,31 @@ export default function SubmissionDetailPage() {
   const [activeTab, setActiveTab] = useState<"results" | "events" | "stdout" | "stderr">("results");
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const pollRef = useRef<number | null>(null);
   const previewUrl = "http://127.0.0.1:3000";
+  const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
+
+  const refreshPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const available = await checkHostDemoPreview(previewUrl);
+      setPreviewAvailable(available);
+      if (available) {
+        setPreviewFrameVersion((current) => current + 1);
+      }
+    } catch {
+      setPreviewAvailable(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setPreviewAvailable(false);
+    setPreviewLoading(true);
+    setPreviewFrameVersion(0);
+  }, [submissionId]);
 
   useEffect(() => {
     setLoadError(null);
@@ -88,6 +111,10 @@ export default function SubmissionDetailPage() {
       setPreviewLoading(false);
       return;
     }
+    if (previewAvailable) {
+      setPreviewLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setPreviewLoading(true);
@@ -123,7 +150,7 @@ export default function SubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewUrl, submission]);
+  }, [previewAvailable, previewUrl, submission]);
 
   if (loading) {
     return (
@@ -249,11 +276,23 @@ export default function SubmissionDetailPage() {
         <section className="action-section">
           <div className="action-section-header">
             <div className="action-section-title">Live Website Preview</div>
-            {previewAvailable ? (
-              <a className="inline-link" href={previewUrl} target="_blank" rel="noreferrer">
-                Open
-              </a>
-            ) : null}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <button
+                type="button"
+                className="inline-link"
+                onClick={() => {
+                  void refreshPreview();
+                }}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              >
+                {previewAvailable ? "Refresh" : "Retry"}
+              </button>
+              {previewAvailable ? (
+                <a className="inline-link" href={previewUrl} target="_blank" rel="noreferrer">
+                  Open
+                </a>
+              ) : null}
+            </div>
           </div>
           <div className="detail-tab-panel">
             {previewLoading ? (
@@ -262,8 +301,8 @@ export default function SubmissionDetailPage() {
               </div>
             ) : previewAvailable ? (
               <iframe
-                key={submissionId}
-                src={previewUrl}
+                key={`${submissionId}-${previewFrameVersion}`}
+                src={previewFrameUrl}
                 title="Live Website Preview"
                 className="playground-preview-iframe"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"

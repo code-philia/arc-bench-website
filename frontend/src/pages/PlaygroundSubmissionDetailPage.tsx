@@ -71,22 +71,47 @@ export default function PlaygroundSubmissionDetailPage() {
   const [detailExpanded, setDetailExpanded] = useState(true);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [pulseNodeId, setPulseNodeId] = useState<string | null>(null);
+  const [sidebarMinimized, setSidebarMinimized] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(340);
   const [previewMinimized, setPreviewMinimized] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(50);
   const pollRef = useRef<number | null>(null);
   const seenVisualKeysRef = useRef<Set<string>>(new Set());
-  const isDragging = useRef(false);
-  const startX = useRef(0);
-  const startWidth = useRef(0);
+  const isSidebarDragging = useRef(false);
+  const sidebarDragStartX = useRef(0);
+  const sidebarDragStartWidth = useRef(0);
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const previewUrl = "http://127.0.0.1:3000";
+  const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
+  const previewPanelWidth = previewMinimized ? "80px" : "min(520px, 42vw)";
+
+  const refreshPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const available = await checkHostDemoPreview(previewUrl);
+      setPreviewAvailable(available);
+      if (available) {
+        setPreviewFrameVersion((current) => current + 1);
+      }
+    } catch {
+      setPreviewAvailable(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   useEffect(() => {
     quickStart.syncStepForRoute();
   }, [quickStart, submissionId]);
+
+  useEffect(() => {
+    setPreviewAvailable(false);
+    setPreviewLoading(true);
+    setPreviewFrameVersion(0);
+  }, [submissionId]);
 
   useEffect(() => {
     if (useQuickStartSubmission && quickStart.mode === "mock" && quickStart.mockSubmission) {
@@ -153,6 +178,10 @@ export default function PlaygroundSubmissionDetailPage() {
       setPreviewLoading(false);
       return;
     }
+    if (previewAvailable) {
+      setPreviewLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setPreviewLoading(true);
@@ -188,7 +217,7 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewUrl, submission]);
+  }, [previewAvailable, previewUrl, submission]);
 
   const tree = useMemo(() => {
     if (!requirement) {
@@ -244,37 +273,44 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => window.clearTimeout(timer);
   }, [logs]);
 
-  const onMouseDown = (event: React.MouseEvent) => {
+  const onSidebarResizeMouseDown = (event: React.MouseEvent) => {
     event.preventDefault();
-    isDragging.current = true;
-    startX.current = event.clientX;
-    startWidth.current = previewWidth;
+    isSidebarDragging.current = true;
+    sidebarDragStartX.current = event.clientX;
+    sidebarDragStartWidth.current = sidebarWidth;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("mousemove", onSidebarResizeMouseMove);
+    document.addEventListener("mouseup", onSidebarResizeMouseUp);
   };
 
-  const onMouseMove = (event: MouseEvent) => {
-    if (!isDragging.current) return;
-
-    const delta = startX.current - event.clientX;
-    if (Math.abs(delta) < 3) return;
-
-    const percentDelta = (delta / window.innerWidth) * 100 * 0.6;
-    let nextWidth = startWidth.current + percentDelta;
-    nextWidth = Math.max(20, Math.min(80, nextWidth));
-    setPreviewWidth(nextWidth);
+  const onSidebarResizeMouseMove = (event: MouseEvent) => {
+    if (!isSidebarDragging.current) {
+      return;
+    }
+    const delta = event.clientX - sidebarDragStartX.current;
+    let nextWidth = sidebarDragStartWidth.current + delta;
+    nextWidth = Math.max(260, Math.min(520, nextWidth));
+    setSidebarWidth(nextWidth);
   };
 
-  const onMouseUp = () => {
-    isDragging.current = false;
+  const onSidebarResizeMouseUp = () => {
+    isSidebarDragging.current = false;
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
+    document.removeEventListener("mousemove", onSidebarResizeMouseMove);
+    document.removeEventListener("mouseup", onSidebarResizeMouseUp);
   };
+
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onSidebarResizeMouseMove);
+      document.removeEventListener("mouseup", onSidebarResizeMouseUp);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -316,22 +352,117 @@ export default function PlaygroundSubmissionDetailPage() {
       flexDirection: "column",
     }}>
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <section className="action-section submission-status-panel playground-submission-sidebar">
-          <div className="playground-submission-heading">
-            <h1>{submission.display_name || submission.id}</h1>
-            <div className="playground-submission-inline-meta">
-              <span>{submission.id}</span>
-              <span>Duration: {formatDuration(submission.started_at, submission.finished_at)}</span>
-            </div>
-          </div>
+        <section
+          className="action-section submission-status-panel playground-submission-sidebar"
+          style={{
+            width: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
+            minWidth: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
+            maxWidth: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
+            overflow: "hidden",
+            transition: "width 0.24s ease, min-width 0.24s ease, max-width 0.24s ease",
+          }}
+        >
+          {!sidebarMinimized ? (
+            <>
+              <div className="playground-submission-heading">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
+                  <div>
+                    <h1>{submission.display_name || submission.id}</h1>
+                    <div className="playground-submission-inline-meta">
+                      <span>{submission.id}</span>
+                      <span>Duration: {formatDuration(submission.started_at, submission.finished_at)}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarMinimized(true)}
+                    style={{
+                      width: "28px",
+                      height: "28px",
+                      border: "1px solid #e2e8f0",
+                      background: "white",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#64748b",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <path d="M11 19L3 12L11 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M21 19L13 12L21 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
 
-          <div className="action-section-title">Run Status</div>
-          <SubmissionStepList
-            steps={submission.steps}
-            submissionStatus={submission.status}
-            failureReason={submission.failure_reason}
-          />
+              <div className="action-section-title">Run Status</div>
+              <SubmissionStepList
+                steps={submission.steps}
+                submissionStatus={submission.status}
+                failureReason={submission.failure_reason}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSidebarMinimized(false)}
+              style={{
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "10px",
+                color: "var(--text-dim)",
+                cursor: "pointer",
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  writingMode: "vertical-rl",
+                  textOrientation: "upright",
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Status
+              </span>
+            </button>
+          )}
         </section>
+
+        {!sidebarMinimized ? (
+          <div
+            onMouseDown={onSidebarResizeMouseDown}
+            style={{
+              width: "14px",
+              cursor: "col-resize",
+              background: "#f8fafc",
+              borderLeft: "1px solid #e2e8f0",
+              borderRight: "1px solid #e2e8f0",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "column",
+              gap: "6px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
+            <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
+            <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
+          </div>
+        ) : null}
 
         <main style={{
           flex: 1,
@@ -340,6 +471,7 @@ export default function PlaygroundSubmissionDetailPage() {
           overflow: "hidden",
           borderRight: "1px solid var(--border)",
           background: "white",
+          minWidth: 0,
         }}>
           <div className="doc-tabs" style={{ borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
             {[
@@ -438,36 +570,16 @@ export default function PlaygroundSubmissionDetailPage() {
           </div>
         </main>
 
-        <div
-          onMouseDown={onMouseDown}
-          style={{
-            width: "16px",
-            cursor: "col-resize",
-            background: "#f8fafc",
-            borderLeft: "1px solid #e2e8f0",
-            borderRight: "1px solid #e2e8f0",
-            display: previewMinimized ? "none" : "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexDirection: "column",
-            gap: "6px",
-            position: "relative",
-          }}
-        >
-          <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
-          <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
-          <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
-        </div>
-
         <aside style={{
-          width: previewMinimized ? "80px" : `${previewWidth}%`,
+          width: previewPanelWidth,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
           background: "white",
           borderLeft: "1px solid var(--border)",
           boxShadow: "-4px 0 24px rgba(0, 0, 0, 0.06)",
-          transition: "width 0.3s ease",
+          transition: "width 0.24s ease",
+          flexShrink: 0,
         }}>
           <div style={{
             padding: "12px 16px",
@@ -489,6 +601,38 @@ export default function PlaygroundSubmissionDetailPage() {
                   Live Website Preview
                 </span>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void refreshPreview();
+                    }}
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#64748b",
+                      textDecoration: "none",
+                      padding: "4px 8px",
+                      borderRadius: "6px",
+                      transition: "all 0.15s ease",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      border: "1px solid #e2e8f0",
+                      background: "white",
+                      cursor: "pointer",
+                    }}
+                    onMouseOver={(buttonEvent) => {
+                      buttonEvent.currentTarget.style.color = "#3b82f6";
+                      buttonEvent.currentTarget.style.background = "#eff6ff";
+                      buttonEvent.currentTarget.style.borderColor = "#bfdbfe";
+                    }}
+                    onMouseOut={(buttonEvent) => {
+                      buttonEvent.currentTarget.style.color = "#64748b";
+                      buttonEvent.currentTarget.style.background = "white";
+                      buttonEvent.currentTarget.style.borderColor = "#e2e8f0";
+                    }}
+                  >
+                    {previewAvailable ? "Refresh" : "Retry"}
+                  </button>
                   {submission && previewAvailable ? (
                     <a
                       href={previewUrl}
@@ -607,8 +751,8 @@ export default function PlaygroundSubmissionDetailPage() {
                 </div>
               ) : submission && previewAvailable ? (
                 <iframe
-                  key={submissionId}
-                  src={previewUrl}
+                  key={`${submissionId}-${previewFrameVersion}`}
+                  src={previewFrameUrl}
                   title="Live Website Preview"
                   style={{
                     position: "absolute",

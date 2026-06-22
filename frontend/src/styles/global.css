@@ -431,10 +431,10 @@ button {
 .home-stage-title {
   max-width: 720px;
   margin: 0;
-  font-size: clamp(2.6rem, 4.8vw, 4.6rem);
+  font-size: clamp(2.3rem, 4.1vw, 3.9rem);
   font-weight: 800;
-  line-height: 1.02;
-  letter-spacing: 0;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
 }
 
 .home-stage-description {
@@ -4348,7 +4348,7 @@ button {
   }
 
   .home-stage-title {
-    font-size: 2.35rem;
+    font-size: 2.1rem;
   }
 
   .home-stage-metrics,

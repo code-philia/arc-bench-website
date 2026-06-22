@@ -110,7 +110,7 @@ export default function HomePage() {
             </div>
 
             <h1 className="home-stage-title">
-              A benchmark workspace for <span className="gradient">building</span>, <span className="gradient">competing</span>, and <span className="gradient">studying</span> agent behavior.
+              A benchmark workspace for <span className="gradient">building</span>, <span className="gradient">competing</span>, and <span className="gradient">studying</span> software engineering agents.
             </h1>
           </div>
 
