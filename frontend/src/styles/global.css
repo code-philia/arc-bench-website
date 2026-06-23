@@ -3368,14 +3368,29 @@ button {
   padding-top: 6px;
 }
 
-.api-doc-toc a {
+.api-doc-nav-button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
   color: #5f7082;
   font-size: 0.84rem;
-  text-decoration: none;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
-.api-doc-toc a:hover {
+.api-doc-nav-button:hover {
   color: #1f2f3f;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.api-doc-nav-button.active {
+  color: #0f172a;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
 }
 
 .api-doc-content {
@@ -3402,6 +3417,31 @@ button {
 
 .api-doc-section-block p:last-child {
   margin-bottom: 0;
+}
+
+.api-doc-callout-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.api-doc-callout-card {
+  padding: 16px;
+  border: 1px solid rgba(100, 116, 139, 0.16);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.api-doc-callout-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.api-doc-callout-card p {
+  margin: 0;
 }
 
 .api-doc-table {
@@ -6165,6 +6205,10 @@ button {
   .api-doc-toc {
     position: static;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .api-doc-callout-grid {
+    grid-template-columns: 1fr;
   }
 
   .create-task-layout {

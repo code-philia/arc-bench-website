@@ -1,6 +1,7 @@
 import json
 import os
 import signal
+import sqlite3
 import subprocess
 import threading
 import time
@@ -24,6 +25,9 @@ STDOUT_PATH = ARTIFACTS_DIR / "stdout.log"
 STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
+TRACEABILITY_DB_PATH = ARTIFACTS_DIR / "traceability.db"
+TRACEABILITY_EVENTS_PATH = ARTIFACTS_DIR / "traceability-events.jsonl"
+TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
@@ -52,6 +56,247 @@ def append_runner_event(step_key: str, message: str, status: str = "info") -> No
     }
     with RUNNER_EVENTS_PATH.open("a", encoding="utf-8") as output:
         output.write(json.dumps(payload, ensure_ascii=True) + "\n")
+
+
+def initialize_traceability_db() -> None:
+    append_debug_log(f"Initializing traceability database at {TRACEABILITY_DB_PATH}")
+    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS requirements (
+                req_id TEXT PRIMARY KEY,
+                description TEXT,
+                visual_reference TEXT,
+                status TEXT,
+                parent_id TEXT,
+                dependencies TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scenarios (
+                scenario_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                req_id TEXT NOT NULL,
+                steps TEXT NOT NULL,
+                FOREIGN KEY(req_id) REFERENCES requirements(req_id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS interfaces (
+                interface_id TEXT PRIMARY KEY,
+                req_ids TEXT,
+                type TEXT,
+                content TEXT,
+                file_path TEXT,
+                first_line TEXT,
+                implemented INTEGER,
+                callers TEXT,
+                callees TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tests (
+                test_id TEXT PRIMARY KEY,
+                req_id TEXT NOT NULL,
+                scenario_id TEXT,
+                type TEXT,
+                file_path TEXT,
+                first_line TEXT,
+                FOREIGN KEY(req_id) REFERENCES requirements(req_id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY(scenario_id) REFERENCES scenarios(scenario_id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def seed_traceability_requirements() -> tuple[int, int]:
+    if not TRACEABILITY_SEED_PATH.exists():
+        append_debug_log("No traceability seed file found, skipping requirement/scenario registration")
+        return 0, 0
+
+    payload = json.loads(TRACEABILITY_SEED_PATH.read_text(encoding="utf-8"))
+    requirements = payload.get("requirements", [])
+    scenarios = payload.get("scenarios", [])
+    if not isinstance(requirements, list) or not isinstance(scenarios, list):
+        raise RuntimeError("traceability-seed.json must contain requirements and scenarios arrays")
+
+    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    try:
+        cursor = connection.cursor()
+        cursor.executemany(
+            """
+            INSERT OR REPLACE INTO requirements (req_id, description, visual_reference, status, parent_id, dependencies)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(item.get("req_id", "")).strip(),
+                    str(item.get("description", "")).strip(),
+                    item.get("visual_reference"),
+                    str(item.get("status", "pending")).strip() or "pending",
+                    item.get("parent_id"),
+                    json.dumps(item.get("dependencies", []), ensure_ascii=False),
+                )
+                for item in requirements
+                if str(item.get("req_id", "")).strip()
+            ],
+        )
+        cursor.executemany(
+            """
+            INSERT OR REPLACE INTO scenarios (scenario_id, name, req_id, steps)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(item.get("scenario_id", "")).strip(),
+                    str(item.get("name", "")).strip() or "Scenario",
+                    str(item.get("req_id", "")).strip(),
+                    json.dumps(item.get("steps", []), ensure_ascii=False),
+                )
+                for item in scenarios
+                if str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
+            ],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    return len(requirements), len(scenarios)
+
+
+def sync_requirement_statuses_from_visual_events() -> None:
+    if not RUNNER_EVENTS_PATH.exists():
+        return
+
+    status_by_requirement: dict[str, str] = {}
+    for raw_line in RUNNER_EVENTS_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("type") != "requirement_state":
+            continue
+        node_id = str(payload.get("node_id", "")).strip()
+        phase = str(payload.get("phase", "")).strip()
+        status = str(payload.get("status", "")).strip()
+        if not node_id:
+            continue
+        if phase == "design" and status == "completed":
+            status_by_requirement[node_id] = "design"
+        elif phase == "implement" and status == "completed":
+            status_by_requirement[node_id] = "implement"
+        elif phase == "test" and status == "passed":
+            status_by_requirement[node_id] = "test-passed"
+        elif phase == "test" and status == "failed":
+            status_by_requirement[node_id] = "test-failed"
+
+    if not status_by_requirement:
+        return
+
+    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    try:
+        cursor = connection.cursor()
+        for req_id, req_status in status_by_requirement.items():
+            cursor.execute(
+                "UPDATE requirements SET status = ? WHERE req_id = ?",
+                (req_status, req_id),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def apply_traceability_events() -> tuple[int, int, int]:
+    if not TRACEABILITY_EVENTS_PATH.exists():
+        append_debug_log("No traceability events found, skipping interface/test import")
+        return 0, 0, 0
+
+    interface_upserts = 0
+    interface_status_updates = 0
+    test_upserts = 0
+    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    try:
+        cursor = connection.cursor()
+        for raw_line in TRACEABILITY_EVENTS_PATH.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                append_debug_log(f"Invalid traceability event ignored: {line}")
+                continue
+
+            event_type = str(payload.get("type", "")).strip()
+            if event_type == "interface_upsert":
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO interfaces (
+                        interface_id, req_ids, type, content, file_path, first_line, implemented, callers, callees
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(payload.get("interface_id", "")).strip(),
+                        json.dumps(payload.get("req_ids", []), ensure_ascii=False),
+                        str(payload.get("interface_type", "")).strip(),
+                        str(payload.get("content", "")).strip(),
+                        payload.get("file_path"),
+                        payload.get("first_line"),
+                        1 if payload.get("implemented") else 0,
+                        json.dumps(payload.get("callers", []), ensure_ascii=False),
+                        json.dumps(payload.get("callees", []), ensure_ascii=False),
+                    ),
+                )
+                interface_upserts += 1
+            elif event_type == "interface_status":
+                cursor.execute(
+                    "UPDATE interfaces SET implemented = ? WHERE interface_id = ?",
+                    (
+                        1 if payload.get("implemented") else 0,
+                        str(payload.get("interface_id", "")).strip(),
+                    ),
+                )
+                interface_status_updates += cursor.rowcount
+            elif event_type == "test_upsert":
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO tests (
+                        test_id, req_id, scenario_id, type, file_path, first_line
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(payload.get("test_id", "")).strip(),
+                        str(payload.get("req_id", "")).strip(),
+                        payload.get("scenario_id"),
+                        str(payload.get("test_type", "")).strip(),
+                        payload.get("file_path"),
+                        payload.get("first_line"),
+                    ),
+                )
+                test_upserts += 1
+        connection.commit()
+    finally:
+        connection.close()
+
+    sync_requirement_statuses_from_visual_events()
+    return interface_upserts, interface_status_updates, test_upserts
 
 
 def stream_pipe(pipe, sink_file, section: str) -> None:
@@ -151,6 +396,8 @@ def run_generation_agent(stdout_file, stderr_file) -> None:
         "ARCBENCH_OUTPUT_DIR": str(TEMPLATE_DIR),
         "ARCBENCH_ARTIFACTS_DIR": str(ARTIFACTS_DIR),
         "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
+        "ARCBENCH_TRACEABILITY_DB_PATH": str(TRACEABILITY_DB_PATH),
+        "ARCBENCH_TRACEABILITY_EVENTS_PATH": str(TRACEABILITY_EVENTS_PATH),
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
         "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
@@ -447,8 +694,16 @@ def run_web_template(stdout_file, stderr_file) -> dict:
 def main() -> int:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
+    TRACEABILITY_EVENTS_PATH.write_text("", encoding="utf-8")
+    initialize_traceability_db()
+    seeded_requirements, seeded_scenarios = seed_traceability_requirements()
     spec = read_spec()
     append_debug_log(f"Runner started with spec: {spec}")
+    append_runner_event(
+        "deploy_agent",
+        f"Traceability initialized with {seeded_requirements} requirements and {seeded_scenarios} scenarios",
+        status="success",
+    )
 
     managed_processes: list[tuple[subprocess.Popen | None, str]] = []
     managed_threads: list[threading.Thread | None] = []
@@ -457,6 +712,17 @@ def main() -> int:
         try:
             install_agent_dependencies(stdout_file, stderr_file)
             run_generation_agent(stdout_file, stderr_file)
+            interface_upserts, interface_status_updates, test_upserts = apply_traceability_events()
+            append_runner_event(
+                "start_agent",
+                (
+                    "Traceability assets imported: "
+                    f"interfaces={interface_upserts}, "
+                    f"interface_status_updates={interface_status_updates}, "
+                    f"tests={test_upserts}"
+                ),
+                status="success",
+            )
 
             task = spec.get("task", {})
             category = task.get("category", "web")
