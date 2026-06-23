@@ -7,9 +7,33 @@ import SubmissionResultCard from "../components/submissions/SubmissionResultCard
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
-import { parseTaskTreeYaml, requirementMarkdownToTree } from "../lib/taskTree";
+import { findNodeById, parseTaskTreeYaml, requirementMarkdownToTree } from "../lib/taskTree";
 import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
+
+type TraceabilityInterfaceType = "UI" | "API" | "FUNC" | "DB";
+type TraceabilityTestType = "Unit" | "Integration" | "E2E";
+
+type MockTraceabilityInterface = {
+  interface_id: string;
+  req_ids: string[];
+  type: TraceabilityInterfaceType;
+  content: string;
+  file_path: string;
+  first_line: string;
+  implemented: boolean;
+  callers: string[];
+  callees: string[];
+};
+
+type MockTraceabilityTest = {
+  test_id: string;
+  req_id: string;
+  scenario_id: string | null;
+  type: TraceabilityTestType;
+  file_path: string;
+  first_line: string;
+};
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -55,6 +79,190 @@ function toVisualState(event: SubmissionVisualEvent): RequirementVisualState {
   return "default";
 }
 
+function hashString(input: string) {
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 33 + input.charCodeAt(index)) % 2147483647;
+  }
+  return Math.abs(hash);
+}
+
+function slugTraceabilityKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "root";
+}
+
+function buildMockTraceabilityInterfaces(
+  requirementId: string,
+  nodeId: string,
+  nodeName: string,
+): MockTraceabilityInterface[] {
+  const seed = hashString(`${requirementId}:${nodeId}:${nodeName}`);
+  const key = slugTraceabilityKey(nodeName || nodeId);
+  const interfaceTypes: TraceabilityInterfaceType[] = ["UI", "API", "FUNC", "DB"];
+  const count = nodeId === "ROOT" ? 3 : (seed % 3) + 1;
+
+  return Array.from({ length: count }, (_, index) => {
+    const type = interfaceTypes[(seed + index) % interfaceTypes.length];
+    const itemKey = `${key}-${index + 1}`;
+    const interfaceId = `${nodeId}-IF-${index + 1}`;
+    const filePathByType: Record<TraceabilityInterfaceType, string> = {
+      UI: `frontend/src/pages/${key}/view-${index + 1}.tsx`,
+      API: `frontend/src/api/${key}.ts`,
+      FUNC: `backend/src/services/${key}_service.ts`,
+      DB: `backend/src/database/${key}_repo.ts`,
+    };
+    const contentByType: Record<TraceabilityInterfaceType, string> = {
+      UI: `${nodeName} panel renders the primary interaction surface and input controls.`,
+      API: `${index % 2 === 0 ? "GET" : "POST"} /api/${slugTraceabilityKey(requirementId)}/${itemKey}`,
+      FUNC: `${key.replace(/-/g, "_")}_${index + 1}(payload)`,
+      DB: `${key}_${index + 1} table access for ${nodeId} persistence and query flow.`,
+    };
+
+    return {
+      interface_id: interfaceId,
+      req_ids: [nodeId],
+      type,
+      content: contentByType[type],
+      file_path: filePathByType[type],
+      first_line: `${20 + ((seed + index * 17) % 120)}`,
+      implemented: ((seed + index) % 5) !== 0,
+      callers: index === 0 ? [] : [`${nodeId}-IF-${index}`],
+      callees: index === count - 1 ? [] : [`${nodeId}-IF-${index + 2}`],
+    };
+  });
+}
+
+function buildMockTraceabilityTests(
+  requirementId: string,
+  nodeId: string,
+  nodeName: string,
+): MockTraceabilityTest[] {
+  const seed = hashString(`test:${requirementId}:${nodeId}:${nodeName}`);
+  const count = nodeId === "ROOT" ? 2 : ((seed % 2) + 1);
+  const key = slugTraceabilityKey(nodeName || nodeId);
+  const testTypes: TraceabilityTestType[] = ["Integration", "E2E", "Unit"];
+
+  return Array.from({ length: count }, (_, index) => {
+    const type = testTypes[(seed + index) % testTypes.length];
+    return {
+      test_id: `${nodeId}-TEST-${index + 1}`,
+      req_id: nodeId,
+      scenario_id: nodeId === "ROOT" ? null : `${nodeId}-SCN-${index + 1}`,
+      type,
+      file_path: `arc-bench/webapp/tests/${requirementId}/${nodeId.toLowerCase()}-${index + 1}.spec.ts`,
+      first_line: `${12 + ((seed + index * 13) % 90)}`,
+    };
+  });
+}
+
+function TraceabilityPanel({
+  requirementId,
+  nodeId,
+  nodeName,
+}: {
+  requirementId: string;
+  nodeId: string | null;
+  nodeName: string | null;
+}) {
+  const traceabilityData = useMemo(() => {
+    if (!nodeId || !nodeName) {
+      return null;
+    }
+    return {
+      interfaces: buildMockTraceabilityInterfaces(requirementId, nodeId, nodeName),
+      tests: buildMockTraceabilityTests(requirementId, nodeId, nodeName),
+    };
+  }, [nodeId, nodeName, requirementId]);
+
+  if (!traceabilityData || !nodeId || !nodeName) {
+    return (
+      <div className="traceability-empty-state">
+        Select a requirement node on the canvas to inspect its linked interfaces and tests.
+      </div>
+    );
+  }
+
+  return (
+    <div className="traceability-panel">
+      <div className="traceability-panel-header">
+        <div className="traceability-panel-kicker">Selected Requirement</div>
+        <div className="traceability-panel-title">{nodeId}</div>
+        <div className="traceability-panel-subtitle">{nodeName}</div>
+      </div>
+
+      <section className="traceability-section">
+        <div className="traceability-section-head">
+          <h3>Interfaces</h3>
+          <span>{traceabilityData.interfaces.length}</span>
+        </div>
+        <div className="traceability-card-list">
+          {traceabilityData.interfaces.map((item) => (
+            <article key={item.interface_id} className="traceability-card">
+              <div className="traceability-card-top">
+                <div>
+                  <div className="traceability-card-id">{item.interface_id}</div>
+                  <div className="traceability-card-path">{item.file_path}:{item.first_line}</div>
+                </div>
+                <div className="traceability-chip-row">
+                  <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
+                  <span className={`traceability-chip ${item.implemented ? "implemented" : "planned"}`}>
+                    {item.implemented ? "Implemented" : "Planned"}
+                  </span>
+                </div>
+              </div>
+              <div className="traceability-card-content">{item.content}</div>
+              <div className="traceability-meta-grid">
+                <div>
+                  <span className="traceability-meta-label">Req IDs</span>
+                  <span>{item.req_ids.join(", ")}</span>
+                </div>
+                <div>
+                  <span className="traceability-meta-label">Callers</span>
+                  <span>{item.callers.length ? item.callers.join(", ") : "None"}</span>
+                </div>
+                <div>
+                  <span className="traceability-meta-label">Callees</span>
+                  <span>{item.callees.length ? item.callees.join(", ") : "None"}</span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="traceability-section">
+        <div className="traceability-section-head">
+          <h3>Tests</h3>
+          <span>{traceabilityData.tests.length}</span>
+        </div>
+        <div className="traceability-card-list">
+          {traceabilityData.tests.map((item) => (
+            <article key={item.test_id} className="traceability-card">
+              <div className="traceability-card-top">
+                <div>
+                  <div className="traceability-card-id">{item.test_id}</div>
+                  <div className="traceability-card-path">{item.file_path}:{item.first_line}</div>
+                </div>
+                <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
+              </div>
+              <div className="traceability-meta-grid">
+                <div>
+                  <span className="traceability-meta-label">Requirement</span>
+                  <span>{item.req_id}</span>
+                </div>
+                <div>
+                  <span className="traceability-meta-label">Scenario</span>
+                  <span>{item.scenario_id ?? "Not linked"}</span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function PlaygroundSubmissionDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
   const taskType = normalizeTaskType(rawTaskType);
@@ -67,6 +275,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"canvas" | "results" | "stdio">("canvas");
   const [stdioTab, setStdioTab] = useState<"stdout" | "stderr">("stdout");
+  const [sidebarTab, setSidebarTab] = useState<"status" | "traceability">("status");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
   const [detailExpanded, setDetailExpanded] = useState(true);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
@@ -244,6 +453,13 @@ export default function PlaygroundSubmissionDetailPage() {
     return nextState;
   }, [logs, quickStart.canvasDemo.active, quickStart.canvasDemo.nodeStates, useQuickStartSubmission]);
 
+  const selectedNode = useMemo(() => {
+    if (!tree || !selectedNodeId) {
+      return null;
+    }
+    return findNodeById(tree, selectedNodeId);
+  }, [selectedNodeId, tree]);
+
   useEffect(() => {
     if (!useQuickStartSubmission || !quickStart.canvasDemo.active) {
       return;
@@ -405,12 +621,41 @@ export default function PlaygroundSubmissionDetailPage() {
                 </div>
               </div>
 
-              <div className="action-section-title">Run Status</div>
-              <SubmissionStepList
-                steps={submission.steps}
-                submissionStatus={submission.status}
-                failureReason={submission.failure_reason}
-              />
+              <div className="submission-side-tabs">
+                <button
+                  type="button"
+                  className={`submission-side-tab ${sidebarTab === "status" ? "active" : ""}`}
+                  onClick={() => setSidebarTab("status")}
+                >
+                  STATUS
+                </button>
+                <button
+                  type="button"
+                  className={`submission-side-tab ${sidebarTab === "traceability" ? "active" : ""}`}
+                  onClick={() => setSidebarTab("traceability")}
+                >
+                  TRACEABILITY
+                </button>
+              </div>
+
+              <div className="playground-submission-side-panel-body">
+                {sidebarTab === "status" ? (
+                  <>
+                    <div className="action-section-title">Run Status</div>
+                    <SubmissionStepList
+                      steps={submission.steps}
+                      submissionStatus={submission.status}
+                      failureReason={submission.failure_reason}
+                    />
+                  </>
+                ) : (
+                  <TraceabilityPanel
+                    requirementId={requirementId}
+                    nodeId={selectedNode?.id ?? selectedNodeId}
+                    nodeName={selectedNode?.name ?? null}
+                  />
+                )}
+              </div>
             </>
           ) : (
             <button
@@ -442,7 +687,7 @@ export default function PlaygroundSubmissionDetailPage() {
                   textTransform: "uppercase",
                 }}
               >
-                Status
+                {sidebarTab === "status" ? "Status" : "Trace"}
               </span>
             </button>
           )}

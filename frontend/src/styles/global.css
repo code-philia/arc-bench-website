@@ -3623,6 +3623,264 @@ button {
   letter-spacing: -0.02em;
 }
 
+.submission-side-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.submission-side-tab {
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  color: #64748b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.submission-side-tab.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+}
+
+.playground-submission-side-panel-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traceability-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.traceability-empty-state {
+  padding: 16px 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.traceability-panel-header {
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.traceability-panel-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #2563eb;
+  margin-bottom: 6px;
+}
+
+.traceability-panel-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.traceability-panel-subtitle {
+  margin-top: 4px;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.traceability-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traceability-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.traceability-section-head h3 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #0f172a;
+  text-transform: uppercase;
+}
+
+.traceability-section-head span {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.traceability-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traceability-card {
+  padding: 12px 12px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traceability-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.traceability-card-id {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.traceability-card-path {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.76rem;
+  word-break: break-all;
+}
+
+.traceability-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.traceability-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.traceability-chip.implemented {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.traceability-chip.planned {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fdba74;
+}
+
+.traceability-chip.type-ui {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.traceability-chip.type-api {
+  background: #ecfeff;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+.traceability-chip.type-func {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-color: #ddd6fe;
+}
+
+.traceability-chip.type-db {
+  background: #fefce8;
+  color: #a16207;
+  border-color: #fde68a;
+}
+
+.traceability-chip.type-unit {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
+.traceability-chip.type-integration {
+  background: #ecfccb;
+  color: #3f6212;
+  border-color: #bef264;
+}
+
+.traceability-chip.type-e2e {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.traceability-card-content {
+  color: #334155;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.traceability-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.traceability-meta-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: #334155;
+}
+
+.traceability-meta-label {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .submission-grid .action-section:first-child {
   border-right: 1px solid var(--border);
 }
