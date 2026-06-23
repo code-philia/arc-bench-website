@@ -1,0 +1,25 @@
+import { test, expect } from '@playwright/test';
+
+test('REQ-3-2-2: Post Voting and Interaction Sidebar', async ({ page }) => {
+  // 1. Pre-condition: 通过 API 创建问题，拿到动态 ID
+  // 修改原因：原测试硬编码访问 /questions/1，依赖数据库里预置的数据；环境干净或数据被删时测试失败
+  const loginRes = await page.request.post('/api/auth/login', {
+    data: { email: 'test_user@example.com', password: 'password123' }
+  });
+  const { token } = (await loginRes.json()).data;
+  const questionRes = await page.request.post('/api/questions', {
+    data: { title: 'Test question for voting sidebar check', body: 'This is a test question body with enough characters to pass validation requirements for the system.'.repeat(3), tags: ['test'] },
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const questionId = (await questionRes.json()).data.id;
+
+  // 2. Navigation
+  await page.goto(`/questions/${questionId}`);
+
+  // 2. Assertion
+  const mainContent = page.getByRole('main');
+  await expect(mainContent.getByRole('button', { name: /upvote/i }).first()).toBeVisible();
+  await expect(mainContent.getByRole('button', { name: /downvote/i }).first()).toBeVisible();
+  await expect(mainContent.getByRole('button', { name: /bookmark|save/i }).first()).toBeVisible();
+  await expect(mainContent.getByRole('link', { name: /timeline|history/i }).first()).toBeVisible();
+});
