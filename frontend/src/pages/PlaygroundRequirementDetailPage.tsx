@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
-import MarkdownDocument, { extractHeadings } from "../components/requirements/MarkdownDocument";
+import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
 import type { RequirementDetail, SubmissionDetail, SubmissionSummary } from "../lib/types";
@@ -63,7 +63,6 @@ export default function PlaygroundRequirementDetailPage() {
     }
     return activeDoc === "readme" ? requirement.requirements_markdown : requirement.prerequisites_markdown;
   }, [activeDoc, requirement]);
-  const headings = useMemo(() => extractHeadings(currentMarkdown), [currentMarkdown]);
 
   useEffect(() => {
     quickStart.syncStepForRoute();
@@ -215,46 +214,34 @@ export default function PlaygroundRequirementDetailPage() {
             <button
               type="button"
               className={`doc-tab${activeDoc === "readme" ? " active" : ""}`}
-              onClick={() => setActiveDoc("readme")}
+              onClick={() => {
+                window.history.replaceState(null, "", window.location.pathname + window.location.search);
+                setActiveDoc("readme");
+              }}
             >
               README.md
             </button>
             <button
               type="button"
               className={`doc-tab${activeDoc === "prerequisites" ? " active" : ""}`}
-              onClick={() => setActiveDoc("prerequisites")}
+              onClick={() => {
+                window.history.replaceState(null, "", window.location.pathname + window.location.search);
+                setActiveDoc("prerequisites");
+              }}
             >
               prerequisites.md
             </button>
           </div>
-          <div className="readme-body playground-readme-body">
-            <aside className="toc playground-readme-toc" data-quickstart-id="quickstart-contents">
-              <div className="toc-title">Contents</div>
-              {headings.length === 0 ? (
-                <div className="empty-state compact">No sections found.</div>
-              ) : (
-                headings.map((heading, index) => (
-                  <a
-                    key={heading.id}
-                    className={`toc-item${index === 0 ? " active" : ""}${heading.level === 3 ? " sub" : ""}`}
-                    href={`#${heading.id}`}
-                  >
-                    {heading.text}
-                  </a>
-                ))
-              )}
-            </aside>
-            <div
-              data-quickstart-id="quickstart-document"
-              className="quickstart-document-anchor playground-readme-scroll"
-            >
-              <MarkdownDocument
-                markdown={currentMarkdown}
-                assetsBaseUrl={requirement.assets_base_url}
-                referencesBaseUrl={requirement.references_base_url}
-              />
-            </div>
-          </div>
+          <MarkdownTocDocument
+            markdown={currentMarkdown}
+            assetsBaseUrl={requirement.assets_base_url}
+            referencesBaseUrl={requirement.references_base_url}
+            bodyClassName="playground-readme-body"
+            tocClassName="playground-readme-toc"
+            scrollClassName="quickstart-document-anchor playground-readme-scroll"
+            tocDataQuickstartId="quickstart-contents"
+            scrollDataQuickstartId="quickstart-document"
+          />
         </section>
 
         <aside className="action-panel action-panel-locked">
