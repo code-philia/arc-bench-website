@@ -20,6 +20,7 @@ import {
   buildNewChildNode,
   createDefaultTaskTree,
   findNodeById,
+  findParentNode,
   parseTaskTreeYaml,
   removeNodeFromTree,
   reindexRequirementTree,
@@ -146,9 +147,13 @@ export default function CreateTaskPage() {
       message.warning("Select a non-root node to add a sibling.");
       return;
     }
+    const parentNode = findParentNode(tree, selectedNode.id);
+    if (!parentNode) {
+      message.warning("Parent node not found.");
+      return;
+    }
     const sibling: RequirementNode = {
-      ...buildNewChildNode(selectedNode),
-      id: `${selectedNode.id}-S${Date.now().toString().slice(-3)}`,
+      ...buildNewChildNode(parentNode),
       name: "New sibling node",
       type: "ATOMIC",
       scenarios: [{ name: "New scenario", steps: [] }],

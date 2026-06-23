@@ -665,11 +665,45 @@ export function appendSiblingNode(root: RequirementNode, nodeId: string, sibling
   };
 }
 
-export function nextChildId(parent: RequirementNode): string {
-  if (parent.id === "ROOT") {
-    return `REQ-${parent.children.length + 1}`;
+export function findParentNode(root: RequirementNode, nodeId: string): RequirementNode | null {
+  if (root.children.some((child) => child.id === nodeId)) {
+    return root;
   }
-  return `${parent.id}.${parent.children.length + 1}`;
+  for (const child of root.children) {
+    const match = findParentNode(child, nodeId);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+function nextChildIndex(parent: RequirementNode): number {
+  const prefix = parent.id === "ROOT" ? "REQ-" : `${parent.id}.`;
+  let maxIndex = 0;
+
+  parent.children.forEach((child) => {
+    if (!child.id.startsWith(prefix)) {
+      return;
+    }
+
+    const suffix = child.id.slice(prefix.length);
+    if (!/^\d+$/.test(suffix)) {
+      return;
+    }
+
+    maxIndex = Math.max(maxIndex, Number(suffix));
+  });
+
+  return maxIndex + 1;
+}
+
+export function nextChildId(parent: RequirementNode): string {
+  const nextIndex = nextChildIndex(parent);
+  if (parent.id === "ROOT") {
+    return `REQ-${nextIndex}`;
+  }
+  return `${parent.id}.${nextIndex}`;
 }
 
 export function buildNewChildNode(parent: RequirementNode): RequirementNode {
