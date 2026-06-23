@@ -1,8 +1,8 @@
 import { DownloadOutlined, FileTextOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import MarkdownDocument, { extractHeadings } from "../components/requirements/MarkdownDocument";
+import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import { api } from "../lib/api";
 import type { UserTaskDetail } from "../lib/types";
 
@@ -10,7 +10,6 @@ export default function MyTaskDetailPage() {
   const { taskId = "" } = useParams();
   const [task, setTask] = useState<UserTaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const headings = useMemo(() => extractHeadings(task?.markdown_content ?? ""), [task]);
 
   useEffect(() => {
     api
@@ -47,17 +46,12 @@ export default function MyTaskDetailPage() {
               <span className="current">{task.title}</span>
             </div>
           </div>
-          <div className="readme-body">
-            <aside className="toc">
-              <div className="toc-title">Chapters</div>
-              {headings.map((heading) => (
-                <a key={heading.id} className={`toc-item ${heading.level === 3 ? "sub" : ""}`} href={`#${heading.id}`}>
-                  {heading.text}
-                </a>
-              ))}
-            </aside>
-            <MarkdownDocument markdown={task.markdown_content} assetsBaseUrl="" referencesBaseUrl="" />
-          </div>
+          <MarkdownTocDocument
+            markdown={task.markdown_content}
+            assetsBaseUrl=""
+            referencesBaseUrl=""
+            tocTitle="Chapters"
+          />
         </section>
 
         <aside className="action-panel">
