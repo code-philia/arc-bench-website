@@ -42,11 +42,8 @@ function competitionAccent(type: string) {
   return "web";
 }
 
-function bankMetaLabel(type: string) {
-  if (type === "web") return "Web Arena";
-  if (type === "android") return "Mobile Arena";
-  if (type === "mixed") return "Mixed Track";
-  return "Browse";
+function bankMetaLabel(taskCount: number) {
+  return `${taskCount} TASK${taskCount === 1 ? "" : "S"}`;
 }
 
 function formatRuntime(seconds: number) {
@@ -187,7 +184,7 @@ export default function RequirementsPage() {
                         <p>{competition.summary}</p>
                       </div>
                       <div className="playground-bank-meta">
-                        <span>{bankMetaLabel(competition.type)}</span>
+                        <span>{bankMetaLabel(competition.task_count)}</span>
                         <RightOutlined />
                       </div>
                     </Link>
