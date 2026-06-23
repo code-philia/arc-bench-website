@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
@@ -407,7 +407,9 @@ function SubmissionFilePanel({
 
 export default function PlaygroundSubmissionDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
+  const location = useLocation();
   const taskType = normalizeTaskType(rawTaskType);
+  const requirementCatalog = location.pathname.startsWith("/submissions/") ? "competition" : "playground";
   const { user } = useAuth();
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
@@ -468,7 +470,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (useQuickStartSubmission && quickStart.mode === "mock" && quickStart.mockSubmission) {
       setSubmission(quickStart.mockSubmission.submission);
       setLogs(quickStart.mockSubmission.logs);
-      api.getRequirement(requirementId)
+      api.getRequirement(requirementId, requirementCatalog)
         .then(setRequirement)
         .catch((error: Error) => {
           setRequirement(null);
@@ -484,7 +486,7 @@ export default function PlaygroundSubmissionDetailPage() {
     Promise.all([
       api.getSubmission(submissionId),
       api.getSubmissionLogs(submissionId),
-      api.getRequirement(requirementId),
+      api.getRequirement(requirementId, requirementCatalog),
     ])
       .then(([detail, latestLogs, requirementDetail]) => {
         setSubmission(detail);
@@ -511,7 +513,7 @@ export default function PlaygroundSubmissionDetailPage() {
         window.clearInterval(pollRef.current);
       }
     };
-  }, [quickStart.mockSubmission, quickStart.mode, requirementId, submissionId, useQuickStartSubmission]);
+  }, [quickStart.mockSubmission, quickStart.mode, requirementCatalog, requirementId, submissionId, useQuickStartSubmission]);
 
   useEffect(() => {
     if (!submission || !pollRef.current) {

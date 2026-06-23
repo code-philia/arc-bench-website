@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import io
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -19,74 +19,141 @@ from app.schemas.requirement import (
 )
 
 
+@dataclass
+class CatalogRequirementEntry:
+    id: str
+    title: str
+    category: str
+    summary: str
+    test_runner: str
+    total_tests: int
+    module_count: int
+    requirements_path: Path
+    prerequisites_path: Path
+    tests_path: Path
+    assets_path: Path
+    references_path: Path
+    templates_root: Path
+
+
 class RequirementCatalogService:
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        db: Session,
+        *,
+        catalog_name: str,
+        requirements_root: Path,
+        tests_root: Path,
+        templates_root: Path,
+    ):
         self.db = db
         self.settings = get_settings()
+        self.catalog_name = catalog_name
+        self.requirements_root = requirements_root
+        self.tests_root = tests_root
+        self.templates_root = templates_root
 
-    def sync(self) -> None:
-        discovered_requirement_ids: set[str] = set()
-        for requirement_dir in sorted(self.settings.requirements_root.iterdir()):
+    @classmethod
+    def for_catalog(cls, db: Session, catalog: str) -> "RequirementCatalogService":
+        settings = get_settings()
+        if catalog == "competition":
+            return cls(
+                db,
+                catalog_name="competition",
+                requirements_root=settings.requirements_root,
+                tests_root=settings.tests_root,
+                templates_root=settings.templates_root,
+            )
+        if catalog == "playground":
+            return cls(
+                db,
+                catalog_name="playground",
+                requirements_root=settings.playground_requirements_root,
+                tests_root=settings.playground_tests_root,
+                templates_root=settings.playground_templates_root,
+            )
+        raise ValueError(f"Unknown catalog '{catalog}'")
+
+    def scan_entries(self) -> list[CatalogRequirementEntry]:
+        rows: list[CatalogRequirementEntry] = []
+        if not self.requirements_root.exists():
+            return rows
+
+        for requirement_dir in sorted(self.requirements_root.iterdir()):
             if not requirement_dir.is_dir():
                 continue
+
             requirement_id = requirement_dir.name
-            discovered_requirement_ids.add(requirement_id)
             requirements_path = requirement_dir / "requirements.md"
             prerequisites_path = requirement_dir / "prerequisites.md"
-            tests_path = self.settings.tests_root / requirement_id
+            tests_path = self.tests_root / requirement_id
             assets_path = requirement_dir / "assets"
             references_path = requirement_dir / "reference"
+
             if not requirements_path.exists():
                 continue
 
             requirements_md = requirements_path.read_text(encoding="utf-8")
-            title = self._extract_title(requirements_md, fallback=requirement_id)
-            summary = self._extract_summary(requirements_md)
-            total_tests = len(list(tests_path.glob("*.spec.ts"))) if tests_path.exists() else 0
-            module_count = sum(1 for line in requirements_md.splitlines() if line.startswith("## REQ-"))
+            rows.append(
+                CatalogRequirementEntry(
+                    id=requirement_id,
+                    title=self._extract_title(requirements_md, fallback=requirement_id),
+                    category="web",
+                    summary=self._extract_summary(requirements_md),
+                    test_runner="playwright",
+                    total_tests=len(list(tests_path.glob("*.spec.ts"))) if tests_path.exists() else 0,
+                    module_count=sum(1 for line in requirements_md.splitlines() if line.startswith("## REQ-")),
+                    requirements_path=requirements_path,
+                    prerequisites_path=prerequisites_path,
+                    tests_path=tests_path,
+                    assets_path=assets_path,
+                    references_path=references_path,
+                    templates_root=self.templates_root,
+                )
+            )
 
-            existing = self.db.get(Requirement, requirement_id)
+        return rows
+
+    def sync_to_db(self, requirement_id: str | None = None) -> None:
+        for entry in self.scan_entries():
+            if requirement_id and entry.id != requirement_id:
+                continue
+
+            existing = self.db.get(Requirement, entry.id)
             data = {
-                "title": title,
-                "category": "web",
-                "summary": summary,
-                "test_runner": "playwright",
-                "requirements_path": str(requirements_path),
-                "prerequisites_path": str(prerequisites_path),
-                "tests_path": str(tests_path),
-                "assets_path": str(assets_path),
-                "references_path": str(references_path),
-                "total_tests": total_tests,
-                "module_count": module_count,
+                "title": entry.title,
+                "category": entry.category,
+                "summary": entry.summary,
+                "test_runner": entry.test_runner,
+                "requirements_path": str(entry.requirements_path),
+                "prerequisites_path": str(entry.prerequisites_path),
+                "tests_path": str(entry.tests_path),
+                "assets_path": str(entry.assets_path),
+                "references_path": str(entry.references_path),
+                "total_tests": entry.total_tests,
+                "module_count": entry.module_count,
             }
             if existing:
                 for key, value in data.items():
                     setattr(existing, key, value)
             else:
-                self.db.add(Requirement(id=requirement_id, **data))
-
-        existing_rows = self.db.scalars(select(Requirement).where(Requirement.category == "web")).all()
-        for row in existing_rows:
-            if row.id not in discovered_requirement_ids:
-                self.db.delete(row)
+                self.db.add(Requirement(id=entry.id, **data))
 
         self.db.commit()
 
     def list_requirements(self) -> list[RequirementSummary]:
-        self.sync()
-        rows = self._list_requirement_rows()
+        rows = self.scan_entries()
         display_ids = self._build_display_id_map(rows)
         return [self._to_requirement_summary(row, display_ids.get(row.id, row.id)) for row in rows]
 
     def get_requirement_detail(self, requirement_id: str, base_url: str) -> RequirementDetail:
-        self.sync()
-        rows = self._list_requirement_rows()
+        rows = self.scan_entries()
         display_ids = self._build_display_id_map(rows)
-        requirement = self._get_requirement(requirement_id)
-        requirements_path = Path(requirement.requirements_path)
-        requirements_markdown = requirements_path.read_text(encoding="utf-8")
-        requirements_yaml = self._read_requirement_yaml(requirements_path)
-        prerequisites_markdown = self._read_text_if_exists(Path(requirement.prerequisites_path))
+        requirement = self.get_entry(requirement_id, rows)
+        requirements_markdown = requirement.requirements_path.read_text(encoding="utf-8")
+        requirements_yaml = self._read_requirement_yaml(requirement.requirements_path)
+        prerequisites_markdown = self._read_text_if_exists(requirement.prerequisites_path)
+
         return RequirementDetail(
             id=requirement.id,
             display_id=display_ids.get(requirement.id, requirement.id),
@@ -99,14 +166,13 @@ class RequirementCatalogService:
             requirements_markdown=requirements_markdown,
             requirements_yaml=requirements_yaml,
             prerequisites_markdown=prerequisites_markdown,
-            assets_base_url=f"{base_url}/api/requirements/{requirement.id}/assets",
-            references_base_url=f"{base_url}/api/requirements/{requirement.id}/references",
+            assets_base_url=f"{base_url}/api/requirements/{requirement.id}/assets?catalog={self.catalog_name}",
+            references_base_url=f"{base_url}/api/requirements/{requirement.id}/references?catalog={self.catalog_name}",
         )
 
     def list_competitions(self) -> list[CompetitionSummary]:
-        self.sync()
-        rows = self._list_requirement_rows()
-        grouped: dict[str, list[Requirement]] = {}
+        rows = self.scan_entries()
+        grouped: dict[str, list[CatalogRequirementEntry]] = {}
         for row in rows:
             grouped.setdefault(row.category, []).append(row)
 
@@ -127,14 +193,16 @@ class RequirementCatalogService:
         return competitions
 
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
-        self.sync()
-        rows = self._list_requirement_rows()
+        rows = self.scan_entries()
         display_ids = self._build_display_id_map(rows)
         competition_tasks = [row for row in rows if row.category == competition_id]
         if not competition_tasks:
             raise LookupError(f"Competition '{competition_id}' not found")
 
-        tasks = [self._to_competition_task(row, base_url, is_public=False, display_id=display_ids.get(row.id, row.id)) for row in competition_tasks]
+        tasks = [
+            self._to_competition_task(row, base_url, is_public=False, display_id=display_ids.get(row.id, row.id))
+            for row in competition_tasks
+        ]
         return CompetitionDetail(
             id=competition_id,
             title=self._competition_title(competition_id),
@@ -148,15 +216,13 @@ class RequirementCatalogService:
         )
 
     def get_document(self, requirement_id: str, kind: str) -> str:
-        self.sync()
-        requirement = self._get_requirement(requirement_id)
-        path = Path(requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path)
+        requirement = self.get_entry(requirement_id)
+        path = requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path
         return self._read_text_if_exists(path)
 
     def get_asset_path(self, requirement_id: str, asset_kind: str, relative_path: str) -> Path:
-        self.sync()
-        requirement = self._get_requirement(requirement_id)
-        base_dir = Path(requirement.assets_path if asset_kind == "assets" else requirement.references_path)
+        requirement = self.get_entry(requirement_id)
+        base_dir = requirement.assets_path if asset_kind == "assets" else requirement.references_path
         if not base_dir.exists():
             raise FileNotFoundError(relative_path)
         target = (base_dir / relative_path).resolve()
@@ -165,63 +231,65 @@ class RequirementCatalogService:
         return target
 
     def build_public_task_bundle(self, requirement_id: str) -> tuple[bytes, str]:
-        self.sync()
-        requirement = self._get_requirement(requirement_id)
+        requirement = self.get_entry(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}.zip"
         entries = [
-            (Path(requirement.requirements_path), f"{requirement.id}/requirements.md"),
-            (Path(requirement.prerequisites_path), f"{requirement.id}/prerequisites.md"),
-            (Path(requirement.tests_path), f"{requirement.id}/tests"),
-            (Path(requirement.assets_path), f"{requirement.id}/demo/assets"),
-            (Path(requirement.references_path), f"{requirement.id}/demo/reference"),
+            (requirement.requirements_path, f"{requirement.id}/requirements.md"),
+            (requirement.prerequisites_path, f"{requirement.id}/prerequisites.md"),
+            (requirement.tests_path, f"{requirement.id}/tests"),
+            (requirement.assets_path, f"{requirement.id}/demo/assets"),
+            (requirement.references_path, f"{requirement.id}/demo/reference"),
         ]
-        requirement_yaml_path = self._resolve_requirement_yaml_path(Path(requirement.requirements_path))
+        requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
         if requirement_yaml_path.exists():
             entries.append((requirement_yaml_path, f"{requirement.id}/requirements.yaml"))
         return self._build_zip(entries, archive_name)
 
     def build_public_task_document(self, requirement_id: str, kind: str) -> tuple[bytes, str]:
-        self.sync()
-        requirement = self._get_requirement(requirement_id)
-        source = Path(requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path)
+        requirement = self.get_entry(requirement_id)
+        source = requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path
         return self._read_bytes_if_exists(source), source.name
 
     def build_public_task_tests_bundle(self, requirement_id: str) -> tuple[bytes, str]:
-        self.sync()
-        requirement = self._get_requirement(requirement_id)
+        requirement = self.get_entry(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}-tests.zip"
-        return self._build_zip([(Path(requirement.tests_path), f"{requirement.id}/tests")], archive_name)
+        return self._build_zip([(requirement.tests_path, f"{requirement.id}/tests")], archive_name)
 
     def build_public_task_demo_bundle(self, requirement_id: str) -> tuple[bytes, str]:
-        self.sync()
-        requirement = self._get_requirement(requirement_id)
+        requirement = self.get_entry(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}-demo.zip"
         return self._build_zip(
             [
-                (Path(requirement.assets_path), f"{requirement.id}/assets"),
-                (Path(requirement.references_path), f"{requirement.id}/reference"),
+                (requirement.assets_path, f"{requirement.id}/assets"),
+                (requirement.references_path, f"{requirement.id}/reference"),
             ],
             archive_name,
         )
 
     def build_public_competition_bundle(self) -> tuple[bytes, str]:
-        self.sync()
-        rows = self._list_requirement_rows()
+        rows = self.scan_entries()
         entries: list[tuple[Path, str]] = []
         for requirement in rows:
             entries.extend(
                 [
-                    (Path(requirement.requirements_path), f"public/{requirement.id}/requirements.md"),
-                    (Path(requirement.prerequisites_path), f"public/{requirement.id}/prerequisites.md"),
-                    (Path(requirement.tests_path), f"public/{requirement.id}/tests"),
-                    (Path(requirement.assets_path), f"public/{requirement.id}/demo/assets"),
-                    (Path(requirement.references_path), f"public/{requirement.id}/demo/reference"),
+                    (requirement.requirements_path, f"public/{requirement.id}/requirements.md"),
+                    (requirement.prerequisites_path, f"public/{requirement.id}/prerequisites.md"),
+                    (requirement.tests_path, f"public/{requirement.id}/tests"),
+                    (requirement.assets_path, f"public/{requirement.id}/demo/assets"),
+                    (requirement.references_path, f"public/{requirement.id}/demo/reference"),
                 ]
             )
-            requirement_yaml_path = self._resolve_requirement_yaml_path(Path(requirement.requirements_path))
+            requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
             if requirement_yaml_path.exists():
                 entries.append((requirement_yaml_path, f"public/{requirement.id}/requirements.yaml"))
         return self._build_zip(entries, "arcbench-public-competition.zip")
+
+    def get_entry(self, requirement_id: str, rows: list[CatalogRequirementEntry] | None = None) -> CatalogRequirementEntry:
+        entries = rows if rows is not None else self.scan_entries()
+        for entry in entries:
+            if entry.id == requirement_id:
+                return entry
+        raise LookupError(f"Requirement '{requirement_id}' not found")
 
     def _build_zip(self, entries: list[tuple[Path, str]], archive_name: str) -> tuple[bytes, str]:
         buffer = io.BytesIO()
@@ -237,10 +305,7 @@ class RequirementCatalogService:
                     archive.write(source, arcname=target)
         return buffer.getvalue(), archive_name
 
-    def _list_requirement_rows(self) -> list[Requirement]:
-        return self.db.scalars(select(Requirement).order_by(Requirement.category, Requirement.id)).all()
-
-    def _to_requirement_summary(self, row: Requirement, display_id: str) -> RequirementSummary:
+    def _to_requirement_summary(self, row: CatalogRequirementEntry, display_id: str) -> RequirementSummary:
         return RequirementSummary(
             id=row.id,
             display_id=display_id,
@@ -252,7 +317,13 @@ class RequirementCatalogService:
             module_count=row.module_count,
         )
 
-    def _to_competition_task(self, row: Requirement, base_url: str, is_public: bool, display_id: str) -> CompetitionTaskSummary:
+    def _to_competition_task(
+        self,
+        row: CatalogRequirementEntry,
+        base_url: str,
+        is_public: bool,
+        display_id: str,
+    ) -> CompetitionTaskSummary:
         downloads = None
         if is_public:
             downloads = CompetitionTaskDownloadLinks(
@@ -275,8 +346,8 @@ class RequirementCatalogService:
         )
 
     @staticmethod
-    def _build_display_id_map(rows: list[Requirement]) -> dict[str, str]:
-        grouped: dict[str, list[Requirement]] = {}
+    def _build_display_id_map(rows: list[CatalogRequirementEntry]) -> dict[str, str]:
+        grouped: dict[str, list[CatalogRequirementEntry]] = {}
         for row in rows:
             grouped.setdefault(row.category, []).append(row)
 
@@ -285,12 +356,6 @@ class RequirementCatalogService:
             for index, row in enumerate(items, start=1):
                 display_ids[row.id] = f"TASK-{index:03d}"
         return display_ids
-
-    def _get_requirement(self, requirement_id: str) -> Requirement:
-        requirement = self.db.get(Requirement, requirement_id)
-        if not requirement:
-            raise LookupError(f"Requirement '{requirement_id}' not found")
-        return requirement
 
     @staticmethod
     def _resolve_requirement_yaml_path(requirements_path: Path) -> Path:

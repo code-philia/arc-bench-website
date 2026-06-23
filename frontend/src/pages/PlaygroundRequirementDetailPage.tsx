@@ -1,7 +1,7 @@
 import { message } from "antd";
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
@@ -41,8 +41,10 @@ function taskTypeLabel(value: string) {
 export default function PlaygroundRequirementDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "12306" } = useParams();
   const taskType = normalizeTaskType(rawTaskType);
+  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const catalog = location.pathname.startsWith("/requirements/") ? "competition" : "playground";
   const [requirement, setRequirement] = useState<RequirementDetail | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState("readme");
@@ -71,7 +73,7 @@ export default function PlaygroundRequirementDetailPage() {
   useEffect(() => {
     setLoading(true);
     api
-      .getRequirement(requirementId)
+      .getRequirement(requirementId, catalog)
       .then((detail) => {
         setRequirement(detail);
         if (!user) {
@@ -85,7 +87,7 @@ export default function PlaygroundRequirementDetailPage() {
         setRequirement(null);
       })
       .finally(() => setLoading(false));
-  }, [requirementId, user]);
+  }, [catalog, requirementId, user]);
 
   useEffect(() => {
     if (!user) {
@@ -144,7 +146,7 @@ export default function PlaygroundRequirementDetailPage() {
       return;
     }
     if (!user) {
-      navigate("/login", { state: { from: `/playground/task-bank/${taskType}/${requirement.id}` } });
+      navigate("/login", { state: { from: location.pathname } });
       return;
     }
     const normalizedDisplayName = displayName.trim();
@@ -163,7 +165,7 @@ export default function PlaygroundRequirementDetailPage() {
     }
     try {
       setUploadError(null);
-      const created = await api.createSubmission(requirement.id, runtime, file, normalizedDisplayName, normalizedModelName);
+      const created = await api.createSubmission(requirement.id, runtime, file, normalizedDisplayName, normalizedModelName, catalog);
       setSubmissions((current) => [created.submission, ...current]);
       const started = await api.startSubmission(created.submission.id);
       setActiveSubmission(started);
@@ -201,13 +203,25 @@ export default function PlaygroundRequirementDetailPage() {
         <section className="readme-panel">
           <div className="readme-header">
             <div className="breadcrumb">
-              <span>Playground</span>
-              <span className="sep">/</span>
-              <span>Task Bank</span>
-              <span className="sep">/</span>
-              <Link to={`/playground/task-bank/${taskType}`}>{taskTypeLabel(taskType)}</Link>
-              <span className="sep">/</span>
-              <span className="current">{requirement.display_id} - {requirement.title}</span>
+              {catalog === "competition" ? (
+                <>
+                  <span>Competition</span>
+                  <span className="sep">/</span>
+                  <Link to="/requirements">Task Bank</Link>
+                  <span className="sep">/</span>
+                  <span className="current">{requirement.display_id} - {requirement.title}</span>
+                </>
+              ) : (
+                <>
+                  <span>Playground</span>
+                  <span className="sep">/</span>
+                  <span>Task Bank</span>
+                  <span className="sep">/</span>
+                  <Link to={`/playground/task-bank/${taskType}`}>{taskTypeLabel(taskType)}</Link>
+                  <span className="sep">/</span>
+                  <span className="current">{requirement.display_id} - {requirement.title}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="doc-tabs">

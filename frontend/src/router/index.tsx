@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
       { path: "register", element: <RegisterPage /> },
       { path: "requirements", element: <RequirementsPage /> },
       { path: "api-doc", element: <ApiDocPage /> },
-      { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },
+      { path: "competitions/:taskType", element: <CompetitionDetailPage /> },
       { path: "requirements/:requirementId", element: <PlaygroundRequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },

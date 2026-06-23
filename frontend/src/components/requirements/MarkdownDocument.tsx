@@ -46,6 +46,34 @@ export function extractHeadings(markdown: string): Heading[] {
     });
 }
 
+function joinResourceUrl(baseUrl: string, relativePath: string) {
+  if (!baseUrl) {
+    return relativePath;
+  }
+
+  const [basePath, query = ""] = baseUrl.split("?");
+  const normalizedBasePath = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  const normalizedRelativePath = relativePath.replace(/^\/+/, "");
+  return query
+    ? `${normalizedBasePath}${normalizedRelativePath}?${query}`
+    : `${normalizedBasePath}${normalizedRelativePath}`;
+}
+
+function rewriteResourceLinks(markdown: string, resourceDir: "assets" | "reference", baseUrl: string) {
+  if (!baseUrl) {
+    return markdown;
+  }
+
+  const patterns = resourceDir === "assets"
+    ? [/\(\.\/assets\/([^)]+)\)/g, /\(assets\/([^)]+)\)/g]
+    : [/\(\.\/reference\/([^)]+)\)/g, /\(reference\/([^)]+)\)/g];
+
+  return patterns.reduce(
+    (content, pattern) => content.replace(pattern, (_match, relativePath: string) => `(${joinResourceUrl(baseUrl, relativePath)})`),
+    markdown,
+  );
+}
+
 export default function MarkdownDocument({
   markdown,
   assetsBaseUrl,
@@ -55,15 +83,11 @@ export default function MarkdownDocument({
   assetsBaseUrl: string;
   referencesBaseUrl: string;
 }) {
-  let rewrittenMarkdown = markdown;
-  if (referencesBaseUrl) {
-    rewrittenMarkdown = rewrittenMarkdown.replaceAll("(./reference/", `(${referencesBaseUrl}/`);
-  }
-  if (assetsBaseUrl) {
-    rewrittenMarkdown = rewrittenMarkdown
-      .replaceAll("(./assets/", `(${assetsBaseUrl}/`)
-      .replaceAll("(assets/", `(${assetsBaseUrl}/`);
-  }
+  const rewrittenMarkdown = rewriteResourceLinks(
+    rewriteResourceLinks(markdown, "reference", referencesBaseUrl),
+    "assets",
+    assetsBaseUrl,
+  );
 
   return (
     <div className="readme-content">

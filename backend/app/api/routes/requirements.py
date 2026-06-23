@@ -13,20 +13,23 @@ competition_router = APIRouter(prefix="/competitions", tags=["competitions"])
 
 
 @router.get("", response_model=list[RequirementSummary])
-def list_requirements(db: Session = Depends(get_db)) -> list[RequirementSummary]:
-    service = RequirementCatalogService(db)
+def list_requirements(
+    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    db: Session = Depends(get_db),
+) -> list[RequirementSummary]:
+    service = RequirementCatalogService.for_catalog(db, catalog)
     return service.list_requirements()
 
 
 @competition_router.get("", response_model=list[CompetitionSummary])
 def list_competitions(db: Session = Depends(get_db)) -> list[CompetitionSummary]:
-    service = RequirementCatalogService(db)
+    service = RequirementCatalogService.for_catalog(db, "competition")
     return service.list_competitions()
 
 
 @competition_router.get("/{competition_id}", response_model=CompetitionDetail)
 def get_competition(competition_id: str, request: Request, db: Session = Depends(get_db)) -> CompetitionDetail:
-    service = RequirementCatalogService(db)
+    service = RequirementCatalogService.for_catalog(db, "competition")
     try:
         return service.get_competition_detail(competition_id, str(request.base_url).rstrip("/"))
     except LookupError as exc:
@@ -35,7 +38,7 @@ def get_competition(competition_id: str, request: Request, db: Session = Depends
 
 @competition_router.get("/public/download")
 def download_public_competition(db: Session = Depends(get_db)) -> Response:
-    service = RequirementCatalogService(db)
+    service = RequirementCatalogService.for_catalog(db, "competition")
     content, filename = service.build_public_competition_bundle()
     return Response(
         content=content,
@@ -46,7 +49,7 @@ def download_public_competition(db: Session = Depends(get_db)) -> Response:
 
 @competition_router.get("/public/tasks/{requirement_id}/download/{download_kind}")
 def download_public_task(requirement_id: str, download_kind: str, db: Session = Depends(get_db)) -> Response:
-    service = RequirementCatalogService(db)
+    service = RequirementCatalogService.for_catalog(db, "competition")
     try:
         if download_kind == "requirements":
             content, filename = service.build_public_task_document(requirement_id, "requirements")
@@ -88,8 +91,13 @@ def download_demo_agent() -> FileResponse:
 
 
 @router.get("/{requirement_id}", response_model=RequirementDetail)
-def get_requirement(requirement_id: str, request: Request, db: Session = Depends(get_db)) -> RequirementDetail:
-    service = RequirementCatalogService(db)
+def get_requirement(
+    requirement_id: str,
+    request: Request,
+    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    db: Session = Depends(get_db),
+) -> RequirementDetail:
+    service = RequirementCatalogService.for_catalog(db, catalog)
     try:
         return service.get_requirement_detail(requirement_id, str(request.base_url).rstrip("/"))
     except LookupError as exc:
@@ -100,9 +108,10 @@ def get_requirement(requirement_id: str, request: Request, db: Session = Depends
 def get_document(
     requirement_id: str,
     kind: str = Query(pattern="^(requirements|prerequisites)$"),
+    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
     db: Session = Depends(get_db),
 ) -> PlainTextResponse:
-    service = RequirementCatalogService(db)
+    service = RequirementCatalogService.for_catalog(db, catalog)
     try:
         return PlainTextResponse(service.get_document(requirement_id, kind))
     except LookupError as exc:
@@ -110,10 +119,16 @@ def get_document(
 
 
 @router.get("/{requirement_id}/{asset_kind}/{asset_path:path}")
-def get_asset(requirement_id: str, asset_kind: str, asset_path: str, db: Session = Depends(get_db)) -> FileResponse:
+def get_asset(
+    requirement_id: str,
+    asset_kind: str,
+    asset_path: str,
+    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    db: Session = Depends(get_db),
+) -> FileResponse:
     if asset_kind not in {"assets", "references"}:
         raise HTTPException(status_code=404, detail="Unknown asset kind")
-    service = RequirementCatalogService(db)
+    service = RequirementCatalogService.for_catalog(db, catalog)
     try:
         return FileResponse(service.get_asset_path(requirement_id, asset_kind, asset_path))
     except LookupError as exc:

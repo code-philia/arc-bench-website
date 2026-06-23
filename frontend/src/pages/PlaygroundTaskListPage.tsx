@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../lib/api";
 import type { RequirementSummary } from "../lib/types";
@@ -35,6 +35,24 @@ function typeSummary(type: PlaygroundTaskType, taskCount: number) {
   return `Mixed benchmark tasks discovered from arc-bench, with ${taskCount} task${taskCount === 1 ? "" : "s"} currently available.`;
 }
 
+function sourceLabel(isCompetitionRoute: boolean) {
+  return isCompetitionRoute ? "arc-bench" : "arc-bench-playground";
+}
+
+function typeSummaryForSource(type: PlaygroundTaskType, taskCount: number, isCompetitionRoute: boolean) {
+  const source = sourceLabel(isCompetitionRoute);
+  if (type === "web") {
+    return `Interactive benchmark tasks discovered from ${source} for the web track, with ${taskCount} task${taskCount === 1 ? "" : "s"} currently available.`;
+  }
+  if (type === "mobile") {
+    return `Mobile benchmark tasks discovered from ${source}, with ${taskCount} task${taskCount === 1 ? "" : "s"} currently available.`;
+  }
+  if (type === "kernel") {
+    return `Kernel and operator style tasks discovered from ${source}, with ${taskCount} task${taskCount === 1 ? "" : "s"} currently available.`;
+  }
+  return `Mixed benchmark tasks discovered from ${source}, with ${taskCount} task${taskCount === 1 ? "" : "s"} currently available.`;
+}
+
 function normalizeTaskType(value: string): PlaygroundTaskType | null {
   if (value === "web" || value === "mobile" || value === "kernel" || value === "mixed") {
     return value;
@@ -44,8 +62,10 @@ function normalizeTaskType(value: string): PlaygroundTaskType | null {
 
 export default function PlaygroundTaskListPage() {
   const { taskType: rawTaskType = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const taskType = normalizeTaskType(rawTaskType);
+  const isCompetitionRoute = location.pathname.startsWith("/competitions/");
+  const taskType = normalizeTaskType(isCompetitionRoute ? rawTaskType || "web" : rawTaskType);
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const quickStart = useQuickStart();
@@ -62,11 +82,11 @@ export default function PlaygroundTaskListPage() {
     }
 
     api
-      .listRequirements()
+      .listRequirements(isCompetitionRoute ? "competition" : "playground")
       .then(setRequirements)
       .catch(() => setRequirements([]))
       .finally(() => setLoading(false));
-  }, [taskType]);
+  }, [isCompetitionRoute, taskType]);
 
   const tasks = useMemo(() => {
     if (!taskType) {
@@ -119,15 +139,27 @@ export default function PlaygroundTaskListPage() {
         <section className="competition-detail-hero">
           <div className="competition-detail-copy">
             <div className="breadcrumb">
-              <span>Playground</span>
-              <span className="sep">/</span>
-              <span>Task Bank</span>
-              <span className="sep">/</span>
-              <span className="current">{typeLabel(taskType)}</span>
+              {isCompetitionRoute ? (
+                <>
+                  <span>Competition</span>
+                  <span className="sep">/</span>
+                  <span>Task Bank</span>
+                  <span className="sep">/</span>
+                  <span className="current">{typeLabel(taskType)}</span>
+                </>
+              ) : (
+                <>
+                  <span>Playground</span>
+                  <span className="sep">/</span>
+                  <span>Task Bank</span>
+                  <span className="sep">/</span>
+                  <span className="current">{typeLabel(taskType)}</span>
+                </>
+              )}
             </div>
             <div className="competition-type-chip large">{typeChipLabel(taskType)}</div>
             <h1>{typeLabel(taskType)}</h1>
-            <p>{typeSummary(taskType, tasks.length)}</p>
+            <p>{typeSummaryForSource(taskType, tasks.length, isCompetitionRoute)}</p>
           </div>
           <div className="competition-detail-side">
             <div className="competition-stat-panel">
@@ -141,7 +173,7 @@ export default function PlaygroundTaskListPage() {
               </div>
               <div className="competition-stat-row">
                 <span>Source</span>
-                <strong>arc-bench</strong>
+                <strong>{sourceLabel(isCompetitionRoute)}</strong>
               </div>
             </div>
           </div>
@@ -167,12 +199,12 @@ export default function PlaygroundTaskListPage() {
                   <tr
                     key={task.id}
                     data-quickstart-id={index === 0 ? "quickstart-task-item" : undefined}
-                    onClick={() => navigate(`/playground/task-bank/${taskType}/${task.id}`)}
+                    onClick={() => navigate(isCompetitionRoute ? `/requirements/${task.id}` : `/playground/task-bank/${taskType}/${task.id}`)}
                   >
                     <td className="task-id">{task.display_id}</td>
                     <td>
                       <div className="task-name">
-                        <Link className="inline-link" to={`/playground/task-bank/${taskType}/${task.id}`}>
+                        <Link className="inline-link" to={isCompetitionRoute ? `/requirements/${task.id}` : `/playground/task-bank/${taskType}/${task.id}`}>
                           {task.title}
                         </Link>
                         <span className="sub">{task.summary}</span>

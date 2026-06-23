@@ -39,7 +39,8 @@ class WorkspaceAssembler:
             archive.extractall(submission_dir)
 
         self._flatten_single_root(submission_dir)
-        shutil.copytree(self.settings.templates_root, template_dir, dirs_exist_ok=True)
+        template_source_root = Path(requirement.requirements_path).resolve().parents[2] / "template"
+        shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
         shutil.copytree(Path(requirement.assets_path), task_dir / "assets", dirs_exist_ok=True)
         shutil.copytree(Path(requirement.references_path), task_dir / "reference", dirs_exist_ok=True)
         requirement_markdown_path = Path(requirement.requirements_path)

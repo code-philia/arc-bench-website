@@ -16,6 +16,7 @@ from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
 from app.schemas.submission import StepState, SubmissionDetail, SubmissionSummary, SubmissionVisualEvent
+from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 
 
@@ -59,6 +60,7 @@ class SubmissionService:
         runtime: RuntimeType,
         upload: UploadFile,
         user_id: str,
+        catalog: str = "playground",
         display_name: str | None = None,
         model_name: str | None = None,
     ) -> Submission:
@@ -67,6 +69,7 @@ class SubmissionService:
         if runtime != RuntimeType.PYTHON:
             raise ValueError("Only Python submissions are supported in v1")
 
+        RequirementCatalogService.for_catalog(self.db, catalog).sync_to_db(requirement_id)
         requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")

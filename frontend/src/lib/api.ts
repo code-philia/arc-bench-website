@@ -108,11 +108,11 @@ export const api = {
       ?.[1] ?? "demo_agent.zip";
     return new File([blob], filename, { type: "application/zip" });
   },
-  listRequirements() {
-    return request<RequirementSummary[]>("/requirements");
+  listRequirements(catalog: "playground" | "competition" = "playground") {
+    return request<RequirementSummary[]>(`/requirements?catalog=${catalog}`);
   },
-  getRequirement(requirementId: string) {
-    return request<RequirementDetail>(`/requirements/${requirementId}`);
+  getRequirement(requirementId: string, catalog: "playground" | "competition" = "playground") {
+    return request<RequirementDetail>(`/requirements/${requirementId}?catalog=${catalog}`);
   },
   listSubmissions(requirementId?: string) {
     const query = requirementId ? `?requirement_id=${encodeURIComponent(requirementId)}` : "";
@@ -133,10 +133,12 @@ export const api = {
     file: File,
     displayName?: string,
     modelName?: string,
+    catalog: "playground" | "competition" = "playground",
   ) {
     const form = new FormData();
     form.append("requirement_id", requirementId);
     form.append("runtime", runtime);
+    form.append("catalog", catalog);
     if (displayName && displayName.trim()) {
       form.append("display_name", displayName.trim());
     }

@@ -34,6 +34,7 @@ def list_submissions(
 def create_submission(
     requirement_id: str = Form(...),
     runtime: RuntimeType = Form(...),
+    catalog: str = Form(default="playground"),
     display_name: str | None = Form(None),
     model_name: str | None = Form(None),
     file: UploadFile = File(...),
@@ -46,6 +47,7 @@ def create_submission(
             runtime,
             file,
             user_id=current_user.id,
+            catalog=catalog,
             display_name=display_name,
             model_name=model_name,
         )
