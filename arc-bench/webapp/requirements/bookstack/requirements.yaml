@@ -1,0 +1,656 @@
+id: REQ-ROOT
+name: BookStack Knowledge Base System (Demo)
+type: FOLDER
+description: Web-based knowledge base/document management system, completing the construction
+  of front-end and back-end infrastructure.
+dependencies: []
+children:
+- id: REQ-1
+  name: BookStack Homepage
+  type: FOLDER
+  description: Defaults to the homepage, including the top navigation bar, search
+    box, and other activities and quick entry points that need to be displayed. Reference
+    image ![image](./reference/index.png)
+  dependencies: []
+  children:
+  - id: REQ-1.1
+    name: Open Homepage
+    description: Open the system and enter the homepage.
+    dependencies: []
+    scenario:
+    - keyword: GIVEN
+      content: System is accessible.
+    - keyword: WHEN
+      content: Open the system
+    - keyword: THEN
+      content: Defaults to the homepage
+    type: ATOMIC
+  - id: REQ-1.2
+    name: Back to homepage from other pages
+    description: Click the logo to return to the homepage.
+    dependencies:
+    - REQ-1.1
+    scenario:
+    - keyword: GIVEN
+      content: User is on a non-homepage page and the top navigation bar is visible.
+    - keyword: WHEN
+      content: Click the 'BookStack' logo on the top left of the navigation bar from
+        other pages
+    - keyword: THEN
+      content: Redirect to the homepage
+    type: ATOMIC
+- id: REQ-2
+  name: User Authentication and Session Module
+  type: FOLDER
+  description: Provides login entry and session state, recording the login status.
+    Login page ![image](./reference/login.png) Homepage after login ![image](./reference/index_after_login.png)
+  dependencies:
+  - REQ-1
+  children:
+  - id: REQ-2.1
+    name: Enter Login Page
+    description: Navigate to the login form.
+    dependencies:
+    - REQ-1.1
+    scenario:
+    - keyword: GIVEN
+      content: User is on the homepage and is not logged in.
+    - keyword: WHEN
+      content: Click 'Login' on the right side of the homepage navigation bar
+    - keyword: THEN
+      content: Redirect to the login form page.
+    type: ATOMIC
+  - id: REQ-2.2
+    name: Login successful and enter homepage after login
+    description: Fill in credentials and log in.
+    dependencies:
+    - REQ-2.1
+    scenario:
+    - keyword: GIVEN
+      content: User is on the login form page.
+    - keyword: WHEN
+      content: Enter valid email and password, check 'Remember Me', and click Login
+    - keyword: THEN
+      content: Redirect to the homepage, with the user nickname displayed in the upper
+        right corner
+    type: ATOMIC
+- id: REQ-3
+  name: Homepage after login (Dashboard) module
+  type: FOLDER
+  description: Displays overview information after login, including recent drafts,
+    recent views, most viewed favorites, recently updated pages, and recent activity
+    stream, and provides a dark mode switch (placeholder implementation). Reference
+    image ![image](./reference/index_after_login.png)
+  dependencies:
+  - REQ-2
+  children:
+  - id: REQ-3.1
+    name: Enter homepage after login
+    description: View the dashboard layout after login.
+    dependencies:
+    - REQ-2.2
+    scenario:
+    - keyword: GIVEN
+      content: User has logged in successfully.
+    - keyword: WHEN
+      content: Redirect after successful login
+    - keyword: THEN
+      content: Display dashboard layout and multiple information cards.
+    type: ATOMIC
+- id: REQ-4
+  name: Shelves Module
+  type: FOLDER
+  description: Shelves serve as the top-level container for content organization,
+    including name, description, books, and tag attributes; support viewing shelf
+    lists, entering shelf details, editing shelves, and deleting shelves (with confirmation
+    page/box). Shelf list page ![image](./reference/shelves.png)
+  dependencies:
+  - REQ-1
+  children:
+  - id: REQ-4.1
+    name: View Shelf List
+    description: Navigate to the shelf list page.
+    dependencies:
+    - REQ-1.1
+    scenario:
+    - keyword: GIVEN
+      content: User is on a page with the top navigation bar visible.
+    - keyword: WHEN
+      content: Click Shelves at the top
+    - keyword: THEN
+      content: Enter the shelf list page.
+    type: ATOMIC
+  - id: REQ-4.2
+    name: Shelf Details Page
+    type: FOLDER
+    description: Displays detailed information for a shelf, including book lists and
+      related Actions. Reference image ![image](./reference/shelf.png)
+    dependencies:
+    - REQ-4.1
+    children:
+    - id: REQ-4.2.1
+      name: Enter Shelf Details Page
+      description: Click a shelf to view its details.
+      dependencies:
+      - REQ-4.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf list page and at least one shelf is displayed.
+      - keyword: WHEN
+        content: Click on any shelf on the shelf list page
+      - keyword: THEN
+        content: Enter the shelf details page
+      type: ATOMIC
+  - id: REQ-4.3
+    name: Create New Shelf
+    type: FOLDER
+    description: Create a new shelf. Type in name, description, and tags. Reference
+      image ![image](./reference/create_shelf.png)
+    dependencies:
+    - REQ-4.2
+    children:
+    - id: REQ-4.3.1
+      name: Create Shelf
+      description: Fill out the form and save the shelf.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf details page and can see the Actions list.
+      - keyword: WHEN
+        content: Click 'new shelf', enter name, description, add tags, and click 'Save
+          Shelf'
+      - keyword: THEN
+        content: Save the shelf and display it on the shelf list page
+      type: ATOMIC
+    - id: REQ-4.3.2
+      name: Cancel Creation
+      description: Cancel the shelf creation process.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the create shelf page.
+      - keyword: WHEN
+        content: On the create shelf page, click the 'Cancel' button below
+      - keyword: THEN
+        content: Cancel shelf creation and return to the shelf list page
+      type: ATOMIC
+  - id: REQ-4.4
+    name: Delete Shelf
+    type: FOLDER
+    description: The current shelf can be deleted from the shelf details page. Double
+      confirmation is required. Confirmation page ![image](./reference/delete_shelves.png)
+    dependencies:
+    - REQ-4.2
+    children:
+    - id: REQ-4.4.1
+      name: Confirm Delete Shelf
+      description: Confirm the deletion of a shelf.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf details page and can see the Actions list.
+      - keyword: WHEN
+        content: Click 'Delete' in Actions, then click 'Confirm' on the Delete Shelf
+          confirmation page
+      - keyword: THEN
+        content: Delete the shelf and redirect to the shelf list page
+      type: ATOMIC
+    - id: REQ-4.4.2
+      name: Cancel Delete Shelf
+      description: Cancel the deletion of a shelf.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the Delete Shelf confirmation page.
+      - keyword: WHEN
+        content: Click 'Cancel'
+      - keyword: THEN
+        content: Cancel deletion and return to the shelf details page
+      type: ATOMIC
+  - id: REQ-4.5
+    name: Edit Shelf
+    type: FOLDER
+    description: Edit shelf, enter new name and description, add or remove books and
+      tags. Shelf edit page ![image](./reference/edit_shelve.png)
+    dependencies:
+    - REQ-4.2
+    children:
+    - id: REQ-4.5.1
+      name: Save Shelf Edits
+      description: Modify shelf information and save.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf details page and can see the Actions list.
+      - keyword: WHEN
+        content: Click 'Edit', enter new information on the shelf edit page, and click
+          'Save Shelf'
+      - keyword: THEN
+        content: Modify shelf information and return to the shelf details page
+      type: ATOMIC
+    - id: REQ-4.5.2
+      name: Cancel Shelf Edits
+      description: Cancel editing the shelf.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf edit page.
+      - keyword: WHEN
+        content: Click 'Cancel'
+      - keyword: THEN
+        content: Cancel modifications and return to the shelf details page
+      type: ATOMIC
+- id: REQ-5
+  name: Books Module
+  type: FOLDER
+  description: 'Books contain attributes such as name, description, chapters, and
+    pages. Book list page: ![image](./reference/books.png)'
+  dependencies:
+  - REQ-1
+  children:
+  - id: REQ-5.1
+    name: View Books List
+    description: Navigate to the Books list page.
+    dependencies:
+    - REQ-1.1
+    scenario:
+    - keyword: GIVEN
+      content: User is on a page with the top navigation bar visible.
+    - keyword: WHEN
+      content: Click Books at the top
+    - keyword: THEN
+      content: Enter the Books list page, displaying a grid of book cards and Actions
+        on the right.
+    type: ATOMIC
+  - id: REQ-5.2
+    name: Book Details Page
+    type: FOLDER
+    description: Enter the book details page through the book list, homepage books,
+      shelves, etc., to display detailed book information. Book details page ![image](./reference/book.png)
+    dependencies:
+    - REQ-5.1
+    children:
+    - id: REQ-5.2.1
+      name: Enter Book Details Page through Book List Page
+      description: Click a book from the book list.
+      dependencies:
+      - REQ-5.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book list page and at least one book card is displayed.
+      - keyword: WHEN
+        content: Click on any book on the book list page
+      - keyword: THEN
+        content: Enter the details page of the corresponding book
+      type: ATOMIC
+    - id: REQ-5.2.2
+      name: Enter Book Details Page through Shelf Details Page
+      description: Click a book from the shelf details.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf details page and at least one book is listed.
+      - keyword: WHEN
+        content: Click on any book in the shelf details page
+      - keyword: THEN
+        content: Enter the details page of the corresponding book
+      type: ATOMIC
+  - id: REQ-5.3
+    name: Create Book in Book List Page
+    type: FOLDER
+    description: 'Create a book on the book list page, providing a Create Book form:
+      Name, Description (rich text), with expandable Cover image / Book Tags / Default
+      Page Template. Reference image ![image](./reference/create_book.png)'
+    dependencies:
+    - REQ-5.1
+    children:
+    - id: REQ-5.3.1
+      name: Fill out and Save Book
+      description: Create a book from the list page.
+      dependencies:
+      - REQ-5.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book list page and can see the Actions panel on the
+          right.
+      - keyword: WHEN
+        content: Click 'Create New Book', fill in required fields, optionally set
+          cover/tags/template, and click Save Book
+      - keyword: THEN
+        content: Success prompt; redirect to the new Book details page or Books list.
+      type: ATOMIC
+    - id: REQ-5.3.2
+      name: Cancel Creating Book
+      description: Cancel the book creation process.
+      dependencies:
+      - REQ-5.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the Create New Book page.
+      - keyword: WHEN
+        content: Click Cancel
+      - keyword: THEN
+        content: Return to the previous page; do not create a new Book.
+      type: ATOMIC
+  - id: REQ-5.4
+    name: Edit Book
+    type: FOLDER
+    description: Books can be edited on the book details page to modify various attributes.
+      Reference image ![image](./reference/edit_book.png)
+    dependencies:
+    - REQ-5.2
+    children:
+    - id: REQ-5.4.1
+      name: Save Book Edits
+      description: Edit book details and save.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book details page and can see the Actions list.
+      - keyword: WHEN
+        content: Click 'Edit', modify book attributes on the edit page, and click
+          'Save Book'
+      - keyword: THEN
+        content: Save book attributes and return to the book details page
+      type: ATOMIC
+    - id: REQ-5.4.2
+      name: Cancel Book Edits
+      description: Cancel book edits.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book edit page.
+      - keyword: WHEN
+        content: Click 'Cancel'
+      - keyword: THEN
+        content: Cancel editing and return to the book details page
+      type: ATOMIC
+  - id: REQ-5.5
+    name: Delete Book
+    type: FOLDER
+    description: The current book can be deleted on the book details page. Double
+      confirmation is required. Confirmation page ![image](./reference/delete_book.png)
+    dependencies:
+    - REQ-5.2
+    children:
+    - id: REQ-5.5.1
+      name: Confirm Delete Book
+      description: Delete the book.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book details page and can see the Actions list.
+      - keyword: WHEN
+        content: Click 'Delete', then click 'Confirm' on the confirmation page
+      - keyword: THEN
+        content: Delete book and return to the book list page
+      type: ATOMIC
+    - id: REQ-5.5.2
+      name: Cancel Delete Book
+      description: Cancel deleting the book.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the confirmation delete page.
+      - keyword: WHEN
+        content: Click 'Cancel'
+      - keyword: THEN
+        content: Cancel deletion and return to the book details page
+      type: ATOMIC
+  - id: REQ-5.6
+    name: Create Book from Shelf Details Page
+    type: FOLDER
+    description: On the shelf details page, create a book directly within the shelf.
+      The created book is automatically associated with the shelf.
+    dependencies:
+    - REQ-4.2
+    children:
+    - id: REQ-5.6.1
+      name: Fill out and Save Book with Shelf
+      description: Create a book associated with a shelf.
+      dependencies:
+      - REQ-4.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the shelf details page and can see the Actions list.
+      - keyword: WHEN
+        content: Click 'Create New Book', fill in required fields, and click Save
+          Book
+      - keyword: THEN
+        content: Success prompt; redirect to Books list, with the new Book associated
+          with the current shelf.
+      type: ATOMIC
+- id: REQ-6
+  name: Pages and Chapters Module
+  type: FOLDER
+  description: Pages are the basic units of a book; chapters can combine multiple
+    pages, and chapters can also be added within chapters.
+  dependencies:
+  - REQ-5
+  children:
+  - id: REQ-6.1
+    name: Page Edit Page
+    type: FOLDER
+    description: Create a new page on the book details page. Page edit page ![image](./reference/page_draft.png)
+      Delete draft confirmation page ![image](./reference/delete_draft.png)
+    dependencies:
+    - REQ-5.2
+    children:
+    - id: REQ-6.1.1
+      name: Save Page
+      description: Create and save a new page.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book details page.
+      - keyword: WHEN
+        content: Click 'New Page', enter page name and content, and click 'Save Page'
+      - keyword: THEN
+        content: Save the page, add it to the book, and return to the book details
+          page
+      type: ATOMIC
+    - id: REQ-6.1.2
+      name: Save Draft
+      description: Save a page as draft.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the page draft page.
+      - keyword: WHEN
+        content: Enter content, press Ctrl+S, click 'Draft saved at', and click 'Save
+          Draft'
+      - keyword: THEN
+        content: Save draft and display it in the 'My Recent Drafts' list on the homepage
+      type: ATOMIC
+    - id: REQ-6.1.3
+      name: Delete Draft
+      description: Delete an existing draft.
+      dependencies:
+      - REQ-6.1.2
+      scenario:
+      - keyword: GIVEN
+        content: User is on the page edit page and a draft exists.
+      - keyword: WHEN
+        content: Click 'Draft saved at', click 'Delete Draft', and click 'Confirm'
+          on the confirmation page
+      - keyword: THEN
+        content: Delete draft and redirect to the book details page
+      type: ATOMIC
+  - id: REQ-6.2
+    name: Create New Chapter
+    type: FOLDER
+    description: Chapters can be added on the book details page; clicking a chapter
+      redirects to the pages or chapter list within that chapter. Add chapter page
+      ![image](./reference/create_chapter.png) Inside chapter page ![image](./reference/chapter.png)
+    dependencies:
+    - REQ-5.2
+    children:
+    - id: REQ-6.2.1
+      name: Create Chapter
+      description: Add a new chapter to a book.
+      dependencies:
+      - REQ-5.2.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the book details page.
+      - keyword: WHEN
+        content: Click 'New Chapter', fill in the name and description, and click
+          'Save Chapter'
+      - keyword: THEN
+        content: Create the chapter and add it to the book
+      type: ATOMIC
+  - id: REQ-6.3
+    name: Page Reading Page
+    type: FOLDER
+    description: Click a page from the book or chapter details page to enter the page
+      reading page. Reference image ![image](./reference/page.png)
+    dependencies:
+    - REQ-6.1
+    - REQ-6.2
+    children:
+    - id: REQ-6.3.1
+      name: Enter Page Reading Page
+      description: Read a page.
+      dependencies:
+      - REQ-6.1.1
+      scenario:
+      - keyword: GIVEN
+        content: User is viewing a list of pages within a book or chapter.
+      - keyword: WHEN
+        content: Click some page
+      - keyword: THEN
+        content: Enter the page reading page
+      type: ATOMIC
+    - id: REQ-6.3.2
+      name: Redirect to Page Edit Page
+      description: Edit a page while reading.
+      dependencies:
+      - REQ-6.3.1
+      scenario:
+      - keyword: GIVEN
+        content: User is on the page reading page and can see the Actions area.
+      - keyword: WHEN
+        content: Click 'Edit' on the page reading page
+      - keyword: THEN
+        content: Redirect to the edit page for that page.
+      type: ATOMIC
+- id: REQ-7
+  name: Recently Viewed
+  type: FOLDER
+  description: The homepage displays recently viewed shelves, books, chapters, and
+    pages in the 'My Recently Viewed' list, showing up to ten records.
+  dependencies:
+  - REQ-4
+  - REQ-5
+  - REQ-6
+  children:
+  - id: REQ-7.1
+    name: Add to Recently Viewed
+    description: Viewing content adds it to the list.
+    dependencies:
+    - REQ-4.2.1
+    - REQ-5.2.1
+    - REQ-6.3.1
+    scenario:
+    - keyword: GIVEN
+      content: User is browsing content pages in the system.
+    - keyword: WHEN
+      content: Open and enter shelf details page, book details page, page reading
+        page, or chapter details page
+    - keyword: THEN
+      content: Add to recently viewed and update the 'My Recently Viewed' list on
+        the homepage
+    type: ATOMIC
+  - id: REQ-7.2
+    name: Quick Navigation from Recently Viewed
+    description: Clicking a recently viewed item navigates to it.
+    dependencies:
+    - REQ-7.1
+    scenario:
+    - keyword: GIVEN
+      content: The homepage shows a 'My Recently Viewed' list with at least one item.
+    - keyword: WHEN
+      content: Click an item in the 'My Recently Viewed' list
+    - keyword: THEN
+      content: Quickly enter the corresponding content details page
+    type: ATOMIC
+- id: REQ-8
+  name: Favorites
+  type: FOLDER
+  description: Shelves, books, chapters, and pages can be favorited and displayed
+    in the 'My Most Viewed Favorites' list on the homepage, showing up to 4 items.
+    A favorites page is provided to view all favorites. Favorites page ![image](./reference/favourites.png)
+  dependencies:
+  - REQ-4
+  - REQ-5
+  - REQ-6
+  children:
+  - id: REQ-8.1
+    name: Favorite Items
+    description: Favorite shelves, books, chapters, and pages.
+    dependencies:
+    - REQ-4.2.1
+    - REQ-5.2.1
+    - REQ-6.3.1
+    - REQ-6.2.1
+    scenario:
+    - keyword: GIVEN
+      content: User is on a shelf details page, book details page, chapter details
+        page, or page reading page.
+    - keyword: WHEN
+      content: Click 'Favorite' on the shelf details page, book details page, chapter
+        details page, or page reading page
+    - keyword: THEN
+      content: Add to the favorites list, and the corresponding button changes to
+        'Unfavorite'
+    type: ATOMIC
+  - id: REQ-8.2
+    name: Quick Navigation from Favorites
+    description: Navigate via the favorites list.
+    dependencies:
+    - REQ-8.1
+    scenario:
+    - keyword: GIVEN
+      content: The homepage or favorites page shows a favorites list with at least
+        one item.
+    - keyword: WHEN
+      content: Click a list item in 'My Most Viewed Favorites' on the homepage or
+        favorites page
+    - keyword: THEN
+      content: Enter the corresponding content details page
+    type: ATOMIC
+- id: REQ-9
+  name: Recently Updated Pages
+  type: FOLDER
+  description: Add recently created or edited pages to the homepage, showing up to
+    5 items.
+  dependencies:
+  - REQ-6.1
+  children:
+  - id: REQ-9.1
+    name: Quick Navigation from Recently Updated
+    description: Navigate via the recently updated pages list.
+    dependencies:
+    - REQ-6.1.1
+    scenario:
+    - keyword: GIVEN
+      content: The homepage shows a 'Recently Updated Pages' list with at least one
+        item.
+    - keyword: WHEN
+      content: Click an item in the 'Recently Updated Pages' list on the homepage
+    - keyword: THEN
+      content: Enter the reading page of the corresponding page
+    type: ATOMIC
