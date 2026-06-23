@@ -13,6 +13,7 @@ class RequirementSummary(BaseModel):
 
 class RequirementDetail(RequirementSummary):
     requirements_markdown: str
+    requirements_yaml: str | None = None
     prerequisites_markdown: str
     assets_base_url: str
     references_base_url: str

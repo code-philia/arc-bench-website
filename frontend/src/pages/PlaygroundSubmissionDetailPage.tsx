@@ -7,7 +7,7 @@ import SubmissionResultCard from "../components/submissions/SubmissionResultCard
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
-import { requirementMarkdownToTree } from "../lib/taskTree";
+import { parseTaskTreeYaml, requirementMarkdownToTree } from "../lib/taskTree";
 import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
@@ -222,6 +222,13 @@ export default function PlaygroundSubmissionDetailPage() {
   const tree = useMemo(() => {
     if (!requirement) {
       return null;
+    }
+    if (requirement.requirements_yaml?.trim()) {
+      try {
+        return parseTaskTreeYaml(requirement.requirements_yaml);
+      } catch {
+        return requirementMarkdownToTree(requirement.requirements_markdown);
+      }
     }
     return requirementMarkdownToTree(requirement.requirements_markdown);
   }, [requirement]);

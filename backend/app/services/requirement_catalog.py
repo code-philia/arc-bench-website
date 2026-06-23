@@ -71,7 +71,9 @@ class RequirementCatalogService:
 
     def get_requirement_detail(self, requirement_id: str, base_url: str) -> RequirementDetail:
         requirement = self._get_requirement(requirement_id)
-        requirements_markdown = Path(requirement.requirements_path).read_text(encoding="utf-8")
+        requirements_path = Path(requirement.requirements_path)
+        requirements_markdown = requirements_path.read_text(encoding="utf-8")
+        requirements_yaml = self._read_requirement_yaml(requirements_path)
         prerequisites_markdown = Path(requirement.prerequisites_path).read_text(encoding="utf-8")
         return RequirementDetail(
             id=requirement.id,
@@ -82,6 +84,7 @@ class RequirementCatalogService:
             total_tests=requirement.total_tests,
             module_count=requirement.module_count,
             requirements_markdown=requirements_markdown,
+            requirements_yaml=requirements_yaml,
             prerequisites_markdown=prerequisites_markdown,
             assets_base_url=f"{base_url}/api/requirements/{requirement.id}/assets",
             references_base_url=f"{base_url}/api/requirements/{requirement.id}/references",
@@ -144,16 +147,17 @@ class RequirementCatalogService:
     def build_public_task_bundle(self, requirement_id: str) -> tuple[bytes, str]:
         requirement = self._get_requirement(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}.zip"
-        return self._build_zip(
-            [
-                (Path(requirement.requirements_path), f"{requirement.id}/requirements.md"),
-                (Path(requirement.prerequisites_path), f"{requirement.id}/prerequisites.md"),
-                (Path(requirement.tests_path), f"{requirement.id}/tests"),
-                (Path(requirement.assets_path), f"{requirement.id}/demo/assets"),
-                (Path(requirement.references_path), f"{requirement.id}/demo/reference"),
-            ],
-            archive_name,
-        )
+        entries = [
+            (Path(requirement.requirements_path), f"{requirement.id}/requirements.md"),
+            (Path(requirement.prerequisites_path), f"{requirement.id}/prerequisites.md"),
+            (Path(requirement.tests_path), f"{requirement.id}/tests"),
+            (Path(requirement.assets_path), f"{requirement.id}/demo/assets"),
+            (Path(requirement.references_path), f"{requirement.id}/demo/reference"),
+        ]
+        requirement_yaml_path = self._resolve_requirement_yaml_path(Path(requirement.requirements_path))
+        if requirement_yaml_path.exists():
+            entries.append((requirement_yaml_path, f"{requirement.id}/requirements.yaml"))
+        return self._build_zip(entries, archive_name)
 
     def build_public_task_document(self, requirement_id: str, kind: str) -> tuple[bytes, str]:
         requirement = self._get_requirement(requirement_id)
@@ -189,6 +193,9 @@ class RequirementCatalogService:
                     (Path(requirement.references_path), f"public/{requirement.id}/demo/reference"),
                 ]
             )
+            requirement_yaml_path = self._resolve_requirement_yaml_path(Path(requirement.requirements_path))
+            if requirement_yaml_path.exists():
+                entries.append((requirement_yaml_path, f"public/{requirement.id}/requirements.yaml"))
         return self._build_zip(entries, "arcbench-public-competition.zip")
 
     def _build_zip(self, entries: list[tuple[Path, str]], archive_name: str) -> tuple[bytes, str]:
@@ -234,6 +241,16 @@ class RequirementCatalogService:
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")
         return requirement
+
+    @staticmethod
+    def _resolve_requirement_yaml_path(requirements_path: Path) -> Path:
+        return requirements_path.with_name("requirements.yaml")
+
+    def _read_requirement_yaml(self, requirements_path: Path) -> str | None:
+        yaml_path = self._resolve_requirement_yaml_path(requirements_path)
+        if not yaml_path.exists():
+            return None
+        return yaml_path.read_text(encoding="utf-8")
 
     @staticmethod
     def _competition_title(category: str) -> str:

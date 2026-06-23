@@ -10,6 +10,7 @@ export type RequirementSummary = {
 
 export type RequirementDetail = RequirementSummary & {
   requirements_markdown: string;
+  requirements_yaml: string | null;
   prerequisites_markdown: string;
   assets_base_url: string;
   references_base_url: string;

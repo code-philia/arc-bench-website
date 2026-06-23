@@ -42,7 +42,11 @@ class WorkspaceAssembler:
         shutil.copytree(self.settings.templates_root, template_dir, dirs_exist_ok=True)
         shutil.copytree(Path(requirement.assets_path), task_dir / "assets", dirs_exist_ok=True)
         shutil.copytree(Path(requirement.references_path), task_dir / "reference", dirs_exist_ok=True)
-        shutil.copy2(Path(requirement.requirements_path), task_dir / "requirements.md")
+        requirement_markdown_path = Path(requirement.requirements_path)
+        requirement_yaml_path = requirement_markdown_path.with_name("requirements.yaml")
+        shutil.copy2(requirement_markdown_path, task_dir / "requirements.md")
+        if requirement_yaml_path.exists():
+            shutil.copy2(requirement_yaml_path, task_dir / "requirements.yaml")
         shutil.copy2(Path(requirement.prerequisites_path), task_dir / "prerequisites.md")
         shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
         self._write_visual_sdk_files(sdk_dir)
@@ -87,13 +91,14 @@ class WorkspaceAssembler:
                 "",
                 "Materials:",
                 "- Base template project: /workspace/template",
+                "- Requirement tree YAML: /workspace/task/requirements.yaml (preferred when present)",
                 "- Requirement document: /workspace/task/requirements.md",
                 "- Prerequisites document: /workspace/task/prerequisites.md",
                 "- Task assets: /workspace/task/assets",
                 "- Reference images: /workspace/task/reference",
                 "",
                 "Instructions:",
-                "1. Read prerequisites.md and requirements.md completely.",
+                "1. Read prerequisites.md completely, then read requirements.yaml first if it exists, and use requirements.md as the narrative companion document.",
                 "2. Use the files in assets/ and reference/ when implementing the product.",
                 "3. Apply your changes directly inside /workspace/template.",
                 "4. Keep the project runnable with the template's frontend and backend structure.",
