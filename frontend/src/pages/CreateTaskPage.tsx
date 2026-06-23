@@ -1,17 +1,18 @@
 import {
-  CaretRightOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   SaveOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
 import { message, Modal } from "antd";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "@xyflow/react/dist/style.css";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
-import MarkdownDocument from "../components/requirements/MarkdownDocument";
 import { api } from "../lib/api";
 import {
   appendSiblingNode,
@@ -34,21 +35,8 @@ type CreateTaskFormState = {
   taskType: "web" | "mobile" | "kernel" | "mixed";
 };
 
-type ChapterItem = {
-  id: string;
-  title: string;
-  children: ChapterItem[];
-};
-
 function slugifyFileName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "task";
-}
-
-function slugifyHeading(value: string) {
-  return `${value}`
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 function downloadText(filename: string, content: string) {
@@ -61,68 +49,22 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
-function buildChapterTree(node: RequirementNode): ChapterItem {
-  return {
-    id: slugifyHeading(`${node.id} ${node.name}`),
-    title: `${node.id} ${node.name}`,
-    children: node.children.map(buildChapterTree),
-  };
-}
-
-function collectExpandedIds(node: RequirementNode): Record<string, boolean> {
-  return {
-    [slugifyHeading(`${node.id} ${node.name}`)]: true,
-    ...Object.assign({}, ...node.children.map(collectExpandedIds)),
-  };
-}
-
-function ChapterTree({
-  item,
-  depth,
-  expanded,
-  onToggle,
-}: {
-  item: ChapterItem;
-  depth: number;
-  expanded: Record<string, boolean>;
-  onToggle: (id: string) => void;
-}) {
-  const hasChildren = item.children.length > 0;
-  const isExpanded = expanded[item.id] ?? true;
-
-  return (
-    <div className="chapter-tree-node">
-      <div className="chapter-tree-row" style={{ paddingLeft: `${depth * 14}px` }}>
-        {hasChildren ? (
-          <button type="button" className={`chapter-tree-toggle ${isExpanded ? "expanded" : ""}`} onClick={() => onToggle(item.id)}>
-            <CaretRightOutlined />
-          </button>
-        ) : (
-          <span className="chapter-tree-toggle spacer" />
-        )}
-        <a className="toc-item chapter-tree-link" href={`#${item.id}`}>
-          {item.title}
-        </a>
-      </div>
-      {hasChildren && isExpanded
-        ? item.children.map((child) => (
-            <ChapterTree key={child.id} item={child} depth={depth + 1} expanded={expanded} onToggle={onToggle} />
-          ))
-        : null}
-    </div>
-  );
-}
-
 export default function CreateTaskPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const uploadRef = useRef<HTMLInputElement | null>(null);
+  const initialPreviewWidth =
+    typeof window === "undefined"
+      ? 560
+      : Math.max(360, Math.min(Math.round(window.innerWidth * 0.68), Math.round(window.innerWidth * 0.4)));
   const [tree, setTree] = useState<RequirementNode>(createDefaultTaskTree);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
   const [detailExpanded, setDetailExpanded] = useState(true);
-  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>(() => collectExpandedIds(createDefaultTaskTree()));
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(initialPreviewWidth);
+  const [isResizingPreview, setIsResizingPreview] = useState(false);
   const [createForm, setCreateForm] = useState<CreateTaskFormState>({
     title: "My Custom Task",
     taskType: "web",
@@ -130,9 +72,33 @@ export default function CreateTaskPage() {
 
   const markdown = useMemo(() => taskTreeToMarkdown(tree), [tree]);
   const yamlContent = useMemo(() => taskTreeToYaml(tree), [tree]);
-  const chapterTree = useMemo(() => buildChapterTree(tree), [tree]);
   const stats = useMemo(() => summarizeTaskTree(tree), [tree]);
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
+
+  useEffect(() => {
+    if (!isResizingPreview) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const viewportWidth = window.innerWidth;
+      const nextWidth = Math.max(360, Math.min(Math.round(viewportWidth * 0.68), event.clientX));
+      setPreviewCollapsed(false);
+      setPreviewWidth(nextWidth);
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingPreview(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingPreview]);
 
   const updateSelectedNode = (updater: (node: RequirementNode) => RequirementNode) => {
     if (!selectedNode) {
@@ -146,7 +112,6 @@ export default function CreateTaskPage() {
       const content = await file.text();
       const nextTree = parseTaskTreeYaml(content);
       setTree(nextTree);
-      setExpandedChapters(collectExpandedIds(nextTree));
       setSelectedNodeId(null);
       setDetailExpanded(false);
       message.success("YAML imported.");
@@ -172,11 +137,6 @@ export default function CreateTaskPage() {
       scenarios: [{ name: "New scenario", steps: [] }],
     };
     setTree((current) => appendChildNode(current, parent.id, child));
-    setExpandedChapters((current) => ({
-      ...current,
-      [slugifyHeading(`${parent.id} ${parent.name}`)]: true,
-      [slugifyHeading(`${child.id} ${child.name}`)]: true,
-    }));
     setSelectedNodeId(child.id);
     setDetailExpanded(true);
   };
@@ -194,10 +154,6 @@ export default function CreateTaskPage() {
       scenarios: [{ name: "New scenario", steps: [] }],
     };
     setTree((current) => appendSiblingNode(current, selectedNode.id, sibling));
-    setExpandedChapters((current) => ({
-      ...current,
-      [slugifyHeading(`${sibling.id} ${sibling.name}`)]: true,
-    }));
     setSelectedNodeId(sibling.id);
     setDetailExpanded(true);
   };
@@ -215,7 +171,6 @@ export default function CreateTaskPage() {
   const handleReindexIds = () => {
     const { tree: reindexedTree, idMap } = reindexRequirementTree(tree);
     setTree(reindexedTree);
-    setExpandedChapters(collectExpandedIds(reindexedTree));
     setSelectedNodeId((current) => (current ? (idMap[current] ?? current) : current));
     message.success("Requirement IDs reindexed.");
   };
@@ -265,53 +220,86 @@ export default function CreateTaskPage() {
   return (
     <div className="page create-task-page create-task-page-locked">
       <div className="create-task-shell create-task-shell-locked">
-        <div className="create-task-layout create-task-layout-locked">
-          <section className="create-task-preview-panel create-task-preview-panel-locked">
-            <div className="create-task-preview-inner create-task-preview-inner-locked">
-              <aside className="create-task-chapters">
-                <ChapterTree
-                  item={chapterTree}
-                  depth={0}
-                  expanded={expandedChapters}
-                  onToggle={(id) =>
-                    setExpandedChapters((current) => ({
-                      ...current,
-                      [id]: !(current[id] ?? true),
-                    }))
-                  }
-                />
-              </aside>
-
-              <div className="create-task-markdown-wrap create-task-markdown-body-only">
-                <MarkdownDocument markdown={markdown} assetsBaseUrl="" referencesBaseUrl="" />
-              </div>
+        <div className="create-task-topbar">
+          <div className="create-task-topbar-copy">
+            <div className="breadcrumb">
+              <span>Playground</span>
+              <span className="sep">/</span>
+              <span>Create Task</span>
+              <span className="sep">/</span>
+              <span className="current">{createForm.title || tree.name}</span>
             </div>
-
-            <div className="create-task-toolbar">
-              <button type="button" className="btn-soft success" onClick={handleSave}>
-                <SaveOutlined /> Save
-              </button>
-              <button type="button" className="btn-soft warn" onClick={() => uploadRef.current?.click()}>
-                <UploadOutlined /> Upload
-              </button>
-              <button type="button" className="create-task-submit-link" onClick={() => setIsCreateModalOpen(true)}>
-                Create Task &gt;
-              </button>
-              <input
-                ref={uploadRef}
-                className="visually-hidden"
-                type="file"
-                accept=".yaml,.yml"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    void handleUploadFile(file);
-                  }
-                  event.currentTarget.value = "";
-                }}
-              />
+            <div className="create-task-topbar-meta">
+              <span className="task-node-chip folder">{createForm.taskType.toUpperCase()}</span>
+              <span className="task-node-chip">{stats.nodeCount} Nodes</span>
+              <span className="task-node-chip atomic">{stats.atomicCount} Atomic</span>
             </div>
+          </div>
+          <div className="create-task-topbar-actions">
+            <button
+              type="button"
+              className="btn-outline create-task-toolbar-btn"
+              onClick={() => setPreviewCollapsed((current) => !current)}
+            >
+              {previewCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              {previewCollapsed ? "Show Preview" : "Hide Preview"}
+            </button>
+            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => uploadRef.current?.click()}>
+              <UploadOutlined /> Import YAML
+            </button>
+            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={handleSave}>
+              <SaveOutlined /> Export Docs
+            </button>
+            <button type="button" className="btn-primary create-task-toolbar-primary" onClick={() => setIsCreateModalOpen(true)}>
+              Create Task
+            </button>
+            <input
+              ref={uploadRef}
+              className="visually-hidden"
+              type="file"
+              accept=".yaml,.yml"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void handleUploadFile(file);
+                }
+                event.currentTarget.value = "";
+              }}
+            />
+          </div>
+        </div>
+
+        <div
+          className={`create-task-layout create-task-layout-locked${previewCollapsed ? " preview-collapsed" : ""}`}
+          style={{ gridTemplateColumns: previewCollapsed ? "0 12px minmax(420px, 1fr)" : `${previewWidth}px 12px minmax(420px, 1fr)` }}
+        >
+          <section className={`readme-panel create-task-preview-panel create-task-preview-panel-locked${previewCollapsed ? " collapsed" : ""}`}>
+            <MarkdownTocDocument
+              markdown={markdown}
+              assetsBaseUrl=""
+              referencesBaseUrl=""
+              tocTitle="Contents"
+              bodyClassName="playground-readme-body"
+              tocClassName="playground-readme-toc create-task-preview-toc"
+              scrollClassName="playground-readme-scroll create-task-preview-scroll"
+            />
           </section>
+
+          <div
+            className={`create-task-resizer${previewCollapsed ? " collapsed" : ""}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize preview panel"
+            onPointerDown={(event) => {
+              if (window.innerWidth <= 820) {
+                return;
+              }
+              event.preventDefault();
+              setIsResizingPreview(true);
+            }}
+          >
+            <span className="create-task-resizer-handle" />
+          </div>
 
           <section className="create-task-editor-panel create-task-editor-panel-locked">
             <RequirementTreeCanvas
