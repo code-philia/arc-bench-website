@@ -25,6 +25,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   ViewportPortal,
+  getBezierPath,
   useStoreApi,
   useReactFlow,
   type EdgeProps,
@@ -149,9 +150,13 @@ function buildFlowFromTree(
 
   const validNodeIds = new Set(positionedNodes.map((node) => node.data.id));
   const dependencyEdges: Edge[] = [];
+  const showSelectedDependenciesOnly = Boolean(selectedNodeId);
 
   positionedNodes.forEach((positioned) => {
     const sourceNode = positioned.data;
+    if (showSelectedDependenciesOnly && sourceNode.id !== selectedNodeId) {
+      return;
+    }
     sourceNode.dependencies.forEach((dependencyId) => {
       if (!validNodeIds.has(dependencyId) || dependencyId === sourceNode.id) {
         return;
@@ -165,6 +170,12 @@ function buildFlowFromTree(
         type: "dependencyEdge",
         animated: false,
         zIndex: 3,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 18,
+          height: 18,
+          color: DEPENDENCY_EDGE_COLOR,
+        },
         style: {
           stroke: DEPENDENCY_EDGE_COLOR,
           strokeWidth: DEPENDENCY_EDGE_STROKE_WIDTH,
@@ -212,34 +223,30 @@ function DependencyEdge({
   targetX,
   targetY,
   style,
-  selected,
+  markerEnd,
 }: EdgeProps<Edge>) {
-  const path = buildDependencyPath(sourceX, sourceY, targetX, targetY);
-  const arrowPath = buildDependencyArrowPath(targetX, targetY);
+  const [path] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition: Position.Right,
+    targetX,
+    targetY,
+    targetPosition: Position.Left,
+  });
 
   return (
-    <>
-      <BaseEdge
-        id={id}
-        path={path}
-        style={{
-          stroke: DEPENDENCY_EDGE_COLOR,
-          strokeWidth: DEPENDENCY_EDGE_STROKE_WIDTH,
-          strokeDasharray: DEPENDENCY_EDGE_DASHARRAY,
-          ...style,
-        }}
-        interactionWidth={20}
-      />
-      <path
-        d={arrowPath}
-        fill="none"
-        stroke={DEPENDENCY_EDGE_COLOR}
-        strokeWidth={selected ? 2.2 : 1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        pointerEvents="none"
-      />
-    </>
+    <BaseEdge
+      id={id}
+      path={path}
+      markerEnd={markerEnd}
+      style={{
+        stroke: DEPENDENCY_EDGE_COLOR,
+        strokeWidth: DEPENDENCY_EDGE_STROKE_WIDTH,
+        strokeDasharray: DEPENDENCY_EDGE_DASHARRAY,
+        ...style,
+      }}
+      interactionWidth={20}
+    />
   );
 }
 
