@@ -25,22 +25,24 @@ class RequirementCatalogService:
         self.settings = get_settings()
 
     def sync(self) -> None:
+        discovered_requirement_ids: set[str] = set()
         for requirement_dir in sorted(self.settings.requirements_root.iterdir()):
             if not requirement_dir.is_dir():
                 continue
             requirement_id = requirement_dir.name
+            discovered_requirement_ids.add(requirement_id)
             requirements_path = requirement_dir / "requirements.md"
             prerequisites_path = requirement_dir / "prerequisites.md"
             tests_path = self.settings.tests_root / requirement_id
             assets_path = requirement_dir / "assets"
             references_path = requirement_dir / "reference"
-            if not requirements_path.exists() or not prerequisites_path.exists() or not tests_path.exists() or not self.settings.templates_root.exists():
+            if not requirements_path.exists():
                 continue
 
             requirements_md = requirements_path.read_text(encoding="utf-8")
             title = self._extract_title(requirements_md, fallback=requirement_id)
             summary = self._extract_summary(requirements_md)
-            total_tests = len(list(tests_path.glob("*.spec.ts")))
+            total_tests = len(list(tests_path.glob("*.spec.ts"))) if tests_path.exists() else 0
             module_count = sum(1 for line in requirements_md.splitlines() if line.startswith("## REQ-"))
 
             existing = self.db.get(Requirement, requirement_id)
@@ -63,18 +65,25 @@ class RequirementCatalogService:
             else:
                 self.db.add(Requirement(id=requirement_id, **data))
 
+        existing_rows = self.db.scalars(select(Requirement).where(Requirement.category == "web")).all()
+        for row in existing_rows:
+            if row.id not in discovered_requirement_ids:
+                self.db.delete(row)
+
         self.db.commit()
 
     def list_requirements(self) -> list[RequirementSummary]:
+        self.sync()
         rows = self._list_requirement_rows()
         return [RequirementSummary.model_validate(row, from_attributes=True) for row in rows]
 
     def get_requirement_detail(self, requirement_id: str, base_url: str) -> RequirementDetail:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         requirements_path = Path(requirement.requirements_path)
         requirements_markdown = requirements_path.read_text(encoding="utf-8")
         requirements_yaml = self._read_requirement_yaml(requirements_path)
-        prerequisites_markdown = Path(requirement.prerequisites_path).read_text(encoding="utf-8")
+        prerequisites_markdown = self._read_text_if_exists(Path(requirement.prerequisites_path))
         return RequirementDetail(
             id=requirement.id,
             title=requirement.title,
@@ -91,6 +100,7 @@ class RequirementCatalogService:
         )
 
     def list_competitions(self) -> list[CompetitionSummary]:
+        self.sync()
         rows = self._list_requirement_rows()
         grouped: dict[str, list[Requirement]] = {}
         for row in rows:
@@ -113,6 +123,7 @@ class RequirementCatalogService:
         return competitions
 
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
+        self.sync()
         rows = self._list_requirement_rows()
         competition_tasks = [row for row in rows if row.category == competition_id]
         if not competition_tasks:
@@ -132,19 +143,24 @@ class RequirementCatalogService:
         )
 
     def get_document(self, requirement_id: str, kind: str) -> str:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         path = Path(requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path)
-        return path.read_text(encoding="utf-8")
+        return self._read_text_if_exists(path)
 
     def get_asset_path(self, requirement_id: str, asset_kind: str, relative_path: str) -> Path:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         base_dir = Path(requirement.assets_path if asset_kind == "assets" else requirement.references_path)
+        if not base_dir.exists():
+            raise FileNotFoundError(relative_path)
         target = (base_dir / relative_path).resolve()
         if not str(target).startswith(str(base_dir.resolve())) or not target.exists():
             raise FileNotFoundError(relative_path)
         return target
 
     def build_public_task_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}.zip"
         entries = [
@@ -160,16 +176,19 @@ class RequirementCatalogService:
         return self._build_zip(entries, archive_name)
 
     def build_public_task_document(self, requirement_id: str, kind: str) -> tuple[bytes, str]:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         source = Path(requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path)
-        return source.read_bytes(), source.name
+        return self._read_bytes_if_exists(source), source.name
 
     def build_public_task_tests_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}-tests.zip"
         return self._build_zip([(Path(requirement.tests_path), f"{requirement.id}/tests")], archive_name)
 
     def build_public_task_demo_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        self.sync()
         requirement = self._get_requirement(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}-demo.zip"
         return self._build_zip(
@@ -181,6 +200,7 @@ class RequirementCatalogService:
         )
 
     def build_public_competition_bundle(self) -> tuple[bytes, str]:
+        self.sync()
         rows = self._list_requirement_rows()
         entries: list[tuple[Path, str]] = []
         for requirement in rows:
@@ -253,6 +273,18 @@ class RequirementCatalogService:
         return yaml_path.read_text(encoding="utf-8")
 
     @staticmethod
+    def _read_text_if_exists(path: Path) -> str:
+        if not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _read_bytes_if_exists(path: Path) -> bytes:
+        if not path.exists():
+            return b""
+        return path.read_bytes()
+
+    @staticmethod
     def _competition_title(category: str) -> str:
         if category == "web":
             return "Web Competition"
@@ -271,14 +303,14 @@ class RequirementCatalogService:
     @staticmethod
     def _extract_title(markdown: str, fallback: str) -> str:
         for line in markdown.splitlines():
-            if line.startswith("# "):
-                return line[2:].strip()
+            stripped = line.strip()
+            if stripped:
+                return stripped[2:].strip() if stripped.startswith("#") else stripped
         return fallback
 
     @staticmethod
     def _extract_summary(markdown: str) -> str:
-        lines = [line.strip() for line in markdown.splitlines()]
-        for line in lines:
-            if line and not line.startswith("#"):
-                return line
+        non_empty_lines = [line.strip() for line in markdown.splitlines() if line.strip()]
+        if len(non_empty_lines) >= 2:
+            return non_empty_lines[1]
         return ""
