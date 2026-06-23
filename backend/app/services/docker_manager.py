@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import docker
-from docker.errors import APIError, BuildError, DockerException
+from docker.errors import APIError, BuildError, DockerException, ImageNotFound
 
 from app.core.config import get_settings
 
@@ -17,14 +17,22 @@ class DockerManager:
 
     def ensure_image(self, log_callback=None) -> None:
         try:
+            self.client.images.get(self.settings.runner_image)
             if log_callback is not None:
-                log_callback(f"Rebuilding runner image: {self.settings.runner_image}")
+                log_callback(f"Using existing runner image: {self.settings.runner_image}")
+            return
+        except ImageNotFound:
+            pass
+
+        try:
+            if log_callback is not None:
+                log_callback(f"Building runner image: {self.settings.runner_image}")
             _, build_logs = self.client.images.build(
                 path=str(self.settings.runner_context_dir),
                 tag=self.settings.runner_image,
                 rm=True,
                 pull=False,
-                nocache=True,
+                nocache=False,
                 forcerm=True,
             )
             if log_callback is not None:

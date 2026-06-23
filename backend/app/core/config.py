@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
-    runner_timeout_seconds: int = 600
+    runner_timeout_seconds: int = 1200
     agent_health_timeout_seconds: int = 90
 
     model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False)

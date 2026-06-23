@@ -166,9 +166,10 @@ def run_generation_agent(stdout_file, stderr_file) -> None:
     append_runner_event("start_agent", f"Generation agent finished with code {completed.returncode}", status="success")
 
 
-def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str) -> None:
+def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str, install_args: list[str] | None = None) -> None:
     append_runner_event(step_key, f"Installing dependencies for {label}")
-    run_command(["npm", "install"], cwd=project_dir, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label=f"{label}-npm-install")
+    command = ["npm", "install", *(install_args or [])]
+    run_command(command, cwd=project_dir, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label=f"{label}-npm-install")
     append_runner_event(step_key, f"Dependencies installed for {label}", status="success")
 
 
@@ -217,6 +218,7 @@ export default defineConfig({{
   reporter: [['json', {{ outputFile: '../artifacts/playwright-report.json' }}]],
   use: {{
     baseURL: '{base_url}',
+    channel: 'chromium',
     trace: 'off',
     screenshot: 'off',
   }},
@@ -237,8 +239,6 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
     append_runner_event("run_tests", "Installing Playwright dependencies")
     run_command(["npm", "install"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="tests-npm-install")
-    append_runner_event("run_tests", "Installing Chromium browser")
-    run_command(["npx", "playwright", "install", "--with-deps", "chromium"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="playwright-install")
     append_runner_event("run_tests", "Playwright environment is ready", status="success")
 
 
@@ -414,7 +414,7 @@ def run_web_template(stdout_file, stderr_file) -> dict:
     )
     append_runner_event("run_tests", "Template frontend built", status="success")
 
-    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "run_tests")
+    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "run_tests", install_args=["--omit=dev"])
 
     backend_env = {
         **os.environ,
@@ -424,7 +424,7 @@ def run_web_template(stdout_file, stderr_file) -> dict:
 
     append_runner_event("run_tests", "Starting template application server")
     backend_process, backend_stdout_thread, backend_stderr_thread = start_background_process(
-        ["npm", "run", "dev"],
+        ["npm", "run", "start"],
         cwd=backend_dir,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
