@@ -97,11 +97,16 @@ function getEventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: nu
 }
 
 function buildDependencyPath(sourceX: number, sourceY: number, targetX: number, targetY: number): string {
-  const control1X = sourceX + DEPENDENCY_EDGE_CONTROL_OFFSET;
-  const control2X = targetX - DEPENDENCY_EDGE_CONTROL_OFFSET;
+  const sourceBendX = sourceX + DEPENDENCY_EDGE_CONTROL_OFFSET;
+  const targetBendX = targetX - DEPENDENCY_EDGE_CONTROL_OFFSET;
+  const midY = sourceY + (targetY - sourceY) / 2;
   return [
     `M ${sourceX} ${sourceY}`,
-    `C ${control1X} ${sourceY}, ${control2X} ${targetY}, ${targetX} ${targetY}`,
+    `L ${sourceBendX} ${sourceY}`,
+    `L ${sourceBendX} ${midY}`,
+    `L ${targetBendX} ${midY}`,
+    `L ${targetBendX} ${targetY}`,
+    `L ${targetX} ${targetY}`,
   ].join(" ");
 }
 
@@ -137,7 +142,7 @@ function buildFlowFromTree(
     id: `${link.source.data.id}-${link.target.data.id}`,
     source: link.source.data.id,
     target: link.target.data.id,
-    type: "straight",
+    type: "step",
     animated: false,
     zIndex: 1,
   }));
@@ -589,7 +594,7 @@ function TreeCanvasInner({
                 previewArrowPathRef.current.setAttribute("d", "");
               }
             }}
-            connectionLineType={ConnectionLineType.SimpleBezier}
+            connectionLineType={ConnectionLineType.Step}
             connectionLineStyle={{
               stroke: "#d44949",
               strokeWidth: 1.8,
@@ -607,7 +612,7 @@ function TreeCanvasInner({
             nodeTypes={nodeTypes}
             className="task-flow-canvas"
             defaultEdgeOptions={{
-              type: "straight",
+              type: "step",
               markerEnd: {
                 type: MarkerType.ArrowClosed,
                 width: 22,
