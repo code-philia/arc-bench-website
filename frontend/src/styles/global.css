@@ -2499,10 +2499,6 @@ button {
 }
 
 .readme-content code {
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #f5c96a;
   font-family: "Consolas", "SFMono-Regular", "Liberation Mono", monospace;
   font-size: 0.84rem;
 }
