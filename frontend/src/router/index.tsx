@@ -14,7 +14,6 @@ import PlaygroundSubmissionDetailPage from "../pages/PlaygroundSubmissionDetailP
 import PlaygroundTaskListPage from "../pages/PlaygroundTaskListPage";
 import ResearchPage from "../pages/ResearchPage";
 import RegisterPage from "../pages/RegisterPage";
-import RequirementDetailPage from "../pages/RequirementDetailPage";
 import RequirementsPage from "../pages/RequirementsPage";
 import SubmissionDetailPage from "../pages/SubmissionDetailPage";
 
@@ -29,7 +28,7 @@ export const router = createBrowserRouter([
       { path: "requirements", element: <RequirementsPage /> },
       { path: "api-doc", element: <ApiDocPage /> },
       { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },
-      { path: "requirements/:requirementId", element: <RequirementDetailPage /> },
+      { path: "requirements/:requirementId", element: <PlaygroundRequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },
       { path: "playground/task-bank/:taskType", element: <PlaygroundTaskListPage /> },
