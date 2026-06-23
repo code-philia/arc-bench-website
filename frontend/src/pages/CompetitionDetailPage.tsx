@@ -95,7 +95,7 @@ export default function CompetitionDetailPage() {
             <tbody>
               {competition.tasks.map((task) => (
                 <tr key={task.id} onClick={() => navigate(`/requirements/${task.id}`)}>
-                  <td className="task-id">{task.id}</td>
+                  <td className="task-id">{task.display_id}</td>
                   <td>
                     <div className="task-name">
                       <Link className="inline-link" to={`/requirements/${task.id}`}>

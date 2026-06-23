@@ -208,7 +208,7 @@ export default function PlaygroundRequirementDetailPage() {
               <span className="sep">/</span>
               <Link to={`/playground/task-bank/${taskType}`}>{taskTypeLabel(taskType)}</Link>
               <span className="sep">/</span>
-              <span className="current">{requirement.title}</span>
+              <span className="current">{requirement.display_id} - {requirement.title}</span>
             </div>
           </div>
           <div className="doc-tabs">

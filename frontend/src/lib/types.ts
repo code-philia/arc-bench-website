@@ -1,5 +1,6 @@
 export type RequirementSummary = {
   id: string;
+  display_id: string;
   title: string;
   category: string;
   summary: string;

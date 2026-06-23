@@ -173,7 +173,7 @@ export default function RequirementDetailPage() {
               <span>Web Apps</span>
               <span className="sep">/</span>
               <span className="current">
-                {requirement.id} — {requirement.title}
+                {requirement.display_id} — {requirement.title}
               </span>
             </div>
           </div>

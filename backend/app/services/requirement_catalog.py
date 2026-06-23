@@ -75,10 +75,13 @@ class RequirementCatalogService:
     def list_requirements(self) -> list[RequirementSummary]:
         self.sync()
         rows = self._list_requirement_rows()
-        return [RequirementSummary.model_validate(row, from_attributes=True) for row in rows]
+        display_ids = self._build_display_id_map(rows)
+        return [self._to_requirement_summary(row, display_ids.get(row.id, row.id)) for row in rows]
 
     def get_requirement_detail(self, requirement_id: str, base_url: str) -> RequirementDetail:
         self.sync()
+        rows = self._list_requirement_rows()
+        display_ids = self._build_display_id_map(rows)
         requirement = self._get_requirement(requirement_id)
         requirements_path = Path(requirement.requirements_path)
         requirements_markdown = requirements_path.read_text(encoding="utf-8")
@@ -86,6 +89,7 @@ class RequirementCatalogService:
         prerequisites_markdown = self._read_text_if_exists(Path(requirement.prerequisites_path))
         return RequirementDetail(
             id=requirement.id,
+            display_id=display_ids.get(requirement.id, requirement.id),
             title=requirement.title,
             category=requirement.category,
             summary=requirement.summary,
@@ -125,11 +129,12 @@ class RequirementCatalogService:
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
         self.sync()
         rows = self._list_requirement_rows()
+        display_ids = self._build_display_id_map(rows)
         competition_tasks = [row for row in rows if row.category == competition_id]
         if not competition_tasks:
             raise LookupError(f"Competition '{competition_id}' not found")
 
-        tasks = [self._to_competition_task(row, base_url, is_public=False) for row in competition_tasks]
+        tasks = [self._to_competition_task(row, base_url, is_public=False, display_id=display_ids.get(row.id, row.id)) for row in competition_tasks]
         return CompetitionDetail(
             id=competition_id,
             title=self._competition_title(competition_id),
@@ -235,7 +240,19 @@ class RequirementCatalogService:
     def _list_requirement_rows(self) -> list[Requirement]:
         return self.db.scalars(select(Requirement).order_by(Requirement.category, Requirement.id)).all()
 
-    def _to_competition_task(self, row: Requirement, base_url: str, is_public: bool) -> CompetitionTaskSummary:
+    def _to_requirement_summary(self, row: Requirement, display_id: str) -> RequirementSummary:
+        return RequirementSummary(
+            id=row.id,
+            display_id=display_id,
+            title=row.title,
+            category=row.category,
+            summary=row.summary,
+            test_runner=row.test_runner,
+            total_tests=row.total_tests,
+            module_count=row.module_count,
+        )
+
+    def _to_competition_task(self, row: Requirement, base_url: str, is_public: bool, display_id: str) -> CompetitionTaskSummary:
         downloads = None
         if is_public:
             downloads = CompetitionTaskDownloadLinks(
@@ -247,6 +264,7 @@ class RequirementCatalogService:
             )
         return CompetitionTaskSummary(
             id=row.id,
+            display_id=display_id,
             title=row.title,
             category=row.category,
             summary=row.summary,
@@ -255,6 +273,18 @@ class RequirementCatalogService:
             module_count=row.module_count,
             public_downloads=downloads,
         )
+
+    @staticmethod
+    def _build_display_id_map(rows: list[Requirement]) -> dict[str, str]:
+        grouped: dict[str, list[Requirement]] = {}
+        for row in rows:
+            grouped.setdefault(row.category, []).append(row)
+
+        display_ids: dict[str, str] = {}
+        for _, items in sorted(grouped.items()):
+            for index, row in enumerate(items, start=1):
+                display_ids[row.id] = f"TASK-{index:03d}"
+        return display_ids
 
     def _get_requirement(self, requirement_id: str) -> Requirement:
         requirement = self.db.get(Requirement, requirement_id)

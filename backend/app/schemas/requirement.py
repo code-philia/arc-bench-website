@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class RequirementSummary(BaseModel):
     id: str
+    display_id: str
     title: str
     category: str
     summary: str

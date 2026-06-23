@@ -169,7 +169,7 @@ export default function PlaygroundTaskListPage() {
                     data-quickstart-id={index === 0 ? "quickstart-task-item" : undefined}
                     onClick={() => navigate(`/playground/task-bank/${taskType}/${task.id}`)}
                   >
-                    <td className="task-id">{task.id}</td>
+                    <td className="task-id">{task.display_id}</td>
                     <td>
                       <div className="task-name">
                         <Link className="inline-link" to={`/playground/task-bank/${taskType}/${task.id}`}>
