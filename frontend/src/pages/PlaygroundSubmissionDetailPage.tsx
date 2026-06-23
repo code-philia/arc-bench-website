@@ -35,6 +35,14 @@ type MockTraceabilityTest = {
   first_line: string;
 };
 
+type MockFileTabItem = {
+  id: string;
+  path: string;
+  kind: "file" | "diff";
+  language: string;
+  content: string;
+};
+
 function formatDateTime(value: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleString();
@@ -263,6 +271,140 @@ function TraceabilityPanel({
   );
 }
 
+function buildMockFileItems(
+  requirementTitle: string,
+  submissionName: string,
+  selectedNodeId: string | null,
+): MockFileTabItem[] {
+  const focusLabel = selectedNodeId ?? "ROOT";
+  return [
+    {
+      id: "frontend-page",
+      path: "frontend/src/pages/HomePage.tsx",
+      kind: "file",
+      language: "tsx",
+      content: `export default function HomePage() {
+  return (
+    <main className="workspace-home">
+      <section data-focus-node="${focusLabel}">
+        <h1>${requirementTitle}</h1>
+        <p>Submission: ${submissionName}</p>
+      </section>
+    </main>
+  );
+}
+`,
+    },
+    {
+      id: "backend-route",
+      path: "backend/src/routes/search.ts",
+      kind: "file",
+      language: "ts",
+      content: `import { Router } from "express";
+
+const router = Router();
+
+router.get("/api/search", async (_request, response) => {
+  response.json({
+    requirementNode: "${focusLabel}",
+    status: "mocked",
+  });
+});
+
+export default router;
+`,
+    },
+    {
+      id: "git-diff",
+      path: "git diff -- frontend/src/pages/HomePage.tsx",
+      kind: "diff",
+      language: "diff",
+      content: `diff --git a/frontend/src/pages/HomePage.tsx b/frontend/src/pages/HomePage.tsx
+index 8f2a1c1..af321f0 100644
+--- a/frontend/src/pages/HomePage.tsx
++++ b/frontend/src/pages/HomePage.tsx
+@@ -12,7 +12,11 @@ export default function HomePage() {
+   return (
+     <main className="workspace-home">
+-      <section>
++      <section data-focus-node="${focusLabel}">
++        <header className="workspace-banner">
++          <span>Tracing ${focusLabel}</span>
++        </header>
+         <h1>${requirementTitle}</h1>
++        <p>Submission: ${submissionName}</p>
+       </section>
+     </main>
+   );
+`,
+    },
+  ];
+}
+
+function SubmissionFilePanel({
+  requirementTitle,
+  submissionName,
+  selectedNodeId,
+}: {
+  requirementTitle: string;
+  submissionName: string;
+  selectedNodeId: string | null;
+}) {
+  const fileItems = useMemo(
+    () => buildMockFileItems(requirementTitle, submissionName, selectedNodeId),
+    [requirementTitle, selectedNodeId, submissionName],
+  );
+  const [activeFileId, setActiveFileId] = useState(fileItems[0]?.id ?? "");
+
+  useEffect(() => {
+    if (!fileItems.some((item) => item.id === activeFileId)) {
+      setActiveFileId(fileItems[0]?.id ?? "");
+    }
+  }, [activeFileId, fileItems]);
+
+  const activeFile = fileItems.find((item) => item.id === activeFileId) ?? fileItems[0] ?? null;
+
+  if (!activeFile) {
+    return <div className="ide-empty-state">No files available.</div>;
+  }
+
+  return (
+    <div className="ide-shell">
+      <aside className="ide-sidebar">
+        <div className="ide-sidebar-title">Workspace</div>
+        <div className="ide-file-list">
+          {fileItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`ide-file-item ${item.id === activeFile.id ? "active" : ""}`}
+              onClick={() => setActiveFileId(item.id)}
+            >
+              <span className={`ide-file-kind kind-${item.kind}`}>{item.kind === "diff" ? "DIFF" : item.language.toUpperCase()}</span>
+              <span className="ide-file-path">{item.path}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <section className="ide-editor">
+        <div className="ide-editor-topbar">
+          <div className="ide-window-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="ide-editor-title">{activeFile.path}</div>
+          <div className="ide-editor-badge">{activeFile.kind === "diff" ? "Git Diff" : activeFile.language.toUpperCase()}</div>
+        </div>
+        <pre className={`ide-code-view ${activeFile.kind === "diff" ? "is-diff" : ""}`}>
+          <code>{activeFile.content}</code>
+        </pre>
+      </section>
+    </div>
+  );
+}
+
 export default function PlaygroundSubmissionDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
   const taskType = normalizeTaskType(rawTaskType);
@@ -273,7 +415,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"canvas" | "results" | "stdio">("canvas");
+  const [activeTab, setActiveTab] = useState<"canvas" | "results" | "stdio" | "file">("canvas");
   const [stdioTab, setStdioTab] = useState<"stdout" | "stderr">("stdout");
   const [sidebarTab, setSidebarTab] = useState<"status" | "traceability">("status");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
@@ -728,6 +870,7 @@ export default function PlaygroundSubmissionDetailPage() {
           <div className="doc-tabs" style={{ borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
             {[
               { key: "canvas", label: "Canvas" },
+              { key: "file", label: "File" },
               { key: "results", label: "Test Result" },
               { key: "stdio", label: "Stdout/Stderror" },
             ].map((tab) => (
@@ -735,7 +878,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 key={tab.key}
                 className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
                 type="button"
-                onClick={() => setActiveTab(tab.key as "canvas" | "results" | "stdio")}
+                onClick={() => setActiveTab(tab.key as "canvas" | "results" | "stdio" | "file")}
               >
                 {tab.label}
               </button>
@@ -783,6 +926,12 @@ export default function PlaygroundSubmissionDetailPage() {
                   Canvas is not available.
                 </div>
               )
+            ) : activeTab === "file" ? (
+              <SubmissionFilePanel
+                requirementTitle={requirement.title}
+                submissionName={submission.display_name || submission.id}
+                selectedNodeId={selectedNode?.id ?? selectedNodeId}
+              />
             ) : activeTab === "results" ? (
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>
                 <SubmissionResultCard submission={submission} />
