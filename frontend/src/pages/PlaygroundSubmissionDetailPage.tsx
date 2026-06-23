@@ -937,7 +937,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 <SubmissionResultCard submission={submission} />
               </div>
             ) : (
-              <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+              <div className="stdio-view">
                 <div className="doc-tabs" style={{ padding: "0 24px", borderBottom: "1px solid var(--border)" }}>
                   <button
                     className={`doc-tab${stdioTab === "stdout" ? " active" : ""}`}
@@ -954,16 +954,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     Stderror
                   </button>
                 </div>
-                <pre style={{
-                  flex: 1,
-                  margin: 0,
-                  padding: "24px",
-                  background: "#1e1e1e",
-                  color: "#d4d4d4",
-                  overflow: "auto",
-                  fontFamily: "monospace",
-                  fontSize: "0.875rem",
-                }}>
+                <pre className="stdio-code-view">
                   {stdioTab === "stdout" ? (logs?.stdout || "No stdout yet.") : (logs?.stderr || "No stderr yet.")}
                 </pre>
               </div>

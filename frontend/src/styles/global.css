@@ -3903,21 +3903,21 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  background: #ffffff;
+  background: var(--bg);
 }
 
 .ide-sidebar {
   min-height: 0;
-  border-right: 1px solid #e2e8f0;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-elevated) 100%);
   display: flex;
   flex-direction: column;
 }
 
 .ide-sidebar-title {
   padding: 14px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  color: #64748b;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -3937,7 +3937,7 @@ button {
   width: 100%;
   border: 1px solid transparent;
   background: transparent;
-  color: #334155;
+  color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
@@ -3949,13 +3949,13 @@ button {
 }
 
 .ide-file-item:hover {
-  background: #f8fafc;
+  background: var(--bg-hover);
 }
 
 .ide-file-item.active {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #0f172a;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  color: var(--text);
 }
 
 .ide-file-kind {
@@ -3974,15 +3974,15 @@ button {
 }
 
 .ide-file-kind.kind-file {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #bfdbfe;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .ide-file-kind.kind-diff {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
+  background: color-mix(in srgb, var(--pass) 14%, transparent);
+  color: var(--pass);
+  border-color: color-mix(in srgb, var(--pass) 26%, transparent);
 }
 
 .ide-file-path {
@@ -3997,17 +3997,17 @@ button {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--bg);
 }
 
 .ide-editor-topbar {
   min-height: 52px;
   padding: 0 16px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 14px;
-  background: #f8fafc;
+  background: var(--bg-elevated);
 }
 
 .ide-window-dots {
@@ -4039,7 +4039,7 @@ button {
 .ide-editor-title {
   min-width: 0;
   flex: 1;
-  color: #0f172a;
+  color: var(--text);
   font-size: 0.84rem;
   font-weight: 600;
   white-space: nowrap;
@@ -4051,9 +4051,9 @@ button {
   flex-shrink: 0;
   padding: 4px 8px;
   border-radius: 999px;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -4067,18 +4067,18 @@ button {
   padding: 20px 22px;
   overflow: auto;
   background:
-    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 0, rgba(148, 163, 184, 0.06) 1px, transparent 1px, transparent 100%),
-    #ffffff;
+    linear-gradient(90deg, color-mix(in srgb, var(--border-light) 22%, transparent) 0, color-mix(in srgb, var(--border-light) 22%, transparent) 1px, transparent 1px, transparent 100%),
+    var(--bg);
   background-size: 40px 40px, auto;
-  color: #1e293b;
-  font-family: "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace;
+  color: var(--text);
+  font-family: var(--mono);
   font-size: 0.84rem;
   line-height: 1.65;
   white-space: pre;
 }
 
 .ide-code-view.is-diff {
-  color: #0f172a;
+  color: var(--text);
 }
 
 .ide-empty-state {
@@ -4086,9 +4086,34 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
-  color: #64748b;
+  background: var(--bg);
+  color: var(--text-dim);
   font-size: 0.92rem;
+}
+
+.stdio-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.stdio-code-view {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 24px;
+  overflow: auto;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--border-light) 22%, transparent) 0, color-mix(in srgb, var(--border-light) 22%, transparent) 1px, transparent 1px, transparent 100%),
+    var(--bg);
+  background-size: 40px 40px, auto;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .submission-grid .action-section:first-child {
