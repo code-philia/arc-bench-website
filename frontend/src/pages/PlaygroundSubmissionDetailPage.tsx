@@ -136,6 +136,22 @@ function readDiffHeaderPath(diffContent: string, fallback: string) {
   return fallback;
 }
 
+function findNewestCommitForNode(
+  payload: SubmissionCommitHistoryPayload | null,
+  nodeId: string | null,
+) {
+  if (!payload || !nodeId) {
+    return null;
+  }
+  for (let index = payload.commits.length - 1; index >= 0; index -= 1) {
+    const commit = payload.commits[index];
+    if (commit.node_id === nodeId) {
+      return commit;
+    }
+  }
+  return null;
+}
+
 function TraceabilityPanel({
   traceability,
   nodeId,
@@ -295,6 +311,7 @@ function SubmissionFilePanel({
 }) {
   const codeViewRef = useRef<HTMLPreElement | null>(null);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const showInlineLoading = loading && Boolean(source);
 
   useEffect(() => {
     if (!source || !codeViewRef.current) {
@@ -305,7 +322,7 @@ function SubmissionFilePanel({
     codeViewRef.current.scrollTop = scrollTop;
   }, [source]);
 
-  if (loading) {
+  if (loading && !source) {
     return <div className="ide-empty-state">Loading source...</div>;
   }
 
@@ -396,7 +413,7 @@ function SubmissionFilePanel({
                       display: "grid",
                       gridTemplateColumns: "56px minmax(0, 1fr)",
                       gap: "14px",
-                      borderRadius: "8px",
+                      borderRadius: 0,
                       padding: "0 8px",
                       margin: "0 -8px",
                     }}
@@ -408,6 +425,7 @@ function SubmissionFilePanel({
               })}
             </code>
           </pre>
+          {showInlineLoading ? <div className="ide-loading-overlay">Loading diff...</div> : null}
         </section>
       </div>
     );
@@ -494,6 +512,7 @@ function SubmissionFilePanel({
             })}
           </code>
         </pre>
+        {showInlineLoading ? <div className="ide-loading-overlay">Loading source...</div> : null}
       </section>
     </div>
   );
@@ -517,6 +536,8 @@ function CommitHistoryPanel({
   onOpenDiff: (commit: SubmissionCommitHistoryEntry) => void;
 }) {
   const [menuState, setMenuState] = useState<{ commit: SubmissionCommitHistoryEntry; x: number; y: number } | null>(null);
+  const selectedItemRef = useRef<HTMLButtonElement | null>(null);
+  const orderedCommits = useMemo(() => [...(commits?.commits ?? [])].reverse(), [commits]);
 
   useEffect(() => {
     if (!menuState) {
@@ -530,6 +551,10 @@ function CommitHistoryPanel({
       window.removeEventListener("contextmenu", closeMenu);
     };
   }, [menuState]);
+
+  useEffect(() => {
+    selectedItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedCommitOid]);
 
   if (loading) {
     return <div className="commit-history-empty">Loading commit history...</div>;
@@ -545,19 +570,15 @@ function CommitHistoryPanel({
 
   return (
     <div className="commit-history-panel">
-      <div className="commit-history-header">
-        <div className="commit-history-kicker">Template Git History</div>
-        <div className="commit-history-title">{commits.commits.length} commits</div>
-      </div>
       <div className="commit-history-list">
-        {commits.commits.map((commit) => {
-          const isNodeMatch = Boolean(selectedNodeId && commit.node_id === selectedNodeId);
+        {orderedCommits.map((commit) => {
           const isCommitSelected = selectedCommitOid === commit.oid;
           return (
             <button
               key={commit.oid}
               type="button"
-              className={`commit-history-item${isNodeMatch ? " node-active" : ""}${isCommitSelected ? " commit-active" : ""}`}
+              ref={isCommitSelected ? selectedItemRef : null}
+              className={`commit-history-item${isCommitSelected ? " commit-active" : ""}`}
               onClick={() => onSelectCommit(commit)}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -565,18 +586,12 @@ function CommitHistoryPanel({
                 setMenuState({ commit, x: event.clientX, y: event.clientY });
               }}
             >
-              <div className="commit-history-item-top">
-                <span className="commit-history-sha">{commit.short_oid}</span>
-                {commit.phase ? <span className={`commit-history-phase ${commit.phase}`}>{commit.phase}</span> : null}
-              </div>
-              <div className="commit-history-message">{commit.message}</div>
-              <div className="commit-history-meta">
-                <span>{commit.node_id ?? "UNMAPPED"}</span>
-                <span>{formatCommitDateTime(commit.committed_at)}</span>
-              </div>
-              <div className="commit-history-files-count">
-                {commit.changed_files.length} changed file{commit.changed_files.length === 1 ? "" : "s"}
-              </div>
+              <span className="commit-history-main">{commit.message}</span>
+              <span className="commit-history-secondary">{[
+                commit.short_oid,
+                commit.node_id,
+                formatCommitDateTime(commit.committed_at),
+              ].filter(Boolean).join(" · ")}</span>
             </button>
           );
         })}
@@ -632,13 +647,14 @@ export default function PlaygroundSubmissionDetailPage() {
     return Math.round(window.innerWidth * 0.333);
   });
   const pollRef = useRef<number | null>(null);
-  const seenVisualKeysRef = useRef<Set<string>>(new Set());
+  const visualEventCountRef = useRef(0);
   const isSidebarDragging = useRef(false);
   const sidebarDragStartX = useRef(0);
   const sidebarDragStartWidth = useRef(0);
   const isPreviewDragging = useRef(false);
   const previewDragStartX = useRef(0);
   const previewDragStartWidth = useRef(0);
+  const suppressNodeToCommitSyncRef = useRef(false);
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
@@ -662,6 +678,10 @@ export default function PlaygroundSubmissionDetailPage() {
   const selectedDiffCommit = useMemo(
     () => commitHistory?.commits.find((commit) => commit.oid === selectedCommitOid) ?? null,
     [commitHistory, selectedCommitOid],
+  );
+  const selectedNodeCommit = useMemo(
+    () => findNewestCommitForNode(commitHistory, selectedNodeId),
+    [commitHistory, selectedNodeId],
   );
 
   const refreshPreview = async () => {
@@ -696,6 +716,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setCommitHistoryError(null);
     setSelectedCommitOid(null);
     setSelectedDiffFilePath(null);
+    visualEventCountRef.current = 0;
   }, [submissionId]);
 
   useEffect(() => {
@@ -865,19 +886,14 @@ export default function PlaygroundSubmissionDetailPage() {
   useEffect(() => {
     const events = logs?.visual_events ?? [];
     if (events.length === 0) {
+      visualEventCountRef.current = 0;
       return;
     }
-    const newest = [...events].reverse().find((event) => {
-      const key = `${event.timestamp}:${event.node_id}:${event.phase}:${event.status}:${event.message ?? ""}`;
-      if (seenVisualKeysRef.current.has(key)) {
-        return false;
-      }
-      seenVisualKeysRef.current.add(key);
-      return true;
-    });
-      if (!newest) {
-        return;
-      }
+    if (events.length <= visualEventCountRef.current) {
+      return;
+    }
+    const newest = events[events.length - 1];
+    visualEventCountRef.current = events.length;
     if (useQuickStartSubmission) {
       quickStart.setSelectedNode(newest.node_id);
       quickStart.setDetailExpanded(true);
@@ -898,6 +914,17 @@ export default function PlaygroundSubmissionDetailPage() {
     );
     return () => window.clearTimeout(timer);
   }, [logs, useQuickStartSubmission]);
+
+  useEffect(() => {
+    if (!selectedNodeCommit) {
+      return;
+    }
+    if (suppressNodeToCommitSyncRef.current) {
+      suppressNodeToCommitSyncRef.current = false;
+      return;
+    }
+    setSelectedCommitOid((current) => (current === selectedNodeCommit.oid ? current : selectedNodeCommit.oid));
+  }, [selectedNodeCommit]);
 
   useEffect(() => {
     if (!submissionId || !selectedNodeId || !submission) {
@@ -999,9 +1026,12 @@ export default function PlaygroundSubmissionDetailPage() {
   };
 
   const selectCommitHistoryEntry = (commit: SubmissionCommitHistoryEntry) => {
+    suppressNodeToCommitSyncRef.current = true;
     setSelectedCommitOid(commit.oid);
     if (commit.node_id) {
       setSelectedNodeId(commit.node_id);
+      setFocusNodeId(commit.node_id);
+      setPulseNodeId(commit.node_id);
       setDetailExpanded(true);
       if (useQuickStartSubmission) {
         quickStart.setSelectedNode(commit.node_id);
@@ -1073,6 +1103,13 @@ export default function PlaygroundSubmissionDetailPage() {
     document.removeEventListener("mousemove", onPreviewResizeMouseMove);
     document.removeEventListener("mouseup", onPreviewResizeMouseUp);
   };
+
+  useEffect(() => {
+    if (activeTab !== "file" || source || sourceLoading || !selectedDiffCommit) {
+      return;
+    }
+    void openCommitDiff(selectedDiffCommit);
+  }, [activeTab, selectedDiffCommit, source, sourceLoading]);
 
   useEffect(() => {
     return () => {
