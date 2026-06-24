@@ -1,0 +1,368 @@
+id: ROOT
+name: Train Ticket Booking System
+type: FOLDER
+description: 'A streamlined train ticket booking demo that focuses on registration, login, ticket search, booking, payment, and basic order viewing.'
+dependencies: []
+children:
+  - id: REQ-1
+    name: System Home
+    type: FOLDER
+    description: 'The default landing page after the system starts. The top area shows the system logo on the left, and "Login", "Register", and a "My 12306" entry on the right. The page displays a simple navigation bar and a quick ticket search area. ![image](./reference/homepage.png)'
+    dependencies: []
+    children:
+      - id: REQ-1.1
+        name: Open system home page
+        type: ATOMIC
+        description: 'Display the home page with the logo, authentication links, navigation bar, and ticket search area.'
+        dependencies: []
+        scenarios:
+          - name: Display the default home page
+            steps:
+              - keyword: GIVEN
+                content: 'The system is accessible.'
+              - keyword: WHEN
+                content: 'Open the application entry URL.'
+              - keyword: THEN
+                content: 'The page shows the system logo, the "Login" link, the "Register" link, the "My 12306" entry, and the ticket search area.'
+  - id: REQ-2
+    name: User Authentication
+    type: FOLDER
+    description: 'Provide user registration, login, and logout for the booking demo. User data is persisted after successful registration and login.'
+    dependencies:
+      - REQ-1
+    children:
+      - id: REQ-2.1
+        name: User Registration
+        type: FOLDER
+        description: 'Allow a user to create an account by filling in basic account information and submitting the registration form.'
+        dependencies:
+          - REQ-1.1
+        children:
+          - id: REQ-2.1.1
+            name: Open registration page
+            type: ATOMIC
+            description: 'Open the registration page from the "Register" link in the top-right area of the home page.'
+            dependencies:
+              - REQ-1.1
+            scenarios:
+              - name: Open the registration page from the home page
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the home page and is not logged in.'
+                  - keyword: WHEN
+                    content: 'Click the "Register" link in the top-right area.'
+                  - keyword: THEN
+                    content: 'Navigate to the registration page.'
+          - id: REQ-2.1.2
+            name: View registration form
+            type: ATOMIC
+            description: 'Display the registration form with input fields labeled "Username", "Email address", "Password", and "Confirm Password", and a "Register" button. ![image](./reference/register.png)'
+            dependencies:
+              - REQ-2.1.1
+            scenarios:
+              - name: Display the registration form layout
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the registration page.'
+                  - keyword: WHEN
+                    content: 'Observe the form content.'
+                  - keyword: THEN
+                    content: 'The page shows the labeled fields "Username", "Email address", "Password", and "Confirm Password", and the "Register" button.'
+          - id: REQ-2.1.3
+            name: Submit valid registration information
+            type: ATOMIC
+            description: 'Allow a new user to submit complete and valid registration information, persist the user data, and show a successful registration message.'
+            dependencies:
+              - REQ-2.1.2
+            scenarios:
+              - name: Submit a valid registration form
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the registration page with a unique username, a valid email address, matching passwords, and all required fields filled.'
+                  - keyword: WHEN
+                    content: 'Click the "Register" button.'
+                  - keyword: THEN
+                    content: 'The system persists the user information and shows a successful registration message.'
+      - id: REQ-2.2
+        name: User Login
+        type: FOLDER
+        description: 'Allow a user to log in with an email address or username and a password.'
+        dependencies:
+          - REQ-1.1
+        children:
+          - id: REQ-2.2.1
+            name: Open login page
+            type: ATOMIC
+            description: 'Open the login page from the "Login" link in the top-right area of the home page.'
+            dependencies:
+              - REQ-1.1
+            scenarios:
+              - name: Open the login page from the home page
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the home page and is not logged in.'
+                  - keyword: WHEN
+                    content: 'Click the "Login" link in the top-right area.'
+                  - keyword: THEN
+                    content: 'Navigate to the login page.'
+          - id: REQ-2.2.2
+            name: View login form
+            type: ATOMIC
+            description: 'Display the login form with an input field whose placeholder is "Email/Username", a password input whose placeholder is "Password", and a "LOGIN" button. ![image](./reference/login.png)'
+            dependencies:
+              - REQ-2.2.1
+            scenarios:
+              - name: Display the login form layout
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the login page.'
+                  - keyword: WHEN
+                    content: 'Observe the page.'
+                  - keyword: THEN
+                    content: 'The page shows the "Email/Username" input, the password input with the placeholder "Password", and the "LOGIN" button.'
+          - id: REQ-2.2.3
+            name: Submit valid login credentials
+            type: ATOMIC
+            description: 'Allow the user to log in with a valid username or email address and the correct password, persist the login state, and show a successful login message.'
+            dependencies:
+              - REQ-2.2.2
+            scenarios:
+              - name: Log in with valid credentials
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the login page with a valid username or email address entered and the correct password entered.'
+                  - keyword: WHEN
+                    content: 'Click the "LOGIN" button.'
+                  - keyword: THEN
+                    content: 'The system persists the login state and shows a successful login message.'
+          - id: REQ-2.2.4
+            name: Block invalid login
+            type: ATOMIC
+            description: 'Reject login when the account field or password field is empty, or when the credentials do not match an existing account, and show an error message.'
+            dependencies:
+              - REQ-2.2.2
+            scenarios:
+              - name: Submit the login form with invalid credentials
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the login page with missing credentials or incorrect credentials.'
+                  - keyword: WHEN
+                    content: 'Click the "LOGIN" button.'
+                  - keyword: THEN
+                    content: 'The page shows an error message and does not complete login.'
+      - id: REQ-2.3
+        name: User Logout
+        type: FOLDER
+        description: 'Allow a logged-in user to sign out and clear the persisted login state.'
+        dependencies:
+          - REQ-2.2.3
+        children:
+          - id: REQ-2.3.1
+            name: Sign out
+            type: ATOMIC
+            description: 'After login, provide a "Sign Out" action. When the user clicks it, clear the login state and show the guest entry state again.'
+            dependencies:
+              - REQ-2.2.3
+            scenarios:
+              - name: Sign out from the home page
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is logged in and is on the home page.'
+                  - keyword: WHEN
+                    content: 'Click the "Sign Out" action.'
+                  - keyword: THEN
+                    content: 'The system clears the login state and shows the guest entry state again.'
+  - id: REQ-3
+    name: Ticket Search and Display
+    type: FOLDER
+    description: 'Provide a simple ticket search flow from the home page and show direct search results.'
+    dependencies:
+      - REQ-1
+    children:
+      - id: REQ-3.1
+        name: Home Quick Search
+        type: FOLDER
+        description: 'Allow the user to search tickets by departure place, arrival place, and departure date from the home page.'
+        dependencies:
+          - REQ-1.1
+        children:
+          - id: REQ-3.1.1
+            name: View home quick search module
+            type: ATOMIC
+            description: 'Display the quick search module with fields for departure place, arrival place, departure date, and a "Search" button.'
+            dependencies:
+              - REQ-1.1
+            scenarios:
+              - name: Display the quick search module
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the home page.'
+                  - keyword: WHEN
+                    content: 'Observe the search area.'
+                  - keyword: THEN
+                    content: 'The page shows fields for departure place, arrival place, departure date, and a "Search" button.'
+          - id: REQ-3.1.2
+            name: Search tickets with valid quick search conditions
+            type: ATOMIC
+            description: 'Allow the user to search tickets after entering a departure place, an arrival place, and a departure date.'
+            dependencies:
+              - REQ-3.1.1
+            scenarios:
+              - name: Search tickets with complete conditions
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the home page with a departure place, an arrival place, and a departure date entered.'
+                  - keyword: WHEN
+                    content: 'Click the "Search" button.'
+                  - keyword: THEN
+                    content: 'Navigate to the ticket search results page.'
+          - id: REQ-3.1.3
+            name: Block search with incomplete conditions
+            type: ATOMIC
+            description: 'Reject ticket search when the departure place, arrival place, or departure date is missing and show the message "Please complete departure, arrival, and date.".'
+            dependencies:
+              - REQ-3.1.1
+            scenarios:
+              - name: Search tickets with missing conditions
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the home page with one or more required search fields left empty.'
+                  - keyword: WHEN
+                    content: 'Click the "Search" button.'
+                  - keyword: THEN
+                    content: 'The page shows "Please complete departure, arrival, and date." and does not continue to the results page.'
+      - id: REQ-3.2
+        name: Ticket Search Results
+        type: FOLDER
+        description: 'Display the ticket search results page with the search conditions, the result count, the ticket list, and booking actions. ![image](./reference/search-result.png)'
+        dependencies:
+          - REQ-3.1.2
+        children:
+          - id: REQ-3.2.1
+            name: View search results page layout
+            type: ATOMIC
+            description: 'Display the search results page with the user''s departure place, arrival place, and departure date in the search condition inputs, a result count, a table with the headers "Train No.", "Departure Time", "Arrival Time", "Price", and "Action", and one "Book" button for each result row. ![image](./reference/search-result.png)'
+            dependencies:
+              - REQ-3.1.2
+            scenarios:
+              - name: Display the search results page
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user has searched tickets with valid conditions and matching trains exist.'
+                  - keyword: WHEN
+                    content: 'The search results page opens.'
+                  - keyword: THEN
+                    content: 'The page shows the search conditions, the result count, the ticket list, and one "Book" button for each result row.'
+          - id: REQ-3.2.2
+            name: Show empty search results gracefully
+            type: ATOMIC
+            description: 'Display an empty-state page when no train matches the search conditions while keeping the search condition inputs visible at the top.'
+            dependencies:
+              - REQ-3.1.2
+            scenarios:
+              - name: Show no-result state
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user has searched tickets with valid conditions and no matching train exists.'
+                  - keyword: WHEN
+                    content: 'The search results page opens.'
+                  - keyword: THEN
+                    content: 'The page keeps the search condition inputs visible at the top and shows a no-result message.'
+  - id: REQ-4
+    name: Ticket Booking
+    type: FOLDER
+    description: 'Provide a streamlined booking flow with booking form submission, order confirmation, payment, and basic order viewing.'
+    dependencies:
+      - REQ-3.2.1
+    children:
+      - id: REQ-4.1
+        name: Booking and Payment
+        type: FOLDER
+        description: 'Allow the user to select one search result, fill in simple passenger information, confirm the order, pay for the order, and view the paid order. ![image](./reference/booking-1.png)'
+        dependencies:
+          - REQ-3.2.1
+        children:
+          - id: REQ-4.1.1
+            name: Open booking form from search results
+            type: ATOMIC
+            description: 'After the user clicks one "Book" button for a valid train result, open the booking form page. ![image](./reference/booking-1.png)'
+            dependencies:
+              - REQ-3.2.1
+              - REQ-2.2.3
+            scenarios:
+              - name: Open the booking form page
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is logged in and is viewing search results with at least one available train.'
+                  - keyword: WHEN
+                    content: 'Click one "Book" button.'
+                  - keyword: THEN
+                    content: 'Navigate to the booking form page for the selected train.'
+          - id: REQ-4.1.2
+            name: Submit booking information
+            type: ATOMIC
+            description: 'Provide a booking form that shows the selected train information, input fields for passenger name and ID number, a seat type selector, and a "Place order" button. Allow the user to submit valid booking information.'
+            dependencies:
+              - REQ-4.1.1
+            scenarios:
+              - name: Submit a valid booking request
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the booking form page with valid passenger information entered and a seat type selected.'
+                  - keyword: WHEN
+                    content: 'Click the "Place order" button.'
+                  - keyword: THEN
+                    content: 'The system accepts the booking information and opens the order confirmation step.'
+          - id: REQ-4.1.3
+            name: Confirm order information
+            type: ATOMIC
+            description: 'After the user submits booking information, open a confirmation dialog with the title "Please confirm the following information.", show the train information and passenger information, and provide the buttons "Confirm" and "Edit". Clicking "Confirm" confirms the order information. Clicking "Edit" returns to the booking information page. ![image](./reference/booking-confirm.png)'
+            dependencies:
+              - REQ-4.1.2
+            scenarios:
+              - name: Confirm the order information and continue
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user has successfully submitted valid booking information.'
+                  - keyword: WHEN
+                    content: 'Click the "Confirm" button in the confirmation dialog.'
+                  - keyword: THEN
+                    content: 'The order information is confirmed and the payment step opens.'
+              - name: Return to edit from the confirmation dialog
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is viewing the confirmation dialog after a valid booking submission.'
+                  - keyword: WHEN
+                    content: 'Click the "Edit" button.'
+                  - keyword: THEN
+                    content: 'Return to the booking information page.'
+          - id: REQ-4.1.4
+            name: Complete payment
+            type: ATOMIC
+            description: 'After the user confirms the order information, open the payment page. The page shows "Order details", the total price, and a "Pay" button. Clicking "Pay" simulates a successful payment. ![image](./reference/payment.png)'
+            dependencies:
+              - REQ-4.1.3
+            scenarios:
+              - name: Complete payment from the payment page
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user is on the payment page for an unpaid order.'
+                  - keyword: WHEN
+                    content: 'Click the "Pay" button.'
+                  - keyword: THEN
+                    content: 'The system simulates a successful payment and marks the order as paid.'
+          - id: REQ-4.1.5
+            name: View paid order
+            type: ATOMIC
+            description: 'Allow the user to open the "Ticket orders" page from the "My 12306" entry after payment and display the paid order in the order list with status "Paid". ![image](./reference/ticket-orders.png)'
+            dependencies:
+              - REQ-4.1.4
+            scenarios:
+              - name: View the paid order in the order list
+                steps:
+                  - keyword: GIVEN
+                    content: 'The user has completed payment for one order.'
+                  - keyword: WHEN
+                    content: 'Open the "Ticket orders" page from the "My 12306" entry.'
+                  - keyword: THEN
+                    content: 'The page shows the paid order in the order list with status "Paid".'
