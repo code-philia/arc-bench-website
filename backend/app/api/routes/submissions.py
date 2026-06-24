@@ -9,16 +9,25 @@ from app.api.deps import require_current_user
 from app.core.enums import RuntimeType, SubmissionStatus
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.submission import SubmissionCreateResponse, SubmissionDetail, SubmissionLogs, SubmissionSummary
+from app.schemas.submission import (
+    SubmissionCreateResponse,
+    SubmissionDetail,
+    SubmissionLogs,
+    SubmissionSourcePayload,
+    SubmissionSummary,
+    SubmissionTraceabilityPayload,
+)
 from app.services.execution_service import ExecutionService
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.runtime_path_service import RuntimePathService
+from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_service import SubmissionService
 
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 executor = ThreadPoolExecutor(max_workers=2)
 runtime_paths = RuntimePathService()
+artifact_service = SubmissionArtifactService()
 
 
 @router.get("", response_model=list[SubmissionSummary])
@@ -118,6 +127,51 @@ def get_submission_logs(
             stderr = stderr_file.read()
     visual_events = service.read_visual_events(submission)
     return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events)
+
+
+@router.get("/{submission_id}/traceability", response_model=SubmissionTraceabilityPayload)
+def get_submission_traceability(
+    submission_id: str,
+    node_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionTraceabilityPayload:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    payload = artifact_service.read_traceability(submission, node_id=node_id)
+    return SubmissionTraceabilityPayload(**payload)
+
+
+@router.get("/{submission_id}/source", response_model=SubmissionSourcePayload)
+def get_submission_source(
+    submission_id: str,
+    file_path: str,
+    first_line: int | None = None,
+    kind: str = "file",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionSourcePayload:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        payload = artifact_service.read_source(
+            submission,
+            file_path=file_path,
+            first_line=first_line,
+            kind=kind,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return SubmissionSourcePayload(**payload)
 
 
 @router.get("/{submission_id}/preview/status")

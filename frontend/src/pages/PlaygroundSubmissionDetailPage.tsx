@@ -8,40 +8,16 @@ import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
 import { findNodeById, parseTaskTreeYaml, requirementMarkdownToTree } from "../lib/taskTree";
-import type { RequirementDetail, RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionVisualEvent } from "../lib/types";
+import type {
+  RequirementDetail,
+  RequirementVisualState,
+  SubmissionDetail,
+  SubmissionLogs,
+  SubmissionSourcePayload,
+  SubmissionTraceabilityPayload,
+  SubmissionVisualEvent,
+} from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
-
-type TraceabilityInterfaceType = "UI" | "API" | "FUNC" | "DB";
-type TraceabilityTestType = "Unit" | "Integration" | "E2E";
-
-type MockTraceabilityInterface = {
-  interface_id: string;
-  req_ids: string[];
-  type: TraceabilityInterfaceType;
-  content: string;
-  file_path: string;
-  first_line: string;
-  implemented: boolean;
-  callers: string[];
-  callees: string[];
-};
-
-type MockTraceabilityTest = {
-  test_id: string;
-  req_id: string;
-  scenario_id: string | null;
-  type: TraceabilityTestType;
-  file_path: string;
-  first_line: string;
-};
-
-type MockFileTabItem = {
-  id: string;
-  path: string;
-  kind: "file" | "diff";
-  language: string;
-  content: string;
-};
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -87,107 +63,47 @@ function toVisualState(event: SubmissionVisualEvent): RequirementVisualState {
   return "default";
 }
 
-function hashString(input: string) {
-  let hash = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash = (hash * 33 + input.charCodeAt(index)) % 2147483647;
-  }
-  return Math.abs(hash);
+function formatLineNumber(value: number | null) {
+  return value && value > 0 ? value : 1;
 }
 
-function slugTraceabilityKey(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "root";
-}
-
-function buildMockTraceabilityInterfaces(
-  requirementId: string,
-  nodeId: string,
-  nodeName: string,
-): MockTraceabilityInterface[] {
-  const seed = hashString(`${requirementId}:${nodeId}:${nodeName}`);
-  const key = slugTraceabilityKey(nodeName || nodeId);
-  const interfaceTypes: TraceabilityInterfaceType[] = ["UI", "API", "FUNC", "DB"];
-  const count = nodeId === "ROOT" ? 3 : (seed % 3) + 1;
-
-  return Array.from({ length: count }, (_, index) => {
-    const type = interfaceTypes[(seed + index) % interfaceTypes.length];
-    const itemKey = `${key}-${index + 1}`;
-    const interfaceId = `${nodeId}-IF-${index + 1}`;
-    const filePathByType: Record<TraceabilityInterfaceType, string> = {
-      UI: `frontend/src/pages/${key}/view-${index + 1}.tsx`,
-      API: `frontend/src/api/${key}.ts`,
-      FUNC: `backend/src/services/${key}_service.ts`,
-      DB: `backend/src/database/${key}_repo.ts`,
-    };
-    const contentByType: Record<TraceabilityInterfaceType, string> = {
-      UI: `${nodeName} panel renders the primary interaction surface and input controls.`,
-      API: `${index % 2 === 0 ? "GET" : "POST"} /api/${slugTraceabilityKey(requirementId)}/${itemKey}`,
-      FUNC: `${key.replace(/-/g, "_")}_${index + 1}(payload)`,
-      DB: `${key}_${index + 1} table access for ${nodeId} persistence and query flow.`,
-    };
-
-    return {
-      interface_id: interfaceId,
-      req_ids: [nodeId],
-      type,
-      content: contentByType[type],
-      file_path: filePathByType[type],
-      first_line: `${20 + ((seed + index * 17) % 120)}`,
-      implemented: ((seed + index) % 5) !== 0,
-      callers: index === 0 ? [] : [`${nodeId}-IF-${index}`],
-      callees: index === count - 1 ? [] : [`${nodeId}-IF-${index + 2}`],
-    };
-  });
-}
-
-function buildMockTraceabilityTests(
-  requirementId: string,
-  nodeId: string,
-  nodeName: string,
-): MockTraceabilityTest[] {
-  const seed = hashString(`test:${requirementId}:${nodeId}:${nodeName}`);
-  const count = nodeId === "ROOT" ? 2 : ((seed % 2) + 1);
-  const key = slugTraceabilityKey(nodeName || nodeId);
-  const testTypes: TraceabilityTestType[] = ["Integration", "E2E", "Unit"];
-
-  return Array.from({ length: count }, (_, index) => {
-    const type = testTypes[(seed + index) % testTypes.length];
-    return {
-      test_id: `${nodeId}-TEST-${index + 1}`,
-      req_id: nodeId,
-      scenario_id: nodeId === "ROOT" ? null : `${nodeId}-SCN-${index + 1}`,
-      type,
-      file_path: `arc-bench/webapp/tests/${requirementId}/${nodeId.toLowerCase()}-${index + 1}.spec.ts`,
-      first_line: `${12 + ((seed + index * 13) % 90)}`,
-    };
-  });
+function codeLines(content: string) {
+  return content.replace(/\r\n/g, "\n").split("\n");
 }
 
 function TraceabilityPanel({
-  requirementId,
+  traceability,
   nodeId,
   nodeName,
+  loading,
+  error,
+  onOpenSource,
 }: {
-  requirementId: string;
+  traceability: SubmissionTraceabilityPayload | null;
   nodeId: string | null;
   nodeName: string | null;
+  loading: boolean;
+  error: string | null;
+  onOpenSource: (payload: { filePath: string; firstLine?: number | null }) => void;
 }) {
-  const traceabilityData = useMemo(() => {
-    if (!nodeId || !nodeName) {
-      return null;
-    }
-    return {
-      interfaces: buildMockTraceabilityInterfaces(requirementId, nodeId, nodeName),
-      tests: buildMockTraceabilityTests(requirementId, nodeId, nodeName),
-    };
-  }, [nodeId, nodeName, requirementId]);
-
-  if (!traceabilityData || !nodeId || !nodeName) {
+  if (!nodeId || !nodeName) {
     return (
       <div className="traceability-empty-state">
         Select a requirement node on the canvas to inspect its linked interfaces and tests.
       </div>
     );
+  }
+
+  if (loading) {
+    return <div className="traceability-empty-state">Loading traceability data...</div>;
+  }
+
+  if (error) {
+    return <div className="traceability-empty-state">{error}</div>;
+  }
+
+  if (!traceability || (traceability.interfaces.length === 0 && traceability.tests.length === 0)) {
+    return <div className="traceability-empty-state">No interfaces or tests are linked to this requirement yet.</div>;
   }
 
   return (
@@ -201,15 +117,27 @@ function TraceabilityPanel({
       <section className="traceability-section">
         <div className="traceability-section-head">
           <h3>Interfaces</h3>
-          <span>{traceabilityData.interfaces.length}</span>
+          <span>{traceability.interfaces.length}</span>
         </div>
         <div className="traceability-card-list">
-          {traceabilityData.interfaces.map((item) => (
-            <article key={item.interface_id} className="traceability-card">
+          {traceability.interfaces.map((item) => (
+            <article
+              key={item.interface_id}
+              className="traceability-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpenSource({ filePath: item.file_path, firstLine: item.first_line })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
+                }
+              }}
+            >
               <div className="traceability-card-top">
                 <div>
                   <div className="traceability-card-id">{item.interface_id}</div>
-                  <div className="traceability-card-path">{item.file_path}:{item.first_line}</div>
+                  <div className="traceability-card-path">{item.file_path}:{formatLineNumber(item.first_line)}</div>
                 </div>
                 <div className="traceability-chip-row">
                   <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
@@ -241,15 +169,27 @@ function TraceabilityPanel({
       <section className="traceability-section">
         <div className="traceability-section-head">
           <h3>Tests</h3>
-          <span>{traceabilityData.tests.length}</span>
+          <span>{traceability.tests.length}</span>
         </div>
         <div className="traceability-card-list">
-          {traceabilityData.tests.map((item) => (
-            <article key={item.test_id} className="traceability-card">
+          {traceability.tests.map((item) => (
+            <article
+              key={item.test_id}
+              className="traceability-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpenSource({ filePath: item.file_path, firstLine: item.first_line })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
+                }
+              }}
+            >
               <div className="traceability-card-top">
                 <div>
                   <div className="traceability-card-id">{item.test_id}</div>
-                  <div className="traceability-card-path">{item.file_path}:{item.first_line}</div>
+                  <div className="traceability-card-path">{item.file_path}:{formatLineNumber(item.first_line)}</div>
                 </div>
                 <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
               </div>
@@ -271,119 +211,50 @@ function TraceabilityPanel({
   );
 }
 
-function buildMockFileItems(
-  requirementTitle: string,
-  submissionName: string,
-  selectedNodeId: string | null,
-): MockFileTabItem[] {
-  const focusLabel = selectedNodeId ?? "ROOT";
-  return [
-    {
-      id: "frontend-page",
-      path: "frontend/src/pages/HomePage.tsx",
-      kind: "file",
-      language: "tsx",
-      content: `export default function HomePage() {
-  return (
-    <main className="workspace-home">
-      <section data-focus-node="${focusLabel}">
-        <h1>${requirementTitle}</h1>
-        <p>Submission: ${submissionName}</p>
-      </section>
-    </main>
-  );
-}
-`,
-    },
-    {
-      id: "backend-route",
-      path: "backend/src/routes/search.ts",
-      kind: "file",
-      language: "ts",
-      content: `import { Router } from "express";
-
-const router = Router();
-
-router.get("/api/search", async (_request, response) => {
-  response.json({
-    requirementNode: "${focusLabel}",
-    status: "mocked",
-  });
-});
-
-export default router;
-`,
-    },
-    {
-      id: "git-diff",
-      path: "git diff -- frontend/src/pages/HomePage.tsx",
-      kind: "diff",
-      language: "diff",
-      content: `diff --git a/frontend/src/pages/HomePage.tsx b/frontend/src/pages/HomePage.tsx
-index 8f2a1c1..af321f0 100644
---- a/frontend/src/pages/HomePage.tsx
-+++ b/frontend/src/pages/HomePage.tsx
-@@ -12,7 +12,11 @@ export default function HomePage() {
-   return (
-     <main className="workspace-home">
--      <section>
-+      <section data-focus-node="${focusLabel}">
-+        <header className="workspace-banner">
-+          <span>Tracing ${focusLabel}</span>
-+        </header>
-         <h1>${requirementTitle}</h1>
-+        <p>Submission: ${submissionName}</p>
-       </section>
-     </main>
-   );
-`,
-    },
-  ];
-}
-
 function SubmissionFilePanel({
-  requirementTitle,
-  submissionName,
-  selectedNodeId,
+  source,
+  loading,
+  error,
 }: {
-  requirementTitle: string;
-  submissionName: string;
-  selectedNodeId: string | null;
+  source: SubmissionSourcePayload | null;
+  loading: boolean;
+  error: string | null;
 }) {
-  const fileItems = useMemo(
-    () => buildMockFileItems(requirementTitle, submissionName, selectedNodeId),
-    [requirementTitle, selectedNodeId, submissionName],
-  );
-  const [activeFileId, setActiveFileId] = useState(fileItems[0]?.id ?? "");
+  const codeViewRef = useRef<HTMLPreElement | null>(null);
 
   useEffect(() => {
-    if (!fileItems.some((item) => item.id === activeFileId)) {
-      setActiveFileId(fileItems[0]?.id ?? "");
+    if (!source || !codeViewRef.current) {
+      return;
     }
-  }, [activeFileId, fileItems]);
+    const lineHeight = 1.65 * 0.84 * 16;
+    const scrollTop = Math.max(0, (formatLineNumber(source.first_line) - 3) * lineHeight);
+    codeViewRef.current.scrollTop = scrollTop;
+  }, [source]);
 
-  const activeFile = fileItems.find((item) => item.id === activeFileId) ?? fileItems[0] ?? null;
-
-  if (!activeFile) {
-    return <div className="ide-empty-state">No files available.</div>;
+  if (loading) {
+    return <div className="ide-empty-state">Loading source...</div>;
   }
+
+  if (error) {
+    return <div className="ide-empty-state">{error}</div>;
+  }
+
+  if (!source) {
+    return <div className="ide-empty-state">Select an interface or test to inspect source.</div>;
+  }
+
+  const lines = codeLines(source.content);
+  const highlightedLine = formatLineNumber(source.first_line);
 
   return (
     <div className="ide-shell">
       <aside className="ide-sidebar">
         <div className="ide-sidebar-title">Workspace</div>
         <div className="ide-file-list">
-          {fileItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`ide-file-item ${item.id === activeFile.id ? "active" : ""}`}
-              onClick={() => setActiveFileId(item.id)}
-            >
-              <span className={`ide-file-kind kind-${item.kind}`}>{item.kind === "diff" ? "DIFF" : item.language.toUpperCase()}</span>
-              <span className="ide-file-path">{item.path}</span>
-            </button>
-          ))}
+          <div className="ide-file-item active">
+            <span className="ide-file-kind kind-file">{source.language.toUpperCase()}</span>
+            <span className="ide-file-path">{source.file_path}</span>
+          </div>
         </div>
       </aside>
 
@@ -394,11 +265,33 @@ function SubmissionFilePanel({
             <span />
             <span />
           </div>
-          <div className="ide-editor-title">{activeFile.path}</div>
-          <div className="ide-editor-badge">{activeFile.kind === "diff" ? "Git Diff" : activeFile.language.toUpperCase()}</div>
+          <div className="ide-editor-title">{source.file_path}</div>
+          <div className="ide-editor-badge">{source.language.toUpperCase()}</div>
         </div>
-        <pre className={`ide-code-view ${activeFile.kind === "diff" ? "is-diff" : ""}`}>
-          <code>{activeFile.content}</code>
+        <pre ref={codeViewRef} className="ide-code-view">
+          <code>
+            {lines.map((line, index) => {
+              const lineNumber = index + 1;
+              const isHighlighted = lineNumber === highlightedLine;
+              return (
+                <div
+                  key={`${lineNumber}:${line}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "56px minmax(0, 1fr)",
+                    gap: "14px",
+                    background: isHighlighted ? "rgba(59, 130, 246, 0.12)" : "transparent",
+                    borderRadius: "8px",
+                    padding: "0 8px",
+                    margin: "0 -8px",
+                  }}
+                >
+                  <span style={{ color: isHighlighted ? "#2563eb" : "#94a3b8", userSelect: "none" }}>{lineNumber}</span>
+                  <span>{line || " "}</span>
+                </div>
+              );
+            })}
+          </code>
         </pre>
       </section>
     </div>
@@ -435,6 +328,12 @@ export default function PlaygroundSubmissionDetailPage() {
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
+  const [traceability, setTraceability] = useState<SubmissionTraceabilityPayload | null>(null);
+  const [traceabilityLoading, setTraceabilityLoading] = useState(false);
+  const [traceabilityError, setTraceabilityError] = useState<string | null>(null);
+  const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const previewUrl = getHostDemoPreviewBase();
@@ -464,23 +363,14 @@ export default function PlaygroundSubmissionDetailPage() {
     setPreviewAvailable(false);
     setPreviewLoading(true);
     setPreviewFrameVersion(0);
+    setTraceability(null);
+    setTraceabilityError(null);
+    setSource(null);
+    setSourceError(null);
   }, [submissionId]);
 
   useEffect(() => {
-    if (useQuickStartSubmission && quickStart.mode === "mock" && quickStart.mockSubmission) {
-      setSubmission(quickStart.mockSubmission.submission);
-      setLogs(quickStart.mockSubmission.logs);
-      api.getRequirement(requirementId, requirementCatalog)
-        .then(setRequirement)
-        .catch((error: Error) => {
-          setRequirement(null);
-          setLoadError(error.message);
-          setLoadErrorStatus(error instanceof ApiError ? error.status : null);
-        })
-        .finally(() => setLoading(false));
-      return () => undefined;
-    }
-
+    setLoading(true);
     setLoadError(null);
     setLoadErrorStatus(null);
     Promise.all([
@@ -511,9 +401,10 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => {
       if (pollRef.current) {
         window.clearInterval(pollRef.current);
+        pollRef.current = null;
       }
     };
-  }, [quickStart.mockSubmission, quickStart.mode, requirementCatalog, requirementId, submissionId, useQuickStartSubmission]);
+  }, [requirementCatalog, requirementId, submissionId]);
 
   useEffect(() => {
     if (!submission || !pollRef.current) {
@@ -587,15 +478,12 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [requirement]);
 
   const nodeStates = useMemo(() => {
-    if (useQuickStartSubmission && quickStart.canvasDemo.active) {
-      return quickStart.canvasDemo.nodeStates;
-    }
     const nextState: Record<string, RequirementVisualState> = {};
     for (const event of logs?.visual_events ?? []) {
       nextState[event.node_id] = toVisualState(event);
     }
     return nextState;
-  }, [logs, quickStart.canvasDemo.active, quickStart.canvasDemo.nodeStates, useQuickStartSubmission]);
+  }, [logs]);
 
   const selectedNode = useMemo(() => {
     if (!tree || !selectedNodeId) {
@@ -608,11 +496,8 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!useQuickStartSubmission || !quickStart.canvasDemo.active) {
       return;
     }
-    setActiveTab("canvas");
     setSelectedNodeId(quickStart.canvasDemo.selectedNodeId);
     setDetailExpanded(quickStart.canvasDemo.detailExpanded);
-    setFocusNodeId(quickStart.canvasDemo.currentNodeId);
-    setPulseNodeId(quickStart.canvasDemo.currentNodeId);
   }, [quickStart.canvasDemo, useQuickStartSubmission]);
 
   useEffect(() => {
@@ -628,17 +513,80 @@ export default function PlaygroundSubmissionDetailPage() {
       seenVisualKeysRef.current.add(key);
       return true;
     });
-    if (!newest) {
+      if (!newest) {
+        return;
+      }
+    if (useQuickStartSubmission) {
+      quickStart.setSelectedNode(newest.node_id);
+      quickStart.setDetailExpanded(true);
+      setSelectedNodeId(newest.node_id);
+      setDetailExpanded(true);
+      setFocusNodeId(newest.node_id);
+      setPulseNodeId(newest.node_id);
+    } else {
+      setActiveTab("canvas");
+      setSelectedNodeId(newest.node_id);
+      setDetailExpanded(true);
+      setFocusNodeId(newest.node_id);
+      setPulseNodeId(newest.node_id);
+    }
+    const timer = window.setTimeout(
+      () => setPulseNodeId((current) => (current === newest.node_id ? null : current)),
+      1400,
+    );
+    return () => window.clearTimeout(timer);
+  }, [logs, useQuickStartSubmission]);
+
+  useEffect(() => {
+    if (!submissionId || !selectedNodeId || !submission) {
+      setTraceability(null);
+      setTraceabilityError(null);
       return;
     }
-    setActiveTab("canvas");
-    setSelectedNodeId(newest.node_id);
-    setDetailExpanded(true);
-    setFocusNodeId(newest.node_id);
-    setPulseNodeId(newest.node_id);
-    const timer = window.setTimeout(() => setPulseNodeId((current) => (current === newest.node_id ? null : current)), 1400);
-    return () => window.clearTimeout(timer);
-  }, [logs]);
+
+    let cancelled = false;
+    setTraceabilityLoading(true);
+    setTraceabilityError(null);
+    api.getSubmissionTraceability(submissionId, selectedNodeId)
+      .then((payload) => {
+        if (!cancelled) {
+          setTraceability(payload);
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setTraceability(null);
+          setTraceabilityError(error.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTraceabilityLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedNodeId, submission, submissionId]);
+
+  const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: number | null }) => {
+    if (!submissionId) {
+      return;
+    }
+    setActiveTab("file");
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      const payload = await api.getSubmissionSource(submissionId, { filePath, firstLine, kind: "file" });
+      setSource(payload);
+    } catch (error) {
+      setSource(null);
+      setSourceError((error as Error).message);
+    } finally {
+      setSourceLoading(false);
+    }
+  };
 
   const onSidebarResizeMouseDown = (event: React.MouseEvent) => {
     event.preventDefault();
@@ -794,9 +742,12 @@ export default function PlaygroundSubmissionDetailPage() {
                   </>
                 ) : (
                   <TraceabilityPanel
-                    requirementId={requirementId}
+                    traceability={traceability}
                     nodeId={selectedNode?.id ?? selectedNodeId}
                     nodeName={selectedNode?.name ?? null}
+                    loading={traceabilityLoading}
+                    error={traceabilityError}
+                    onOpenSource={openSource}
                   />
                 )}
               </div>
@@ -917,8 +868,8 @@ export default function PlaygroundSubmissionDetailPage() {
                     mode="readonly"
                     detailPlacement="bottom"
                     nodeStates={nodeStates}
-                    focusNodeId={useQuickStartSubmission ? quickStart.canvasDemo.currentNodeId : focusNodeId}
-                    pulseNodeId={useQuickStartSubmission ? quickStart.canvasDemo.currentNodeId : pulseNodeId}
+                    focusNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? focusNodeId) : focusNodeId}
+                    pulseNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId}
                     showLegend
                     detailTestId="quickstart-submission-node-detail"
                   />
@@ -930,9 +881,9 @@ export default function PlaygroundSubmissionDetailPage() {
               )
             ) : activeTab === "file" ? (
               <SubmissionFilePanel
-                requirementTitle={requirement.title}
-                submissionName={submission.display_name || submission.id}
-                selectedNodeId={selectedNode?.id ?? selectedNodeId}
+                source={source}
+                loading={sourceLoading}
+                error={sourceError}
               />
             ) : activeTab === "results" ? (
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>

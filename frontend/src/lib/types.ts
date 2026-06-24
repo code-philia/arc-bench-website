@@ -91,6 +91,40 @@ export type SubmissionLogs = {
   visual_events: SubmissionVisualEvent[];
 };
 
+export type SubmissionTraceabilityInterface = {
+  interface_id: string;
+  req_ids: string[];
+  type: string;
+  content: string;
+  file_path: string;
+  first_line: number | null;
+  implemented: boolean;
+  callers: string[];
+  callees: string[];
+};
+
+export type SubmissionTraceabilityTest = {
+  test_id: string;
+  req_id: string;
+  scenario_id: string | null;
+  type: string;
+  file_path: string;
+  first_line: number | null;
+};
+
+export type SubmissionTraceabilityPayload = {
+  interfaces: SubmissionTraceabilityInterface[];
+  tests: SubmissionTraceabilityTest[];
+};
+
+export type SubmissionSourcePayload = {
+  kind: "file";
+  file_path: string;
+  language: string;
+  content: string;
+  first_line: number;
+};
+
 export type SubmissionVisualEvent = {
   type: "requirement_state";
   node_id: string;

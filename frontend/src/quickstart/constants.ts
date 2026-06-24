@@ -1,6 +1,6 @@
 import type { QuickStartStep } from "./types";
 
-export const QUICK_START_REQUIREMENT_ID = "12306";
+export const QUICK_START_REQUIREMENT_ID = "meetingroom";
 export const QUICK_START_TASK_TYPE = "web";
 export const QUICK_START_DISPLAY_NAME = "Quick Start Demo Agent";
 export const QUICK_START_MODEL_NAME = "ArcBench Demo Runtime";
@@ -31,7 +31,7 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     route: `/playground/task-bank/${QUICK_START_TASK_TYPE}`,
     targetId: "quickstart-task-item",
     title: "Step 2/8",
-    message: "Choose one task (railway ticket booking system).",
+    message: "Choose one task (meeting room reservation system).",
     buttonLabel: "Next",
     preferredPlacement: "up",
   },

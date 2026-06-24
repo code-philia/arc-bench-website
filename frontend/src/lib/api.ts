@@ -3,10 +3,12 @@ import type {
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
+  SubmissionSourcePayload,
   RequirementSummary,
   SubmissionDetail,
   SubmissionLogs,
   SubmissionSummary,
+  SubmissionTraceabilityPayload,
   UserTaskDetail,
   UserTaskSummary,
 } from "./types";
@@ -123,6 +125,21 @@ export const api = {
   },
   getSubmissionLogs(submissionId: string) {
     return request<SubmissionLogs>(`/submissions/${submissionId}/logs`);
+  },
+  getSubmissionTraceability(submissionId: string, nodeId: string) {
+    return request<SubmissionTraceabilityPayload>(
+      `/submissions/${submissionId}/traceability?node_id=${encodeURIComponent(nodeId)}`,
+    );
+  },
+  getSubmissionSource(submissionId: string, payload: { filePath: string; firstLine?: number | null; kind?: "file" }) {
+    const params = new URLSearchParams({
+      file_path: payload.filePath,
+      kind: payload.kind ?? "file",
+    });
+    if (payload.firstLine && payload.firstLine > 0) {
+      params.set("first_line", String(payload.firstLine));
+    }
+    return request<SubmissionSourcePayload>(`/submissions/${submissionId}/source?${params.toString()}`);
   },
   getSubmissionPreviewStatus(submissionId: string) {
     return request<{ available: boolean; entry_file?: string }>(`/submissions/${submissionId}/preview/status`);

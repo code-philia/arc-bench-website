@@ -50,7 +50,11 @@ class WorkspaceAssembler:
         shutil.copy2(requirement_markdown_path, task_dir / "requirements.md")
         if requirement_yaml_path.exists():
             shutil.copy2(requirement_yaml_path, task_dir / "requirements.yaml")
-        shutil.copy2(Path(requirement.prerequisites_path), task_dir / "prerequisites.md")
+        prerequisites_path = Path(requirement.prerequisites_path)
+        if prerequisites_path.exists():
+            shutil.copy2(prerequisites_path, task_dir / "prerequisites.md")
+        else:
+            (task_dir / "prerequisites.md").write_text("", encoding="utf-8")
         shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
         self._write_visual_sdk_files(sdk_dir)
         self.traceability_seed_builder.write_seed_file(

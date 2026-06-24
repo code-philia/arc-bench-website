@@ -1,6 +1,4 @@
-import type { RequirementVisualState, SubmissionDetail, SubmissionLogs } from "../lib/types";
-
-export type QuickStartMode = "real" | "mock";
+import type { RequirementVisualState } from "../lib/types";
 
 export type QuickStartStepId =
   | "home-task-type"
@@ -21,11 +19,6 @@ export type QuickStartStep = {
   buttonLabel: string;
   codeSnippet?: string;
   preferredPlacement?: "left" | "right" | "up" | "down";
-};
-
-export type QuickStartMockSubmission = {
-  submission: SubmissionDetail;
-  logs: SubmissionLogs;
 };
 
 export type QuickStartCanvasDemoState = {

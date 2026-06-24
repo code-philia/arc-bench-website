@@ -13,7 +13,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
-import type { RequirementVisualState, SubmissionDetail, SubmissionLogs, SubmissionStep } from "../lib/types";
 import {
   QUICK_START_DISPLAY_NAME,
   QUICK_START_MODEL_NAME,
@@ -22,8 +21,6 @@ import {
 } from "./constants";
 import type {
   QuickStartCanvasDemoState,
-  QuickStartMockSubmission,
-  QuickStartMode,
   QuickStartPrefill,
   QuickStartStep,
 } from "./types";
@@ -32,10 +29,8 @@ type QuickStartContextValue = {
   active: boolean;
   stepIndex: number;
   currentStep: QuickStartStep | null;
-  mode: QuickStartMode | null;
   prefill: QuickStartPrefill;
   canvasDemo: QuickStartCanvasDemoState;
-  mockSubmission: QuickStartMockSubmission | null;
   demoSubmissionId: string | null;
   start: () => void;
   finish: () => void;
@@ -51,73 +46,6 @@ const QuickStartContext = createContext<QuickStartContextValue | undefined>(unde
 
 const QUICK_START_LOGIN_FLAG = "arcbench.quickstart.login";
 
-const demoSequence: Array<{ nodeId: string; states: RequirementVisualState[] }> = [
-  { nodeId: "ROOT", states: ["design", "implement", "test-passed"] },
-  { nodeId: "REQ-1", states: ["design", "implement", "test-passed"] },
-  { nodeId: "REQ-1.1", states: ["design", "implement", "test-passed"] },
-];
-
-const emptyVisualLogs: SubmissionLogs = {
-  events: "",
-  stdout: "Quick Start simulation mode.\n",
-  stderr: "",
-  visual_events: [],
-};
-
-function buildMockSteps(): SubmissionStep[] {
-  return [
-    {
-      key: "deploy_agent",
-      title: "Deploy Agent",
-      status: "completed",
-      description: "Pull runner container, prepare workspace, and install agent dependencies.",
-      logs: ["[success] Demo agent package loaded"],
-    },
-    {
-      key: "start_agent",
-      title: "Start Agent",
-      status: "completed",
-      description: "Execute the agent until it finishes the task and exits cleanly.",
-      logs: ["[success] Requirement processing visualization started"],
-    },
-    {
-      key: "run_tests",
-      title: "Run Tests",
-      status: "running",
-      description: "Execute the benchmark test suite against the finished task output.",
-      logs: ["[success] Canvas tutorial animation is active"],
-    },
-  ];
-}
-
-function buildMockSubmission(): QuickStartMockSubmission {
-  const createdAt = new Date().toISOString();
-  const submission: SubmissionDetail = {
-    id: "quickstart-demo-submission",
-    display_name: QUICK_START_DISPLAY_NAME,
-    model_name: QUICK_START_MODEL_NAME,
-    requirement_id: QUICK_START_REQUIREMENT_ID,
-    runtime: "python",
-    original_filename: "demo_agent.zip",
-    status: "RUNNING",
-    score: null,
-    passed_count: 0,
-    failed_count: 0,
-    created_at: createdAt,
-    started_at: createdAt,
-    finished_at: null,
-    failure_reason: null,
-    steps: buildMockSteps(),
-    stdout_path: null,
-    stderr_path: null,
-    result_path: null,
-    workspace_path: null,
-    logs_available: true,
-    tests: [],
-  };
-  return { submission, logs: emptyVisualLogs };
-}
-
 function buildRoute(step: QuickStartStep, submissionId: string | null) {
   if (!step.route.includes("__dynamic__")) {
     return step.route;
@@ -132,7 +60,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
 
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
-  const [mode, setMode] = useState<QuickStartMode | null>(null);
   const [prefill, setPrefill] = useState<QuickStartPrefill>({
     runtime: "python",
     displayName: QUICK_START_DISPLAY_NAME,
@@ -142,7 +69,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     error: null,
   });
   const [demoSubmissionId, setDemoSubmissionId] = useState<string | null>(null);
-  const [mockSubmission, setMockSubmission] = useState<QuickStartMockSubmission | null>(null);
   const [canvasDemo, setCanvasDemo] = useState<QuickStartCanvasDemoState>({
     active: false,
     completed: false,
@@ -164,9 +90,7 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     clearTimers();
     setActive(false);
     setStepIndex(0);
-    setMode(null);
     setDemoSubmissionId(null);
-    setMockSubmission(null);
     setCanvasDemo({
       active: false,
       completed: false,
@@ -202,58 +126,11 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const startCanvasDemo = useCallback(() => {
-    clearTimers();
-    setCanvasDemo({
-      active: true,
-      completed: false,
-      currentNodeId: null,
-      nodeStates: {},
-      selectedNodeId: null,
-      detailExpanded: false,
-    });
-
-    let offset = 400;
-    demoSequence.forEach(({ nodeId, states }) => {
-      states.forEach((state) => {
-        const timer = window.setTimeout(() => {
-          setCanvasDemo((current) => ({
-            ...current,
-            currentNodeId: nodeId,
-            selectedNodeId: nodeId,
-            nodeStates: {
-              ...current.nodeStates,
-              [nodeId]: state,
-            },
-          }));
-        }, offset);
-        timersRef.current.push(timer);
-        offset += 2000;
-      });
-    });
-  }, [clearTimers]);
-
-  const completeCanvasDemo = useCallback(() => {
-    clearTimers();
-    setCanvasDemo({
-      active: true,
-      completed: true,
-      currentNodeId: "REQ-1",
-      selectedNodeId: "REQ-1",
-      detailExpanded: false,
-      nodeStates: {
-        ROOT: "test-passed",
-        "REQ-1": "test-passed",
-        "REQ-1.1": "test-passed",
-      },
-    });
-  }, [clearTimers]);
-
   const requestNodeDetailFocus = useCallback(() => {
     setCanvasDemo((current) => ({
       ...current,
-      selectedNodeId: "REQ-1",
-      currentNodeId: "REQ-1",
+      selectedNodeId: current.selectedNodeId ?? current.currentNodeId ?? "ROOT",
+      currentNodeId: current.currentNodeId ?? current.selectedNodeId ?? "ROOT",
       detailExpanded: true,
     }));
   }, []);
@@ -283,8 +160,15 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
         QUICK_START_MODEL_NAME,
       );
       const started = await api.startSubmission(created.submission.id);
-      setMode("real");
       setDemoSubmissionId(started.id);
+      setCanvasDemo({
+        active: true,
+        completed: false,
+        currentNodeId: null,
+        nodeStates: {},
+        selectedNodeId: null,
+        detailExpanded: false,
+      });
       return started;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to start quick start submission.";
@@ -359,10 +243,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (currentStep.id === "submission-canvas") {
-      completeCanvasDemo();
-    }
-
     if (currentStep.id === "submission-node-detail") {
       requestNodeDetailFocus();
     }
@@ -384,7 +264,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     navigate(route);
   }, [
     active,
-    completeCanvasDemo,
     currentStep,
     demoSubmissionId,
     ensureRealSubmission,
@@ -407,8 +286,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     resetState();
     setActive(true);
     setStepIndex(0);
-    setMode(null);
-    setMockSubmission(null);
     void loadDemoAgent().catch(() => undefined);
     navigate("/playground");
   }, [isLoading, loadDemoAgent, navigate, resetState, user]);
@@ -421,13 +298,10 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
     if (location.pathname !== expectedRoute) {
       return;
     }
-    if (currentStep.id === "submission-canvas" && !canvasDemo.active) {
-      startCanvasDemo();
-    }
     if (currentStep.id === "submission-node-detail") {
       requestNodeDetailFocus();
     }
-  }, [active, canvasDemo.active, currentStep, demoSubmissionId, location.pathname, requestNodeDetailFocus, startCanvasDemo]);
+  }, [active, currentStep, demoSubmissionId, location.pathname, requestNodeDetailFocus]);
 
   useEffect(() => {
     if (isLoading || !user) {
@@ -461,10 +335,8 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
       active,
       stepIndex,
       currentStep,
-      mode,
       prefill,
       canvasDemo,
-      mockSubmission,
       demoSubmissionId,
       start,
       finish,
@@ -483,8 +355,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
       demoSubmissionId,
       finish,
       isSubmissionRouteMatch,
-      mockSubmission,
-      mode,
       prefill,
       requestNodeDetailFocus,
       setDetailExpanded,

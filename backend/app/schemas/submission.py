@@ -56,3 +56,37 @@ class SubmissionLogs(BaseModel):
     stdout: str
     stderr: str
     visual_events: list[SubmissionVisualEvent] = Field(default_factory=list)
+
+
+class SubmissionTraceabilityInterface(BaseModel):
+    interface_id: str
+    req_ids: list[str] = Field(default_factory=list)
+    type: str
+    content: str
+    file_path: str
+    first_line: int | None = None
+    implemented: bool
+    callers: list[str] = Field(default_factory=list)
+    callees: list[str] = Field(default_factory=list)
+
+
+class SubmissionTraceabilityTest(BaseModel):
+    test_id: str
+    req_id: str
+    scenario_id: str | None = None
+    type: str
+    file_path: str
+    first_line: int | None = None
+
+
+class SubmissionTraceabilityPayload(BaseModel):
+    interfaces: list[SubmissionTraceabilityInterface] = Field(default_factory=list)
+    tests: list[SubmissionTraceabilityTest] = Field(default_factory=list)
+
+
+class SubmissionSourcePayload(BaseModel):
+    kind: str
+    file_path: str
+    language: str
+    content: str
+    first_line: int
