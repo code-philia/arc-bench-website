@@ -3980,7 +3980,7 @@ button {
 }
 
 .ide-shell.workspace-collapsed {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 .ide-sidebar {
@@ -4102,31 +4102,23 @@ button {
   background: var(--bg);
 }
 
-.ide-sidebar-restore {
-  position: absolute;
-  top: 16px;
-  left: 0;
-  width: 26px;
-  height: 26px;
-  transform: translateX(-50%);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 100%);
+.ide-sidebar-minimized-toggle {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-elevated) 100%);
   color: var(--text-dim);
-  font-size: 0.8rem;
-  font-weight: 800;
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--bg-deep) 18%, transparent);
-  z-index: 2;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.ide-sidebar-restore:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+.ide-sidebar-minimized-toggle:hover {
+  color: var(--accent);
 }
 
 .ide-editor-topbar {
@@ -4406,33 +4398,6 @@ button {
 .preview-panel-collapse {
   width: 30px;
   padding: 0;
-}
-
-.preview-panel-minimized-toggle {
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--text-dim);
-}
-
-.preview-panel-minimized-toggle:hover {
-  color: var(--accent);
-}
-
-.preview-panel-minimized-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
 }
 
 .preview-panel-body {

@@ -300,6 +300,7 @@ function SubmissionFilePanel({
   diffFiles,
   selectedDiffFilePath,
   onOpenDiffFile,
+  emptyMessage,
 }: {
   source: SubmissionSourcePayload | null;
   loading: boolean;
@@ -308,6 +309,7 @@ function SubmissionFilePanel({
   diffFiles: SubmissionCommitChangedFile[];
   selectedDiffFilePath: string | null;
   onOpenDiffFile: (changedFile: SubmissionCommitChangedFile) => void;
+  emptyMessage: string;
 }) {
   const codeViewRef = useRef<HTMLPreElement | null>(null);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
@@ -331,7 +333,7 @@ function SubmissionFilePanel({
   }
 
   if (!source) {
-    return <div className="ide-empty-state">Select an interface or test to inspect source.</div>;
+    return <div className="ide-empty-state">{emptyMessage}</div>;
   }
 
   if (source.kind === "diff") {
@@ -378,20 +380,22 @@ function SubmissionFilePanel({
               )}
             </div>
           </aside>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            className="ide-sidebar-minimized-toggle"
+            onClick={() => setWorkspaceCollapsed(false)}
+            aria-label="Expand workspace"
+            title="Expand workspace"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
 
         <section className="ide-editor">
-          {workspaceCollapsed ? (
-            <button
-              type="button"
-              className="ide-sidebar-restore"
-              onClick={() => setWorkspaceCollapsed(false)}
-              aria-label="Expand workspace"
-              title="Expand workspace"
-            >
-              <span aria-hidden="true">&gt;</span>
-            </button>
-          ) : null}
           <div className="ide-editor-topbar">
             <div className="ide-window-dots" aria-hidden="true">
               <span />
@@ -457,20 +461,22 @@ function SubmissionFilePanel({
             </div>
           </div>
         </aside>
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          className="ide-sidebar-minimized-toggle"
+          onClick={() => setWorkspaceCollapsed(false)}
+          aria-label="Expand workspace"
+          title="Expand workspace"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
 
       <section className="ide-editor">
-        {workspaceCollapsed ? (
-          <button
-            type="button"
-            className="ide-sidebar-restore"
-            onClick={() => setWorkspaceCollapsed(false)}
-            aria-label="Expand workspace"
-            title="Expand workspace"
-          >
-            <span aria-hidden="true">&gt;</span>
-          </button>
-        ) : null}
         <div className="ide-editor-topbar">
           <div className="ide-window-dots" aria-hidden="true">
             <span />
@@ -665,6 +671,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  const [fileViewMode, setFileViewMode] = useState<"traceability" | "diff" | null>(null);
   const [commitHistory, setCommitHistory] = useState<SubmissionCommitHistoryPayload | null>(null);
   const [commitHistoryLoading, setCommitHistoryLoading] = useState(false);
   const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
@@ -683,6 +690,9 @@ export default function PlaygroundSubmissionDetailPage() {
     () => findNewestCommitForNode(commitHistory, selectedNodeId),
     [commitHistory, selectedNodeId],
   );
+  const filePanelEmptyMessage = fileViewMode === "diff"
+    ? "Select a commit history entry to inspect its diff."
+    : "Select an interface or test to inspect source.";
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
@@ -712,6 +722,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setTraceabilityError(null);
     setSource(null);
     setSourceError(null);
+    setFileViewMode(null);
     setCommitHistory(null);
     setCommitHistoryError(null);
     setSelectedCommitOid(null);
@@ -964,6 +975,7 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     setSelectedCommitOid(null);
+    setFileViewMode("traceability");
     setActiveTab("file");
     setSourceLoading(true);
     setSourceError(null);
@@ -983,6 +995,7 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     setSelectedCommitOid(commit.oid);
+    setFileViewMode("diff");
     const firstChangedFile = commit.changed_files[0] ?? null;
     setSelectedDiffFilePath(firstChangedFile?.file_path ?? null);
     setActiveTab("file");
@@ -1007,6 +1020,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId || !selectedDiffCommit) {
       return;
     }
+    setFileViewMode("diff");
     setSelectedDiffFilePath(changedFile.file_path);
     setSourceLoading(true);
     setSourceError(null);
@@ -1037,6 +1051,9 @@ export default function PlaygroundSubmissionDetailPage() {
         quickStart.setSelectedNode(commit.node_id);
         quickStart.setDetailExpanded(true);
       }
+    }
+    if (activeTab === "file") {
+      void openCommitDiff(commit);
     }
   };
 
@@ -1267,18 +1284,6 @@ export default function PlaygroundSubmissionDetailPage() {
                 <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span
-                style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 700,
-                  writingMode: "vertical-rl",
-                  textOrientation: "upright",
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                }}
-              >
-                {sidebarTab === "status" ? "Status" : "Trace"}
-              </span>
             </button>
           )}
         </section>
@@ -1383,6 +1388,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 diffFiles={selectedDiffCommit?.changed_files ?? []}
                 selectedDiffFilePath={selectedDiffFilePath}
                 onOpenDiffFile={openCommitDiffFile}
+                emptyMessage={filePanelEmptyMessage}
               />
             ) : activeTab === "results" ? (
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>
@@ -1494,13 +1500,12 @@ export default function PlaygroundSubmissionDetailPage() {
               <button
                 type="button"
                 onClick={() => setPreviewMinimized(false)}
-                className="preview-panel-minimized-toggle"
+                className="submission-panel-minimized-toggle"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ transform: "scaleX(-1)" }}>
                   <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span className="preview-panel-minimized-label">{previewTab === "history" ? "History" : "Preview"}</span>
               </button>
             )}
           </div>
