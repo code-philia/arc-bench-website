@@ -221,6 +221,7 @@ function SubmissionFilePanel({
   error: string | null;
 }) {
   const codeViewRef = useRef<HTMLPreElement | null>(null);
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
 
   useEffect(() => {
     if (!source || !codeViewRef.current) {
@@ -247,18 +248,42 @@ function SubmissionFilePanel({
   const highlightedLine = formatLineNumber(source.first_line);
 
   return (
-    <div className="ide-shell">
-      <aside className="ide-sidebar">
-        <div className="ide-sidebar-title">Workspace</div>
-        <div className="ide-file-list">
-          <div className="ide-file-item active">
-            <span className="ide-file-kind kind-file">{source.language.toUpperCase()}</span>
-            <span className="ide-file-path">{source.file_path}</span>
+    <div className={`ide-shell ${workspaceCollapsed ? "workspace-collapsed" : ""}`}>
+      {!workspaceCollapsed ? (
+        <aside className="ide-sidebar">
+          <div className="ide-sidebar-title">
+            <span>Workspace</span>
+            <button
+              type="button"
+              className="ide-sidebar-toggle"
+              onClick={() => setWorkspaceCollapsed(true)}
+              aria-label="Collapse workspace"
+              title="Collapse workspace"
+            >
+              <span aria-hidden="true">&lt;</span>
+            </button>
           </div>
-        </div>
-      </aside>
+          <div className="ide-file-list">
+            <div className="ide-file-item active">
+              <span className="ide-file-kind kind-file">{source.language.toUpperCase()}</span>
+              <span className="ide-file-path">{source.file_path}</span>
+            </div>
+          </div>
+        </aside>
+      ) : null}
 
       <section className="ide-editor">
+        {workspaceCollapsed ? (
+          <button
+            type="button"
+            className="ide-sidebar-restore"
+            onClick={() => setWorkspaceCollapsed(false)}
+            aria-label="Expand workspace"
+            title="Expand workspace"
+          >
+            <span aria-hidden="true">&gt;</span>
+          </button>
+        ) : null}
         <div className="ide-editor-topbar">
           <div className="ide-window-dots" aria-hidden="true">
             <span />
@@ -280,13 +305,20 @@ function SubmissionFilePanel({
                     display: "grid",
                     gridTemplateColumns: "56px minmax(0, 1fr)",
                     gap: "14px",
-                    background: isHighlighted ? "rgba(59, 130, 246, 0.12)" : "transparent",
+                    background: isHighlighted ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
                     borderRadius: "8px",
                     padding: "0 8px",
                     margin: "0 -8px",
                   }}
                 >
-                  <span style={{ color: isHighlighted ? "#2563eb" : "#94a3b8", userSelect: "none" }}>{lineNumber}</span>
+                  <span
+                    style={{
+                      color: isHighlighted ? "var(--accent)" : "var(--text-muted)",
+                      userSelect: "none",
+                    }}
+                  >
+                    {lineNumber}
+                  </span>
                   <span>{line || " "}</span>
                 </div>
               );
