@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     playground_requirements_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "requirements"
     playground_tests_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "tests"
     playground_templates_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "template"
-    demo_agent_zip: Path = ROOT_DIR / "runtime" / "demo" / "demo_agent.zip"
+    demo_agent_zip: Path = ROOT_DIR / "runtime" / "demo.zip"
     user_submissions_root: Path = ROOT_DIR / "runtime" / "user-submissions"
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
