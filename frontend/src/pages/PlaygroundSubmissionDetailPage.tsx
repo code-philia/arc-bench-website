@@ -11,6 +11,9 @@ import { findNodeById, parseTaskTreeYaml, requirementMarkdownToTree } from "../l
 import type {
   RequirementDetail,
   RequirementVisualState,
+  SubmissionCommitChangedFile,
+  SubmissionCommitHistoryEntry,
+  SubmissionCommitHistoryPayload,
   SubmissionDetail,
   SubmissionLogs,
   SubmissionSourcePayload,
@@ -69,6 +72,68 @@ function formatLineNumber(value: number | null) {
 
 function codeLines(content: string) {
   return content.replace(/\r\n/g, "\n").split("\n");
+}
+
+function formatCommitDateTime(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+function diffLineClassName(line: string) {
+  if (line.startsWith("+") && !line.startsWith("+++ ")) {
+    return "diff-line added";
+  }
+  if (line.startsWith("-") && !line.startsWith("--- ")) {
+    return "diff-line removed";
+  }
+  if (line.startsWith("@@")) {
+    return "diff-line hunk";
+  }
+  if (
+    line.startsWith("diff --git")
+    || line.startsWith("index ")
+    || line.startsWith("--- ")
+    || line.startsWith("+++ ")
+    || line.startsWith("rename from ")
+    || line.startsWith("rename to ")
+    || line.startsWith("new file mode ")
+    || line.startsWith("deleted file mode ")
+  ) {
+    return "diff-line meta";
+  }
+  return "diff-line";
+}
+
+function commitHistoryEmptyState(payload: SubmissionCommitHistoryPayload | null) {
+  if (!payload) {
+    return "No git history is available for this submission.";
+  }
+  if (payload.availability === "workspace_unavailable") {
+    return "Submission workspace is not available for this run.";
+  }
+  if (payload.availability === "git_unavailable") {
+    return "Git history is not available because workspace/template/.git is missing.";
+  }
+  return "No git history is available for this submission.";
+}
+
+function changedFileLabel(changedFile: SubmissionCommitChangedFile) {
+  if (changedFile.change_type === "R" && changedFile.old_file_path) {
+    return `${changedFile.old_file_path} -> ${changedFile.file_path}`;
+  }
+  return changedFile.file_path;
+}
+
+function readDiffHeaderPath(diffContent: string, fallback: string) {
+  const lines = codeLines(diffContent);
+  for (const line of lines) {
+    if (line.startsWith("+++ b/")) {
+      return line.slice(6).trim() || fallback;
+    }
+    if (line.startsWith("rename to ")) {
+      return line.slice("rename to ".length).trim() || fallback;
+    }
+  }
+  return fallback;
 }
 
 function TraceabilityPanel({
@@ -215,10 +280,18 @@ function SubmissionFilePanel({
   source,
   loading,
   error,
+  diffCommit,
+  diffFiles,
+  selectedDiffFilePath,
+  onOpenDiffFile,
 }: {
   source: SubmissionSourcePayload | null;
   loading: boolean;
   error: string | null;
+  diffCommit: SubmissionCommitHistoryEntry | null;
+  diffFiles: SubmissionCommitChangedFile[];
+  selectedDiffFilePath: string | null;
+  onOpenDiffFile: (changedFile: SubmissionCommitChangedFile) => void;
 }) {
   const codeViewRef = useRef<HTMLPreElement | null>(null);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
@@ -242,6 +315,102 @@ function SubmissionFilePanel({
 
   if (!source) {
     return <div className="ide-empty-state">Select an interface or test to inspect source.</div>;
+  }
+
+  if (source.kind === "diff") {
+    const diffLines = codeLines(source.content);
+    const diffDisplayPath = readDiffHeaderPath(source.content, source.file_path);
+    const hasWorkspaceFiles = diffFiles.length > 0;
+    const editorTitle = selectedDiffFilePath ?? diffDisplayPath;
+    return (
+      <div className={`ide-shell ${workspaceCollapsed ? "workspace-collapsed" : ""}`}>
+        {!workspaceCollapsed ? (
+          <aside className="ide-sidebar">
+            <div className="ide-sidebar-title">
+              <span>Workspace</span>
+              <button
+                type="button"
+                className="ide-sidebar-toggle"
+                onClick={() => setWorkspaceCollapsed(true)}
+                aria-label="Collapse workspace"
+                title="Collapse workspace"
+              >
+                <span aria-hidden="true">&lt;</span>
+              </button>
+            </div>
+            <div className="ide-file-list">
+              {hasWorkspaceFiles ? diffFiles.map((changedFile) => {
+                const isActive = selectedDiffFilePath === changedFile.file_path;
+                return (
+                  <button
+                    key={`${changedFile.change_type}:${changedFile.old_file_path ?? ""}:${changedFile.file_path}`}
+                    type="button"
+                    className={`ide-file-item diff-workspace-item${isActive ? " active" : ""}`}
+                    onClick={() => onOpenDiffFile(changedFile)}
+                  >
+                    <span className={`ide-file-kind kind-diff kind-change-${changedFile.change_type.toLowerCase()}`}>
+                      {changedFile.change_type}
+                    </span>
+                    <span className="ide-file-path">{changedFileLabel(changedFile)}</span>
+                  </button>
+                );
+              }) : (
+                <div className="ide-file-list-empty">
+                  {diffCommit ? `No changed files found in commit ${diffCommit.short_oid}.` : "No changed files found."}
+                </div>
+              )}
+            </div>
+          </aside>
+        ) : null}
+
+        <section className="ide-editor">
+          {workspaceCollapsed ? (
+            <button
+              type="button"
+              className="ide-sidebar-restore"
+              onClick={() => setWorkspaceCollapsed(false)}
+              aria-label="Expand workspace"
+              title="Expand workspace"
+            >
+              <span aria-hidden="true">&gt;</span>
+            </button>
+          ) : null}
+          <div className="ide-editor-topbar">
+            <div className="ide-window-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="ide-editor-title">{editorTitle}</div>
+            <div className="ide-editor-badge">DIFF</div>
+          </div>
+          <pre ref={codeViewRef} className="ide-code-view is-diff">
+            <code>
+              {diffLines.map((line, index) => {
+                const lineNumber = index + 1;
+                return (
+                  <div
+                    key={`${lineNumber}:${line}`}
+                    className={diffLineClassName(line)}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "56px minmax(0, 1fr)",
+                      gap: "14px",
+                      borderRadius: "8px",
+                      padding: "0 8px",
+                      margin: "0 -8px",
+                    }}
+                  >
+                    <span style={{ color: "var(--text-muted)", userSelect: "none" }}>{lineNumber}</span>
+                    <span>{line || " "}</span>
+                  </div>
+                );
+              })}
+            </code>
+          </pre>
+        </section>
+      </div>
+    );
   }
 
   const lines = codeLines(source.content);
@@ -330,6 +499,110 @@ function SubmissionFilePanel({
   );
 }
 
+function CommitHistoryPanel({
+  commits,
+  loading,
+  error,
+  selectedNodeId,
+  selectedCommitOid,
+  onSelectCommit,
+  onOpenDiff,
+}: {
+  commits: SubmissionCommitHistoryPayload | null;
+  loading: boolean;
+  error: string | null;
+  selectedNodeId: string | null;
+  selectedCommitOid: string | null;
+  onSelectCommit: (commit: SubmissionCommitHistoryEntry) => void;
+  onOpenDiff: (commit: SubmissionCommitHistoryEntry) => void;
+}) {
+  const [menuState, setMenuState] = useState<{ commit: SubmissionCommitHistoryEntry; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!menuState) {
+      return;
+    }
+    const closeMenu = () => setMenuState(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("contextmenu", closeMenu);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("contextmenu", closeMenu);
+    };
+  }, [menuState]);
+
+  if (loading) {
+    return <div className="commit-history-empty">Loading commit history...</div>;
+  }
+
+  if (error) {
+    return <div className="commit-history-empty">{error}</div>;
+  }
+
+  if (!commits || commits.commits.length === 0) {
+    return <div className="commit-history-empty">{commitHistoryEmptyState(commits)}</div>;
+  }
+
+  return (
+    <div className="commit-history-panel">
+      <div className="commit-history-header">
+        <div className="commit-history-kicker">Template Git History</div>
+        <div className="commit-history-title">{commits.commits.length} commits</div>
+      </div>
+      <div className="commit-history-list">
+        {commits.commits.map((commit) => {
+          const isNodeMatch = Boolean(selectedNodeId && commit.node_id === selectedNodeId);
+          const isCommitSelected = selectedCommitOid === commit.oid;
+          return (
+            <button
+              key={commit.oid}
+              type="button"
+              className={`commit-history-item${isNodeMatch ? " node-active" : ""}${isCommitSelected ? " commit-active" : ""}`}
+              onClick={() => onSelectCommit(commit)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                onSelectCommit(commit);
+                setMenuState({ commit, x: event.clientX, y: event.clientY });
+              }}
+            >
+              <div className="commit-history-item-top">
+                <span className="commit-history-sha">{commit.short_oid}</span>
+                {commit.phase ? <span className={`commit-history-phase ${commit.phase}`}>{commit.phase}</span> : null}
+              </div>
+              <div className="commit-history-message">{commit.message}</div>
+              <div className="commit-history-meta">
+                <span>{commit.node_id ?? "UNMAPPED"}</span>
+                <span>{formatCommitDateTime(commit.committed_at)}</span>
+              </div>
+              <div className="commit-history-files-count">
+                {commit.changed_files.length} changed file{commit.changed_files.length === 1 ? "" : "s"}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {menuState ? (
+        <div
+          className="commit-history-context-menu"
+          style={{ left: `${menuState.x}px`, top: `${menuState.y}px` }}
+          role="menu"
+        >
+          <button
+            type="button"
+            className="commit-history-context-action"
+            onClick={() => {
+              onOpenDiff(menuState.commit);
+              setMenuState(null);
+            }}
+          >
+            View Git Diff
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function PlaygroundSubmissionDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
   const location = useLocation();
@@ -352,25 +625,44 @@ export default function PlaygroundSubmissionDetailPage() {
   const [sidebarMinimized, setSidebarMinimized] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(340);
   const [previewMinimized, setPreviewMinimized] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 480;
+    }
+    return Math.round(window.innerWidth * 0.333);
+  });
   const pollRef = useRef<number | null>(null);
   const seenVisualKeysRef = useRef<Set<string>>(new Set());
   const isSidebarDragging = useRef(false);
   const sidebarDragStartX = useRef(0);
   const sidebarDragStartWidth = useRef(0);
+  const isPreviewDragging = useRef(false);
+  const previewDragStartX = useRef(0);
+  const previewDragStartWidth = useRef(0);
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
+  const [previewTab, setPreviewTab] = useState<"preview" | "history">("preview");
   const [traceability, setTraceability] = useState<SubmissionTraceabilityPayload | null>(null);
   const [traceabilityLoading, setTraceabilityLoading] = useState(false);
   const [traceabilityError, setTraceabilityError] = useState<string | null>(null);
   const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  const [commitHistory, setCommitHistory] = useState<SubmissionCommitHistoryPayload | null>(null);
+  const [commitHistoryLoading, setCommitHistoryLoading] = useState(false);
+  const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
+  const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
+  const [selectedDiffFilePath, setSelectedDiffFilePath] = useState<string | null>(null);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const previewUrl = getHostDemoPreviewBase();
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
-  const previewPanelWidth = previewMinimized ? "80px" : "33.333vw";
+  const previewPanelWidth = previewMinimized ? "80px" : `${previewWidth}px`;
+  const selectedDiffCommit = useMemo(
+    () => commitHistory?.commits.find((commit) => commit.oid === selectedCommitOid) ?? null,
+    [commitHistory, selectedCommitOid],
+  );
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
@@ -395,10 +687,15 @@ export default function PlaygroundSubmissionDetailPage() {
     setPreviewAvailable(false);
     setPreviewLoading(true);
     setPreviewFrameVersion(0);
+    setPreviewTab("preview");
     setTraceability(null);
     setTraceabilityError(null);
     setSource(null);
     setSourceError(null);
+    setCommitHistory(null);
+    setCommitHistoryError(null);
+    setSelectedCommitOid(null);
+    setSelectedDiffFilePath(null);
   }, [submissionId]);
 
   useEffect(() => {
@@ -437,6 +734,39 @@ export default function PlaygroundSubmissionDetailPage() {
       }
     };
   }, [requirementCatalog, requirementId, submissionId]);
+
+  useEffect(() => {
+    if (!submissionId || !submission) {
+      setCommitHistory(null);
+      setCommitHistoryError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCommitHistoryLoading(true);
+    setCommitHistoryError(null);
+    api.getSubmissionCommitHistory(submissionId)
+      .then((payload) => {
+        if (!cancelled) {
+          setCommitHistory(payload);
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setCommitHistory(null);
+          setCommitHistoryError(error.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCommitHistoryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submission, submissionId]);
 
   useEffect(() => {
     if (!submission || !pollRef.current) {
@@ -606,6 +936,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId) {
       return;
     }
+    setSelectedCommitOid(null);
     setActiveTab("file");
     setSourceLoading(true);
     setSourceError(null);
@@ -617,6 +948,65 @@ export default function PlaygroundSubmissionDetailPage() {
       setSourceError((error as Error).message);
     } finally {
       setSourceLoading(false);
+    }
+  };
+
+  const openCommitDiff = async (commit: SubmissionCommitHistoryEntry) => {
+    if (!submissionId) {
+      return;
+    }
+    setSelectedCommitOid(commit.oid);
+    const firstChangedFile = commit.changed_files[0] ?? null;
+    setSelectedDiffFilePath(firstChangedFile?.file_path ?? null);
+    setActiveTab("file");
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      const payload = await api.getSubmissionSource(submissionId, {
+        filePath: firstChangedFile?.file_path ?? "",
+        kind: "diff",
+        commitOid: commit.oid,
+      });
+      setSource(payload);
+    } catch (error) {
+      setSource(null);
+      setSourceError((error as Error).message);
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
+  const openCommitDiffFile = async (changedFile: SubmissionCommitChangedFile) => {
+    if (!submissionId || !selectedDiffCommit) {
+      return;
+    }
+    setSelectedDiffFilePath(changedFile.file_path);
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      const payload = await api.getSubmissionSource(submissionId, {
+        filePath: changedFile.file_path,
+        kind: "diff",
+        commitOid: selectedDiffCommit.oid,
+      });
+      setSource(payload);
+    } catch (error) {
+      setSource(null);
+      setSourceError((error as Error).message);
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
+  const selectCommitHistoryEntry = (commit: SubmissionCommitHistoryEntry) => {
+    setSelectedCommitOid(commit.oid);
+    if (commit.node_id) {
+      setSelectedNodeId(commit.node_id);
+      setDetailExpanded(true);
+      if (useQuickStartSubmission) {
+        quickStart.setSelectedNode(commit.node_id);
+        quickStart.setDetailExpanded(true);
+      }
     }
   };
 
@@ -650,12 +1040,48 @@ export default function PlaygroundSubmissionDetailPage() {
     document.removeEventListener("mouseup", onSidebarResizeMouseUp);
   };
 
+  const clampPreviewWidth = (value: number) => {
+    const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+    const maxWidth = Math.min(720, Math.floor(viewportWidth * 0.5));
+    return Math.max(320, Math.min(maxWidth, value));
+  };
+
+  const onPreviewResizeMouseDown = (event: React.MouseEvent) => {
+    event.preventDefault();
+    isPreviewDragging.current = true;
+    previewDragStartX.current = event.clientX;
+    previewDragStartWidth.current = previewWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    document.addEventListener("mousemove", onPreviewResizeMouseMove);
+    document.addEventListener("mouseup", onPreviewResizeMouseUp);
+  };
+
+  const onPreviewResizeMouseMove = (event: MouseEvent) => {
+    if (!isPreviewDragging.current) {
+      return;
+    }
+    const delta = previewDragStartX.current - event.clientX;
+    setPreviewWidth(clampPreviewWidth(previewDragStartWidth.current + delta));
+  };
+
+  const onPreviewResizeMouseUp = () => {
+    isPreviewDragging.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("mousemove", onPreviewResizeMouseMove);
+    document.removeEventListener("mouseup", onPreviewResizeMouseUp);
+  };
+
   useEffect(() => {
     return () => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       document.removeEventListener("mousemove", onSidebarResizeMouseMove);
       document.removeEventListener("mouseup", onSidebarResizeMouseUp);
+      document.removeEventListener("mousemove", onPreviewResizeMouseMove);
+      document.removeEventListener("mouseup", onPreviewResizeMouseUp);
     };
   }, []);
 
@@ -849,7 +1275,7 @@ export default function PlaygroundSubmissionDetailPage() {
           flexDirection: "column",
           overflow: "hidden",
           borderRight: "1px solid var(--border)",
-          background: "white",
+          background: "var(--bg)",
           minWidth: 0,
         }}>
           <div className="doc-tabs" style={{ borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
@@ -916,6 +1342,10 @@ export default function PlaygroundSubmissionDetailPage() {
                 source={source}
                 loading={sourceLoading}
                 error={sourceError}
+                diffCommit={selectedDiffCommit}
+                diffFiles={selectedDiffCommit?.changed_files ?? []}
+                selectedDiffFilePath={selectedDiffFilePath}
+                onOpenDiffFile={openCommitDiffFile}
               />
             ) : activeTab === "results" ? (
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>
@@ -947,123 +1377,74 @@ export default function PlaygroundSubmissionDetailPage() {
           </div>
         </main>
 
-        <aside style={{
+        {!previewMinimized ? (
+          <div
+            className="preview-panel-resizer"
+            onMouseDown={onPreviewResizeMouseDown}
+            aria-label="Resize right sidebar"
+          >
+            <div className="preview-panel-resizer-handle" />
+          </div>
+        ) : null}
+
+        <aside className="preview-panel-shell" style={{
           width: previewPanelWidth,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          background: "white",
+          background: "var(--bg)",
           borderLeft: "1px solid var(--border)",
-          boxShadow: "-4px 0 24px rgba(0, 0, 0, 0.06)",
+          boxShadow: "-4px 0 24px color-mix(in srgb, var(--bg-deep) 16%, transparent)",
           transition: "width 0.24s ease",
           flexShrink: 0,
         }}>
-          <div style={{
-            padding: "12px 16px",
-            background: "#f8fafc",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            minHeight: "48px",
-          }}>
+          <div className="preview-panel-header">
             {!previewMinimized ? (
               <>
-                <span style={{
-                  fontWeight: 700,
-                  fontSize: "0.9375rem",
-                  color: "#1e293b",
-                  letterSpacing: "0.01em",
-                }}>
-                  Live Website Preview
-                </span>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div className="preview-panel-tabs">
                   <button
                     type="button"
-                    onClick={() => {
-                      void refreshPreview();
-                    }}
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "#64748b",
-                      textDecoration: "none",
-                      padding: "4px 8px",
-                      borderRadius: "6px",
-                      transition: "all 0.15s ease",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      border: "1px solid #e2e8f0",
-                      background: "white",
-                      cursor: "pointer",
-                    }}
-                    onMouseOver={(buttonEvent) => {
-                      buttonEvent.currentTarget.style.color = "#3b82f6";
-                      buttonEvent.currentTarget.style.background = "#eff6ff";
-                      buttonEvent.currentTarget.style.borderColor = "#bfdbfe";
-                    }}
-                    onMouseOut={(buttonEvent) => {
-                      buttonEvent.currentTarget.style.color = "#64748b";
-                      buttonEvent.currentTarget.style.background = "white";
-                      buttonEvent.currentTarget.style.borderColor = "#e2e8f0";
-                    }}
+                    className={`preview-panel-tab ${previewTab === "preview" ? "active" : ""}`}
+                    onClick={() => setPreviewTab("preview")}
                   >
-                    {previewAvailable ? "Refresh" : "Retry"}
+                    Live Preview
                   </button>
-                  {submission && previewAvailable ? (
-                    <a
-                      href={previewUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "#64748b",
-                        textDecoration: "none",
-                        padding: "4px 8px",
-                        borderRadius: "6px",
-                        transition: "all 0.15s ease",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                      onMouseOver={(linkEvent) => {
-                        linkEvent.currentTarget.style.color = "#3b82f6";
-                        linkEvent.currentTarget.style.background = "#eff6ff";
-                      }}
-                      onMouseOut={(linkEvent) => {
-                        linkEvent.currentTarget.style.color = "#64748b";
-                        linkEvent.currentTarget.style.background = "transparent";
-                      }}
-                    >
-                      Open
-                    </a>
+                  <button
+                    type="button"
+                    className={`preview-panel-tab ${previewTab === "history" ? "active" : ""}`}
+                    onClick={() => setPreviewTab("history")}
+                  >
+                    Commit History
+                  </button>
+                </div>
+                <div className="preview-panel-actions">
+                  {previewTab === "preview" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="preview-panel-action"
+                        onClick={() => {
+                          void refreshPreview();
+                        }}
+                      >
+                        {previewAvailable ? "Refresh" : "Retry"}
+                      </button>
+                      {submission && previewAvailable ? (
+                        <a
+                          href={previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="preview-panel-link"
+                        >
+                          Open
+                        </a>
+                      ) : null}
+                    </>
                   ) : null}
                   <button
                     type="button"
+                    className="preview-panel-collapse"
                     onClick={() => setPreviewMinimized(true)}
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      border: "1px solid #e2e8f0",
-                      background: "white",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#64748b",
-                      transition: "all 0.15s ease",
-                    }}
-                    onMouseOver={(buttonEvent) => {
-                      buttonEvent.currentTarget.style.borderColor = "#cbd5e1";
-                      buttonEvent.currentTarget.style.color = "#334155";
-                      buttonEvent.currentTarget.style.background = "#f1f5f9";
-                    }}
-                    onMouseOut={(buttonEvent) => {
-                      buttonEvent.currentTarget.style.borderColor = "#e2e8f0";
-                      buttonEvent.currentTarget.style.color = "#64748b";
-                      buttonEvent.currentTarget.style.background = "white";
-                    }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ transform: "scaleX(-1)" }}>
                       <path d="M11 19L3 12L11 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -1076,95 +1457,62 @@ export default function PlaygroundSubmissionDetailPage() {
               <button
                 type="button"
                 onClick={() => setPreviewMinimized(false)}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "column",
-                  gap: "6px",
-                  color: "#475569",
-                }}
-                onMouseOver={(buttonEvent) => {
-                  buttonEvent.currentTarget.style.color = "#3b82f6";
-                }}
-                onMouseOut={(buttonEvent) => {
-                  buttonEvent.currentTarget.style.color = "#475569";
-                }}
+                className="preview-panel-minimized-toggle"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 600,
-                  writingMode: "vertical-rl",
-                  textOrientation: "upright",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.15em",
-                }}>
-                  Preview
-                </span>
+                <span className="preview-panel-minimized-label">{previewTab === "history" ? "History" : "Preview"}</span>
               </button>
             )}
           </div>
 
           {!previewMinimized ? (
-            <div style={{ flex: 1, position: "relative", background: "white", overflow: "hidden" }}>
-              {previewLoading ? (
-                <div style={{
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#64748b",
-                }}>
-                  Loading preview...
-                </div>
-              ) : submission && previewAvailable ? (
-                <iframe
-                  key={`${submissionId}-${previewFrameVersion}`}
-                  src={previewFrameUrl}
-                  title="Live Website Preview"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    border: "none",
-                    background: "white",
-                  }}
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-                />
-              ) : (
-                <div style={{
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  textAlign: "center",
-                  padding: "40px",
-                  color: "#64748b",
-                  flexDirection: "column",
-                  gap: "12px",
-                }}>
-                  <div>
-                    <div style={{ fontWeight: 600, color: "#334155" }}>
-                      {submission ? "Preview not available yet" : "No submission selected"}
-                    </div>
-                    <div style={{ fontSize: "0.875rem", marginTop: "4px", color: "#64748b" }}>
-                      {submission
-                        ? "Waiting for host demo backend to build and start."
-                        : "Select a submission to view its preview"}
+            <div className="preview-panel-body">
+              {previewTab === "preview" ? (
+                previewLoading ? (
+                  <div className="preview-panel-empty">Loading preview...</div>
+                ) : submission && previewAvailable ? (
+                  <iframe
+                    key={`${submissionId}-${previewFrameVersion}`}
+                    src={previewFrameUrl}
+                    title="Live Website Preview"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      background: "white",
+                    }}
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                  />
+                ) : (
+                  <div className="preview-panel-empty">
+                    <div>
+                      <div className="preview-panel-empty-title">
+                        {submission ? "Preview not available yet" : "No submission selected"}
+                      </div>
+                      <div className="preview-panel-empty-copy">
+                        {submission
+                          ? "Waiting for host demo backend to build and start."
+                          : "Select a submission to view its preview"}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )
+              ) : (
+                <CommitHistoryPanel
+                  commits={commitHistory}
+                  loading={commitHistoryLoading}
+                  error={commitHistoryError}
+                  selectedNodeId={selectedNodeId}
+                  selectedCommitOid={selectedCommitOid}
+                  onSelectCommit={selectCommitHistoryEntry}
+                  onOpenDiff={openCommitDiff}
+                />
               )}
             </div>
           ) : null}

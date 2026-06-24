@@ -118,11 +118,33 @@ export type SubmissionTraceabilityPayload = {
 };
 
 export type SubmissionSourcePayload = {
-  kind: "file";
+  kind: "file" | "diff";
   file_path: string;
   language: string;
   content: string;
   first_line: number;
+};
+
+export type SubmissionCommitChangedFile = {
+  file_path: string;
+  change_type: "A" | "M" | "D" | "R" | string;
+  old_file_path: string | null;
+};
+
+export type SubmissionCommitHistoryEntry = {
+  oid: string;
+  short_oid: string;
+  committed_at: string;
+  message: string;
+  node_id: string | null;
+  phase: "design" | "implement" | null;
+  summary: string | null;
+  changed_files: SubmissionCommitChangedFile[];
+};
+
+export type SubmissionCommitHistoryPayload = {
+  availability: "available" | "workspace_unavailable" | "git_unavailable";
+  commits: SubmissionCommitHistoryEntry[];
 };
 
 export type SubmissionVisualEvent = {

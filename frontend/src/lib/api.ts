@@ -6,6 +6,7 @@ import type {
   SubmissionSourcePayload,
   RequirementSummary,
   SubmissionDetail,
+  SubmissionCommitHistoryPayload,
   SubmissionLogs,
   SubmissionSummary,
   SubmissionTraceabilityPayload,
@@ -131,13 +132,22 @@ export const api = {
       `/submissions/${submissionId}/traceability?node_id=${encodeURIComponent(nodeId)}`,
     );
   },
-  getSubmissionSource(submissionId: string, payload: { filePath: string; firstLine?: number | null; kind?: "file" }) {
+  getSubmissionCommitHistory(submissionId: string) {
+    return request<SubmissionCommitHistoryPayload>(`/submissions/${submissionId}/commit-history`);
+  },
+  getSubmissionSource(
+    submissionId: string,
+    payload: { filePath: string; firstLine?: number | null; kind?: "file" | "diff"; commitOid?: string | null },
+  ) {
     const params = new URLSearchParams({
       file_path: payload.filePath,
       kind: payload.kind ?? "file",
     });
     if (payload.firstLine && payload.firstLine > 0) {
       params.set("first_line", String(payload.firstLine));
+    }
+    if (payload.commitOid && payload.commitOid.trim()) {
+      params.set("commit_oid", payload.commitOid.trim());
     }
     return request<SubmissionSourcePayload>(`/submissions/${submissionId}/source?${params.toString()}`);
   },

@@ -11,6 +11,7 @@ class DemoAgentService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.demo_root = self.settings.demo_agent_zip.parent
+        self.git_root = self.demo_root / ".git"
         self.project_root = self.demo_root / "meetingroom"
         self.queue_path = self.demo_root / "queue.json"
 
@@ -21,6 +22,8 @@ class DemoAgentService:
             raise FileNotFoundError(f"Demo project not found: {self.project_root}")
         if not self.queue_path.is_file():
             raise FileNotFoundError(f"Demo queue file not found: {self.queue_path}")
+        if not self.git_root.is_dir():
+            raise FileNotFoundError(f"Demo git history not found: {self.git_root}")
         output = BytesIO()
 
         with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -31,5 +34,12 @@ class DemoAgentService:
                 if not file_path.is_file():
                     continue
                 archive.write(file_path, arcname=str(file_path.relative_to(self.demo_root)).replace("\\", "/"))
+            for git_file_path in self.git_root.rglob("*"):
+                if not git_file_path.is_file():
+                    continue
+                archive.write(
+                    git_file_path,
+                    arcname=str(Path("meetingroom") / ".git" / git_file_path.relative_to(self.git_root)).replace("\\", "/"),
+                )
 
         return output.getvalue(), self.settings.demo_agent_zip.name

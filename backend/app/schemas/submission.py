@@ -84,6 +84,28 @@ class SubmissionTraceabilityPayload(BaseModel):
     tests: list[SubmissionTraceabilityTest] = Field(default_factory=list)
 
 
+class SubmissionCommitChangedFile(BaseModel):
+    file_path: str
+    change_type: str
+    old_file_path: str | None = None
+
+
+class SubmissionCommitHistoryEntry(BaseModel):
+    oid: str
+    short_oid: str
+    committed_at: str
+    message: str
+    node_id: str | None = None
+    phase: str | None = None
+    summary: str | None = None
+    changed_files: list[SubmissionCommitChangedFile] = Field(default_factory=list)
+
+
+class SubmissionCommitHistoryPayload(BaseModel):
+    availability: str = "available"
+    commits: list[SubmissionCommitHistoryEntry] = Field(default_factory=list)
+
+
 class SubmissionSourcePayload(BaseModel):
     kind: str
     file_path: str

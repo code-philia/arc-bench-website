@@ -10,6 +10,7 @@ from app.core.enums import RuntimeType, SubmissionStatus
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.submission import (
+    SubmissionCommitHistoryPayload,
     SubmissionCreateResponse,
     SubmissionDetail,
     SubmissionLogs,
@@ -145,12 +146,28 @@ def get_submission_traceability(
     return SubmissionTraceabilityPayload(**payload)
 
 
+@router.get("/{submission_id}/commit-history", response_model=SubmissionCommitHistoryPayload)
+def get_submission_commit_history(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionCommitHistoryPayload:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    payload = artifact_service.read_commit_history(submission)
+    return SubmissionCommitHistoryPayload(**payload)
+
+
 @router.get("/{submission_id}/source", response_model=SubmissionSourcePayload)
 def get_submission_source(
     submission_id: str,
-    file_path: str,
+    file_path: str = "",
     first_line: int | None = None,
     kind: str = "file",
+    commit_oid: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionSourcePayload:
@@ -166,6 +183,7 @@ def get_submission_source(
             file_path=file_path,
             first_line=first_line,
             kind=kind,
+            commit_oid=commit_oid,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
