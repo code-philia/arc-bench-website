@@ -553,7 +553,7 @@ function CommitHistoryPanel({
   }, [menuState]);
 
   useEffect(() => {
-    selectedItemRef.current?.scrollIntoView({ block: "nearest" });
+    selectedItemRef.current?.scrollIntoView({ block: "center" });
   }, [selectedCommitOid]);
 
   if (loading) {
