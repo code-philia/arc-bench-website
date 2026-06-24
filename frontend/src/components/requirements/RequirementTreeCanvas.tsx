@@ -14,7 +14,7 @@ import {
 } from "@ant-design/icons";
 import { Tooltip } from "antd";
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BaseEdge,
   Connection,
@@ -35,18 +35,35 @@ import {
 } from "@xyflow/react";
 
 import { findNodeById, type RequirementNode } from "../../lib/taskTree";
-import type { RequirementVisualState } from "../../lib/types";
+import type {
+  RequirementVisualState,
+  SubmissionTraceabilityInterface,
+  SubmissionTraceabilityTest,
+} from "../../lib/types";
 import RequirementNodeDetailContent from "./RequirementNodeDetailContent";
 
+type FlowNodeKind = "requirement" | "interface" | "test";
+
 type FlowNodeData = {
+  kind: FlowNodeKind;
   label: string;
   title: string;
-  type: RequirementNode["type"];
+  subtitle?: string;
+  badge?: string;
+  filePath?: string;
+  firstLine?: number | null;
+  onMeasuredHeightChange?: (nodeId: string, height: number) => void;
+  type?: RequirementNode["type"];
   selected: boolean;
   visualState: RequirementVisualState;
   pulse: boolean;
   dependencySourcesVisible: boolean;
   dependencyTargetsVisible: boolean;
+};
+
+type TraceabilityCanvasPayload = {
+  interfaces: SubmissionTraceabilityInterface[];
+  tests: SubmissionTraceabilityTest[];
 };
 
 type FlowGraph = {
@@ -75,12 +92,23 @@ type RequirementTreeCanvasProps = {
   showLegend?: boolean;
   detailTestId?: string;
   autoFitOnTreeChange?: boolean;
+  traceabilityNodes?: TraceabilityCanvasPayload | null;
+  onTraceabilityNodeClick?: (payload: {
+    kind: "interface" | "test";
+    id: string;
+    filePath: string;
+    firstLine: number | null;
+  }) => void;
 };
 
 const NODE_WIDTH = 124;
 const NODE_HEIGHT = 48;
 const HORIZONTAL_GAP = 72;
 const VERTICAL_GAP = 44;
+const TRACEABILITY_NODE_WIDTH = 188;
+const TRACEABILITY_COLUMN_GAP = 56;
+const TRACEABILITY_ROW_GAP = 20;
+const TRACEABILITY_OFFSET_X = 84;
 const FLOW_MARGIN_X = 32;
 const FLOW_MARGIN_Y = 32;
 const DEPENDENCY_EDGE_COLOR = "#d44949";
@@ -120,6 +148,48 @@ function buildDependencyArrowPath(targetX: number, targetY: number): string {
   ].join(" ");
 }
 
+function fileBasename(filePath: string): string {
+  const segments = filePath.split(/[\\/]/);
+  return segments[segments.length - 1] || filePath;
+}
+
+function formatTraceabilitySubtitle(filePath: string, lineNumber: number | null, badge: string): string {
+  const safeLine = lineNumber && lineNumber > 0 ? lineNumber : 1;
+  return `${badge} · ${fileBasename(filePath)}:${safeLine}`;
+}
+
+function estimateWrappedLineCount(text: string, approxCharsPerLine: number): number {
+  const normalized = text.trim();
+  if (!normalized) {
+    return 0;
+  }
+  return normalized
+    .split("\n")
+    .reduce((count, line) => count + Math.max(1, Math.ceil(Math.max(line.length, 1) / approxCharsPerLine)), 0);
+}
+
+function estimateTraceabilityNodeHeight(label: string, title: string, subtitle?: string): number {
+  const labelLines = estimateWrappedLineCount(label, 14);
+  const titleLines = estimateWrappedLineCount(title, 24);
+  const subtitleLines = estimateWrappedLineCount(subtitle ?? "", 26);
+  const contentHeight = (labelLines * 19) + (titleLines * 16) + (subtitleLines * 15);
+  const spacingHeight = 20 + 8 + (subtitleLines > 0 ? 6 : 0);
+  return Math.max(70, contentHeight + spacingHeight);
+}
+
+function centeredColumnYPositions(heights: number[], anchorCenterY: number): number[] {
+  if (heights.length === 0) {
+    return [];
+  }
+  const totalHeight = heights.reduce((sum, height) => sum + height, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
+  let cursor = anchorCenterY - totalHeight / 2;
+  return heights.map((height) => {
+    const y = cursor;
+    cursor += height + TRACEABILITY_ROW_GAP;
+    return y;
+  });
+}
+
 function buildFlowFromTree(
   tree: RequirementNode,
   selectedNodeId: string | null,
@@ -129,6 +199,9 @@ function buildFlowFromTree(
   dependencySourcesVisible: boolean,
   dependencyTargetsVisible: boolean,
   showDependencies: boolean,
+  traceabilityNodes: TraceabilityCanvasPayload | null,
+  measuredTraceabilityHeights: Record<string, number>,
+  onMeasuredHeightChange?: (nodeId: string, height: number) => void,
 ): FlowGraph {
   const root = hierarchy(tree, (node) => node.children);
   const layout = createTreeLayout<RequirementNode>()
@@ -197,6 +270,7 @@ function buildFlowFromTree(
         y: FLOW_MARGIN_Y + (positioned.x - minX) - NODE_HEIGHT / 2,
       },
       data: {
+        kind: "requirement",
         label: node.id,
         title: node.name,
         type: node.type,
@@ -207,8 +281,132 @@ function buildFlowFromTree(
         dependencyTargetsVisible,
       },
       draggable: false,
+      zIndex: 2,
     };
   });
+
+  if (selectedNodeId && traceabilityNodes) {
+    const selectedPositionedNode = positionedNodes.find((node) => node.data.id === selectedNodeId);
+    if (selectedPositionedNode) {
+      const anchorX = FLOW_MARGIN_X + (selectedPositionedNode.y - minY) - NODE_WIDTH / 2;
+      const anchorY = FLOW_MARGIN_Y + (selectedPositionedNode.x - minX) - NODE_HEIGHT / 2;
+      const anchorCenterY = anchorY + NODE_HEIGHT / 2;
+      const interfaceX = anchorX + NODE_WIDTH + TRACEABILITY_OFFSET_X;
+      const testX = interfaceX + TRACEABILITY_NODE_WIDTH + TRACEABILITY_COLUMN_GAP;
+      const interfaceHeights = traceabilityNodes.interfaces.map((item) => {
+        const nodeId = `traceability-interface:${item.interface_id}`;
+        return measuredTraceabilityHeights[nodeId]
+          ?? estimateTraceabilityNodeHeight(
+            item.interface_id,
+            fileBasename(item.file_path),
+            formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
+          );
+      });
+      const testHeights = traceabilityNodes.tests.map((item) => {
+        const nodeId = `traceability-test:${item.test_id}`;
+        return measuredTraceabilityHeights[nodeId]
+          ?? estimateTraceabilityNodeHeight(
+            item.test_id,
+            fileBasename(item.file_path),
+            formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
+          );
+      });
+      const interfacePositions = centeredColumnYPositions(interfaceHeights, anchorCenterY);
+      const testPositions = centeredColumnYPositions(testHeights, anchorCenterY);
+
+      traceabilityNodes.interfaces.forEach((item, index) => {
+        const nodeId = `traceability-interface:${item.interface_id}`;
+        const subtitle = formatTraceabilitySubtitle(item.file_path, item.first_line, item.type);
+        nodes.push({
+          id: nodeId,
+          type: "traceabilityNode",
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          position: {
+            x: interfaceX,
+            y: interfacePositions[index] ?? anchorCenterY,
+          },
+          data: {
+            kind: "interface",
+            label: item.interface_id,
+            title: fileBasename(item.file_path),
+            subtitle,
+            badge: item.type,
+            filePath: item.file_path,
+            firstLine: item.first_line,
+            onMeasuredHeightChange,
+            selected: false,
+            visualState: "default",
+            pulse: false,
+            dependencySourcesVisible: false,
+            dependencyTargetsVisible: false,
+          },
+          draggable: false,
+          selectable: false,
+          zIndex: 4,
+        });
+        structureEdges.push({
+          id: `traceability-link:${selectedNodeId}:${nodeId}`,
+          source: selectedNodeId,
+          target: nodeId,
+          type: "step",
+          animated: false,
+          zIndex: 0,
+          style: {
+            stroke: "#94a3b8",
+            strokeWidth: 1.2,
+            strokeDasharray: "5 4",
+          },
+        });
+      });
+
+      traceabilityNodes.tests.forEach((item, index) => {
+        const nodeId = `traceability-test:${item.test_id}`;
+        const subtitle = formatTraceabilitySubtitle(item.file_path, item.first_line, item.type);
+        nodes.push({
+          id: nodeId,
+          type: "traceabilityNode",
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          position: {
+            x: testX,
+            y: testPositions[index] ?? anchorCenterY,
+          },
+          data: {
+            kind: "test",
+            label: item.test_id,
+            title: fileBasename(item.file_path),
+            subtitle,
+            badge: item.type,
+            filePath: item.file_path,
+            firstLine: item.first_line,
+            onMeasuredHeightChange,
+            selected: false,
+            visualState: "default",
+            pulse: false,
+            dependencySourcesVisible: false,
+            dependencyTargetsVisible: false,
+          },
+          draggable: false,
+          selectable: false,
+          zIndex: 4,
+        });
+        structureEdges.push({
+          id: `traceability-link:${selectedNodeId}:${nodeId}`,
+          source: selectedNodeId,
+          target: nodeId,
+          type: "step",
+          animated: false,
+          zIndex: 0,
+          style: {
+            stroke: "#94a3b8",
+            strokeWidth: 1.2,
+            strokeDasharray: "5 4",
+          },
+        });
+      });
+    }
+  }
 
   return {
     nodes,
@@ -250,7 +448,40 @@ function DependencyEdge({
   );
 }
 
-function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
+function RequirementFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
+  const sideNodeRef = useRef<HTMLDivElement | null>(null);
+  const storeApi = useStoreApi();
+
+  useEffect(() => {
+    if (data.kind === "requirement" || !sideNodeRef.current || !data.onMeasuredHeightChange) {
+      return;
+    }
+    const element = sideNodeRef.current;
+    const reportHeight = () => {
+      const zoom = storeApi.getState().transform[2] || 1;
+      data.onMeasuredHeightChange?.(id, element.getBoundingClientRect().height / zoom);
+    };
+    reportHeight();
+    const observer = new ResizeObserver(() => {
+      reportHeight();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [data.kind, data.onMeasuredHeightChange, id, storeApi]);
+
+  if (data.kind !== "requirement") {
+    return (
+      <div ref={sideNodeRef} className={`task-flow-node task-flow-side-node ${data.kind}`}>
+        <div className="task-flow-side-node-head">
+          <strong>{data.label}</strong>
+          {data.badge ? <span className={`task-flow-side-badge ${data.kind}`}>{data.badge}</span> : null}
+        </div>
+        <span>{data.title}</span>
+        {data.subtitle ? <span className="task-flow-side-subtitle">{data.subtitle}</span> : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`task-flow-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
@@ -324,6 +555,8 @@ function TreeCanvasInner({
   showLegend = false,
   detailTestId,
   autoFitOnTreeChange = true,
+  traceabilityNodes = null,
+  onTraceabilityNodeClick,
 }: RequirementTreeCanvasProps) {
   const reactFlow = useReactFlow();
   const storeApi = useStoreApi();
@@ -334,9 +567,41 @@ function TreeCanvasInner({
   const previewPathRef = useRef<SVGPathElement | null>(null);
   const previewArrowPathRef = useRef<SVGPathElement | null>(null);
   const previewSourcePointRef = useRef<{ x: number; y: number } | null>(null);
+  const [measuredTraceabilityHeights, setMeasuredTraceabilityHeights] = useState<Record<string, number>>({});
   const [dependencyConnectionActive, setDependencyConnectionActive] = useState(false);
   const [clickConnectionSourceId, setClickConnectionSourceId] = useState<string | null>(null);
   const [showDependencies, setShowDependencies] = useState(mode === "editable");
+  const handleMeasuredTraceabilityHeightChange = useCallback((nodeId: string, height: number) => {
+    if (!nodeId || !Number.isFinite(height)) {
+      return;
+    }
+    const normalizedHeight = Math.ceil(height);
+    setMeasuredTraceabilityHeights((current) => {
+      if (current[nodeId] === normalizedHeight) {
+        return current;
+      }
+      return { ...current, [nodeId]: normalizedHeight };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!traceabilityNodes || !selectedNodeId) {
+      setMeasuredTraceabilityHeights({});
+      return;
+    }
+    const validNodeIds = new Set([
+      ...traceabilityNodes.interfaces.map((item) => `traceability-interface:${item.interface_id}`),
+      ...traceabilityNodes.tests.map((item) => `traceability-test:${item.test_id}`),
+    ]);
+    setMeasuredTraceabilityHeights((current) => {
+      const nextEntries = Object.entries(current).filter(([nodeId]) => validNodeIds.has(nodeId));
+      if (nextEntries.length === Object.keys(current).length) {
+        return current;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+  }, [selectedNodeId, traceabilityNodes]);
+
   const baseFlow = useMemo(
     () => buildFlowFromTree(
       tree,
@@ -347,12 +612,29 @@ function TreeCanvasInner({
       !dependencyConnectionActive,
       dependencyConnectionActive,
       showDependencies,
+      traceabilityNodes,
+      measuredTraceabilityHeights,
+      handleMeasuredTraceabilityHeightChange,
     ),
-    [dependencyConnectionActive, mode, nodeStates, pulseNodeId, selectedNodeId, showDependencies, tree],
+    [
+      dependencyConnectionActive,
+      handleMeasuredTraceabilityHeightChange,
+      measuredTraceabilityHeights,
+      mode,
+      nodeStates,
+      pulseNodeId,
+      selectedNodeId,
+      showDependencies,
+      traceabilityNodes,
+      tree,
+    ],
   );
   const flow = baseFlow;
   const edgeTypes = useMemo(() => ({ dependencyEdge: DependencyEdge }), []);
-  const nodeTypes = useMemo(() => ({ requirementNode: RequirementFlowNode }), []);
+  const nodeTypes = useMemo(
+    () => ({ requirementNode: RequirementFlowNode, traceabilityNode: RequirementFlowNode }),
+    [],
+  );
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
 
   useEffect(() => {
@@ -534,6 +816,15 @@ function TreeCanvasInner({
             onNodeClick={(event, node) => {
               const target = event.target as HTMLElement | null;
               if (target?.closest(".task-flow-handle")) {
+                return;
+              }
+              if (node.data.kind === "interface" || node.data.kind === "test") {
+                onTraceabilityNodeClick?.({
+                  kind: node.data.kind,
+                  id: node.data.label,
+                  filePath: node.data.filePath ?? "",
+                  firstLine: node.data.firstLine ?? null,
+                });
                 return;
               }
               onSelectNode(node.id);

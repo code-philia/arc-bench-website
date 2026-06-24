@@ -6077,6 +6077,78 @@ button {
   background: #fff0f0;
 }
 
+.task-flow-side-node {
+  width: 188px;
+  padding: 10px 12px;
+  border-color: rgba(148, 163, 184, 0.42);
+  box-shadow: 0 10px 20px rgba(15, 23, 32, 0.1);
+}
+
+.task-flow-side-node.interface {
+  --task-flow-node-accent: rgba(37, 99, 235, 0.34);
+  background: linear-gradient(180deg, #eff6ff, #f8fafc);
+}
+
+.task-flow-side-node.test {
+  --task-flow-node-accent: rgba(22, 163, 74, 0.34);
+  background: linear-gradient(180deg, #f0fdf4, #f8fafc);
+}
+
+.task-flow-side-node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 32, 0.12);
+}
+
+.task-flow-side-node-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-flow-side-node strong {
+  display: block;
+}
+
+.task-flow-side-node > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.task-flow-side-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.task-flow-side-badge.interface {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.task-flow-side-badge.test {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.task-flow-side-subtitle {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 0.58rem;
+  line-height: 1.28;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
 .task-flow-node.pulse {
   animation: taskNodePulse 1.1s ease-out;
 }
@@ -6153,6 +6225,14 @@ button {
 
 .task-flow-legend-swatch.test-failed {
   background: #f2abab;
+}
+
+.task-flow-legend-swatch.interface {
+  background: #2563eb;
+}
+
+.task-flow-legend-swatch.test-node {
+  background: #16a34a;
 }
 
 .quick-start-overlay {

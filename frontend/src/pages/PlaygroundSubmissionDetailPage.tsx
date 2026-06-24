@@ -1372,6 +1372,13 @@ export default function PlaygroundSubmissionDetailPage() {
                     pulseNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId}
                     showLegend
                     detailTestId="quickstart-submission-node-detail"
+                    traceabilityNodes={traceability}
+                    onTraceabilityNodeClick={({ filePath, firstLine }) => {
+                      if (!filePath) {
+                        return;
+                      }
+                      void openSource({ filePath, firstLine });
+                    }}
                   />
                 </div>
               ) : (
