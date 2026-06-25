@@ -16,13 +16,20 @@ class DockerManager:
             raise RuntimeError(self._format_daemon_error(exc)) from exc
 
     def ensure_image(self, log_callback=None) -> None:
+        needs_build = False
         try:
-            self.client.images.get(self.settings.runner_image)
-            if log_callback is not None:
+            image = self.client.images.get(self.settings.runner_image)
+            if self._is_image_stale(image):
+                needs_build = True
+                if log_callback is not None:
+                    log_callback(f"Runner source newer than image, rebuilding: {self.settings.runner_image}")
+            elif log_callback is not None:
                 log_callback(f"Using existing runner image: {self.settings.runner_image}")
-            return
         except ImageNotFound:
-            pass
+            needs_build = True
+
+        if not needs_build:
+            return
 
         try:
             if log_callback is not None:
@@ -50,6 +57,24 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
 
+    def _is_image_stale(self, image) -> bool:
+        source_path = self.settings.runner_context_dir / "run_submission.py"
+        if not source_path.exists():
+            return False
+        source_mtime = source_path.stat().st_mtime
+        created_at = str(image.attrs.get("Created", ""))
+        if not created_at:
+            return False
+        try:
+            from datetime import datetime, timezone
+
+            # Docker reports something like "2026-06-25T20:27:24.123456789Z".
+            created_at_normalized = created_at.split(".")[0] + "+00:00" if created_at.endswith("Z") else created_at
+            created_time = datetime.fromisoformat(created_at_normalized).astimezone(timezone.utc).timestamp()
+            return source_mtime > created_time
+        except Exception:  # noqa: BLE001
+            return False
+
     def create_container(self, submission_id: str, workspace_path: str | Path, log_callback=None):
         self.ensure_image(log_callback=log_callback)
         return self.client.containers.create(
@@ -76,6 +101,10 @@ class DockerManager:
         container.stop(timeout=5)
 
     @staticmethod
+    def kill_container_process(container, *, signal_name: str = "SIGTERM") -> None:
+        container.kill(signal=signal_name)
+
+    @staticmethod
     def remove_container(container) -> None:
         container.remove(force=True)
 
@@ -84,6 +113,19 @@ class DockerManager:
         stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
         stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
         return stdout, stderr
+
+    @staticmethod
+    def exec(container, command: list[str], workdir: str = "/workspace") -> tuple[int, str]:
+        result = container.exec_run(command, workdir=workdir, stdout=True, stderr=True)
+        output = result.output.decode("utf-8", errors="replace") if isinstance(result.output, (bytes, bytearray)) else str(result.output)
+        return int(result.exit_code), output
+
+    @staticmethod
+    def kill_agent_process(container, *, signal_name: str = "TERM") -> tuple[int, str]:
+        # Target the generation agent (main.py) without touching run_submission.py.
+        # pkill matches the full command line; run_submission.py is invoked as
+        # "python3 /opt/arcbench/run_submission.py" so it is not matched by "main.py".
+        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py"])
 
     @staticmethod
     def collect_result(workspace_path: str | Path) -> Path:

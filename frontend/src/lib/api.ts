@@ -3,6 +3,7 @@ import type {
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
+  SubmissionEditableTaskPayload,
   SubmissionSourcePayload,
   RequirementSummary,
   SubmissionDetail,
@@ -123,6 +124,25 @@ export const api = {
   },
   getSubmission(submissionId: string) {
     return request<SubmissionDetail>(`/submissions/${submissionId}`);
+  },
+  pauseSubmission(submissionId: string) {
+    return request<SubmissionDetail>(`/submissions/${submissionId}/pause`, {
+      method: "POST",
+    });
+  },
+  resumeSubmission(submissionId: string) {
+    return request<SubmissionDetail>(`/submissions/${submissionId}/resume`, {
+      method: "POST",
+    });
+  },
+  getSubmissionEditableTask(submissionId: string) {
+    return request<SubmissionEditableTaskPayload>(`/submissions/${submissionId}/editable-task`);
+  },
+  updateSubmissionEditableTask(submissionId: string, payload: SubmissionEditableTaskPayload) {
+    return request<{ detail: string }>(`/submissions/${submissionId}/editable-task`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
   getSubmissionLogs(submissionId: string) {
     return request<SubmissionLogs>(`/submissions/${submissionId}/logs`);

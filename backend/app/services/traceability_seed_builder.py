@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,30 @@ from app.models.requirement import Requirement
 
 
 class TraceabilitySeedBuilder:
+    def build_from_yaml_text(self, yaml_text: str, *, fallback_description: str = "Updated requirement tree") -> dict[str, list[dict[str, Any]]]:
+        parsed = yaml.safe_load(yaml_text) or {}
+        if not isinstance(parsed, dict):
+            raise ValueError("requirements.yaml must contain a root mapping")
+
+        requirements: list[dict[str, Any]] = []
+        scenarios: list[dict[str, Any]] = []
+        self._walk_node(parsed, parent_id=None, requirements=requirements, scenarios=scenarios)
+        if not requirements:
+            return {
+                "requirements": [
+                    {
+                        "req_id": "ROOT",
+                        "description": fallback_description,
+                        "visual_reference": None,
+                        "status": "pending",
+                        "parent_id": None,
+                        "dependencies": [],
+                    }
+                ],
+                "scenarios": [],
+            }
+        return {"requirements": requirements, "scenarios": scenarios}
+
     def build_for_requirement(self, requirement: Requirement, requirement_yaml_path: Path | None = None) -> dict[str, list[dict[str, Any]]]:
         yaml_path = requirement_yaml_path or Path(requirement.requirements_path).with_name("requirements.yaml")
         if not yaml_path.exists():
@@ -31,6 +56,79 @@ class TraceabilitySeedBuilder:
         seed = self.build_for_requirement(requirement, requirement_yaml_path=requirement_yaml_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def write_seed_file_from_yaml_text(self, output_path: Path, yaml_text: str) -> None:
+        seed = self.build_from_yaml_text(yaml_text)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def write_sqlite_database_from_yaml_text(self, output_path: Path, yaml_text: str) -> None:
+        seed = self.build_from_yaml_text(yaml_text)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(output_path)
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS requirements (
+                    req_id TEXT PRIMARY KEY,
+                    description TEXT,
+                    visual_reference TEXT,
+                    status TEXT,
+                    parent_id TEXT,
+                    dependencies TEXT
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scenarios (
+                    scenario_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    req_id TEXT NOT NULL,
+                    steps TEXT NOT NULL,
+                    FOREIGN KEY(req_id) REFERENCES requirements(req_id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute("DELETE FROM scenarios")
+            cursor.execute("DELETE FROM requirements")
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO requirements (req_id, description, visual_reference, status, parent_id, dependencies)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        str(item.get("req_id", "")).strip(),
+                        str(item.get("description", "")).strip(),
+                        item.get("visual_reference"),
+                        str(item.get("status", "pending")).strip() or "pending",
+                        item.get("parent_id"),
+                        json.dumps(item.get("dependencies", []), ensure_ascii=False),
+                    )
+                    for item in seed["requirements"]
+                ],
+            )
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO scenarios (scenario_id, name, req_id, steps)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        str(item.get("scenario_id", "")).strip(),
+                        str(item.get("name", "")).strip() or "Scenario",
+                        str(item.get("req_id", "")).strip(),
+                        json.dumps(item.get("steps", []), ensure_ascii=False),
+                    )
+                    for item in seed["scenarios"]
+                ],
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     def _build_fallback_seed(self, requirement: Requirement) -> dict[str, list[dict[str, Any]]]:
         return {

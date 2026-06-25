@@ -15,7 +15,7 @@ from app.core.enums import RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
-from app.schemas.submission import StepState, SubmissionDetail, SubmissionSummary, SubmissionVisualEvent
+from app.schemas.submission import StepState, SubmissionDetail, SubmissionRunnerEvent, SubmissionSummary, SubmissionVisualEvent
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 
@@ -109,6 +109,106 @@ class SubmissionService:
         self.db.commit()
         self.db.refresh(submission)
         return submission
+
+    def get_submission_checkpoint_path(self, submission: Submission) -> Path | None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return None
+        return workspace_path / "artifacts" / "checkpoint.json"
+
+    def get_pause_request_path(self, submission: Submission) -> Path | None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return None
+        return workspace_path / "artifacts" / "pause.request.json"
+
+    def get_resume_request_path(self, submission: Submission) -> Path | None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return None
+        return workspace_path / "artifacts" / "resume.request.json"
+
+    def read_checkpoint(self, submission: Submission) -> dict:
+        checkpoint_path = self.get_submission_checkpoint_path(submission)
+        if checkpoint_path is None or not checkpoint_path.exists():
+            return {}
+        try:
+            payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def write_checkpoint(self, submission: Submission, payload: dict) -> Path:
+        checkpoint_path = self.get_submission_checkpoint_path(submission)
+        if checkpoint_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = checkpoint_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp_path.replace(checkpoint_path)
+        return checkpoint_path
+
+    def read_submission_task_documents(self, submission: Submission) -> dict[str, str]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return {"requirements_md": "", "requirements_yaml": "", "prerequisites_md": ""}
+        task_dir = workspace_path / "task"
+        requirements_md = self._read_text(task_dir / "requirements.md")
+        requirements_yaml = self._read_text(task_dir / "requirements.yaml")
+        prerequisites_md = self._read_text(task_dir / "prerequisites.md")
+        return {
+            "requirements_md": requirements_md,
+            "requirements_yaml": requirements_yaml,
+            "prerequisites_md": prerequisites_md,
+        }
+
+    def write_submission_task_documents(
+        self,
+        submission: Submission,
+        *,
+        requirements_md: str,
+        requirements_yaml: str,
+        prerequisites_md: str,
+    ) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        task_dir = workspace_path / "task"
+        task_dir.mkdir(parents=True, exist_ok=True)
+        (task_dir / "requirements.md").write_text(requirements_md, encoding="utf-8")
+        (task_dir / "requirements.yaml").write_text(requirements_yaml, encoding="utf-8")
+        (task_dir / "prerequisites.md").write_text(prerequisites_md, encoding="utf-8")
+
+    def write_submission_traceability_store(self, submission: Submission, requirements_yaml: str) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        traceability_db_path = workspace_path / "artifacts" / "traceability.db"
+        from app.services.traceability_seed_builder import TraceabilitySeedBuilder
+
+        TraceabilitySeedBuilder().write_sqlite_database_from_yaml_text(traceability_db_path, requirements_yaml)
+
+    def request_pause(self, submission: Submission) -> None:
+        request_path = self.get_pause_request_path(submission)
+        if request_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        request_path.parent.mkdir(parents=True, exist_ok=True)
+        request_path.write_text(
+            json.dumps({"requested_at": datetime.utcnow().isoformat(), "submission_id": submission.id}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        self.update_status(submission, SubmissionStatus.PAUSED)
+
+    def request_resume(self, submission: Submission) -> None:
+        request_path = self.get_resume_request_path(submission)
+        if request_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        request_path.parent.mkdir(parents=True, exist_ok=True)
+        request_path.write_text(
+            json.dumps({"requested_at": datetime.utcnow().isoformat(), "submission_id": submission.id}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        self.update_status(submission, SubmissionStatus.RUNNING)
 
     def append_event_log(self, submission_id: str, message: str) -> Path:
         submission = self.get_submission(submission_id)
@@ -251,6 +351,9 @@ class SubmissionService:
             workspace_path=submission.workspace_path,
             logs_available=bool(submission.stdout_path or submission.stderr_path),
             tests=tests,
+            can_pause=self.can_pause(submission),
+            can_resume=self.can_resume(submission),
+            pause_available=bool(self.get_pause_request_path(submission)),
         )
 
     def read_events(self, submission: Submission) -> list[dict]:
@@ -304,6 +407,8 @@ class SubmissionService:
                 continue
             if not isinstance(parsed, dict):
                 continue
+            if str(parsed.get("type", "")).strip() == "runner_state":
+                continue
             if str(parsed.get("type", "")).strip() != "requirement_state":
                 continue
 
@@ -327,6 +432,44 @@ class SubmissionService:
                 )
             )
         return visual_events
+
+    def read_runner_events(self, submission: Submission) -> list[SubmissionRunnerEvent]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            return []
+
+        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        if not runner_events_path.exists():
+            return []
+
+        runner_events: list[SubmissionRunnerEvent] = []
+        for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            if str(parsed.get("type", "")).strip() != "runner_state":
+                continue
+
+            state = str(parsed.get("state", "")).strip()
+            timestamp = str(parsed.get("timestamp", "")).strip()
+            message = str(parsed.get("message", "")).strip() or None
+            if state not in {"paused", "resumed"} or not timestamp:
+                continue
+            runner_events.append(
+                SubmissionRunnerEvent(
+                    type="runner_state",
+                    state=state,
+                    timestamp=timestamp,
+                    message=message,
+                )
+            )
+        return runner_events
 
     def read_event_lines(self, submission: Submission) -> list[str]:
         return [
@@ -372,6 +515,27 @@ class SubmissionService:
         submission.failure_reason = failure_reason
         self.db.add(submission)
         self.db.commit()
+
+    def update_status(self, submission: Submission, status: SubmissionStatus, failure_reason: str | None = None) -> None:
+        submission.status = status.value
+        submission.failure_reason = failure_reason
+        self.db.add(submission)
+        self.db.commit()
+        self.db.refresh(submission)
+
+    @staticmethod
+    def can_pause(submission: Submission) -> bool:
+        return submission.status == SubmissionStatus.RUNNING.value
+
+    @staticmethod
+    def can_resume(submission: Submission) -> bool:
+        return submission.status == SubmissionStatus.PAUSED.value
+
+    @staticmethod
+    def _read_text(path: Path) -> str:
+        if not path.is_file():
+            return ""
+        return path.read_text(encoding="utf-8")
 
     @staticmethod
     def build_step_states(active_key: str | None = None, completed: set[str] | None = None, description: str | None = None) -> list[StepState]:

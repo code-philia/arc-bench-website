@@ -12,6 +12,13 @@ class SubmissionVisualEvent(BaseModel):
     message: str | None = None
 
 
+class SubmissionRunnerEvent(BaseModel):
+    type: str
+    state: str
+    timestamp: str
+    message: str | None = None
+
+
 class StepState(BaseModel):
     key: str
     title: str
@@ -45,6 +52,15 @@ class SubmissionDetail(SubmissionSummary):
     workspace_path: str | None
     logs_available: bool
     tests: list[dict]
+    can_pause: bool = False
+    can_resume: bool = False
+    pause_available: bool = False
+
+
+class SubmissionEditableTaskPayload(BaseModel):
+    requirements_md: str
+    requirements_yaml: str
+    prerequisites_md: str
 
 
 class SubmissionCreateResponse(BaseModel):
@@ -56,6 +72,7 @@ class SubmissionLogs(BaseModel):
     stdout: str
     stderr: str
     visual_events: list[SubmissionVisualEvent] = Field(default_factory=list)
+    runner_events: list[SubmissionRunnerEvent] = Field(default_factory=list)
 
 
 class SubmissionTraceabilityInterface(BaseModel):

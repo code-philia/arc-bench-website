@@ -29,6 +29,9 @@ RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
 TRACEABILITY_DB_PATH = ARTIFACTS_DIR / "traceability.db"
 TRACEABILITY_EVENTS_PATH = ARTIFACTS_DIR / "traceability-events.jsonl"
 TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
+PAUSE_REQUEST_PATH = ARTIFACTS_DIR / "pause.request.json"
+RESUME_REQUEST_PATH = ARTIFACTS_DIR / "resume.request.json"
+CHECKPOINT_PATH = ARTIFACTS_DIR / "checkpoint.json"
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
@@ -53,6 +56,17 @@ def append_runner_event(step_key: str, message: str, status: str = "info") -> No
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
         "step_key": step_key,
         "status": status,
+        "message": message,
+    }
+    with RUNNER_EVENTS_PATH.open("a", encoding="utf-8") as output:
+        output.write(json.dumps(payload, ensure_ascii=True) + "\n")
+
+
+def append_runner_state(state: str, message: str) -> None:
+    payload = {
+        "type": "runner_state",
+        "state": state,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
         "message": message,
     }
     with RUNNER_EVENTS_PATH.open("a", encoding="utf-8") as output:
@@ -365,6 +379,34 @@ def resolve_python_agent_entrypoint() -> Path:
     raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
 
 
+def clear_request_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def read_checkpoint() -> dict:
+    if not CHECKPOINT_PATH.exists():
+        return {"last_completed_index": 0, "completed": []}
+    try:
+        payload = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"last_completed_index": 0, "completed": []}
+    if not isinstance(payload, dict):
+        return {"last_completed_index": 0, "completed": []}
+    payload.setdefault("last_completed_index", 0)
+    payload.setdefault("completed", [])
+    return payload
+
+
+def write_checkpoint(payload: dict) -> None:
+    CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CHECKPOINT_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(CHECKPOINT_PATH)
+
+
 def install_agent_dependencies(stdout_file, stderr_file) -> None:
     requirements_path = SUBMISSION_DIR / "requirements.txt"
     if not requirements_path.exists():
@@ -382,7 +424,7 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
     append_runner_event("start_agent", "Agent dependencies installed", status="success")
 
 
-def run_generation_agent(stdout_file, stderr_file) -> None:
+def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
     entrypoint = resolve_python_agent_entrypoint()
     prompt = PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() else ""
     command = ["python3", entrypoint.name]
@@ -400,18 +442,68 @@ def run_generation_agent(stdout_file, stderr_file) -> None:
         "ARCBENCH_TRACEABILITY_DB_PATH": str(TRACEABILITY_DB_PATH),
         "ARCBENCH_TRACEABILITY_EVENTS_PATH": str(TRACEABILITY_EVENTS_PATH),
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
+        "ARCBENCH_CHECKPOINT_PATH": str(CHECKPOINT_PATH),
+        "ARCBENCH_PAUSE_REQUEST_PATH": str(PAUSE_REQUEST_PATH),
+        "ARCBENCH_RESUME_REQUEST_PATH": str(RESUME_REQUEST_PATH),
         "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
-    completed = run_command(
+    return run_command(
         command,
         cwd=SUBMISSION_DIR,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
-        check=True,
+        check=False,
         label="generation-agent",
         env=env,
     )
-    append_runner_event("start_agent", f"Generation agent finished with code {completed.returncode}", status="success")
+
+
+def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
+    checkpoint = read_checkpoint()
+    last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+    if last_completed_index > 0:
+        append_runner_event("start_agent", f"Resuming from checkpoint at commit {last_completed_index}", status="info")
+
+    while True:
+        completed = run_generation_agent(stdout_file, stderr_file)
+        if completed.returncode == 0:
+            checkpoint = read_checkpoint()
+            if checkpoint.get("paused") or PAUSE_REQUEST_PATH.exists():
+                append_runner_state("paused", "Generation paused")
+                append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
+                while not RESUME_REQUEST_PATH.exists():
+                    time.sleep(1)
+                append_runner_state("resumed", "Generation resumed")
+                append_runner_event("start_agent", "Resume request received", status="success")
+                clear_request_file(PAUSE_REQUEST_PATH)
+                clear_request_file(RESUME_REQUEST_PATH)
+                checkpoint = read_checkpoint()
+                last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+                continue
+            append_runner_event("start_agent", "Generation agent finished successfully", status="success")
+            clear_request_file(PAUSE_REQUEST_PATH)
+            clear_request_file(RESUME_REQUEST_PATH)
+            return
+
+        if completed.returncode == 130 or PAUSE_REQUEST_PATH.exists():
+            append_runner_state("paused", "Generation paused")
+            append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
+            while not RESUME_REQUEST_PATH.exists():
+                time.sleep(1)
+            append_runner_state("resumed", "Generation resumed")
+            append_runner_event("start_agent", "Resume request received", status="success")
+            clear_request_file(PAUSE_REQUEST_PATH)
+            clear_request_file(RESUME_REQUEST_PATH)
+            checkpoint = read_checkpoint()
+            last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+            continue
+
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
 
 
 def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str, install_args: list[str] | None = None) -> None:
@@ -730,7 +822,7 @@ def main() -> int:
     with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file, STDERR_PATH.open("w", encoding="utf-8") as stderr_file:
         try:
             install_agent_dependencies(stdout_file, stderr_file)
-            run_generation_agent(stdout_file, stderr_file)
+            run_generation_agent_with_resume(stdout_file, stderr_file)
             interface_upserts, interface_status_updates, test_upserts = apply_traceability_events()
             append_runner_event(
                 "start_agent",

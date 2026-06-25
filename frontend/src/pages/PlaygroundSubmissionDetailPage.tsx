@@ -3,11 +3,20 @@ import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
+import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
-import { findNodeById, parseTaskTreeYaml, requirementMarkdownToTree } from "../lib/taskTree";
+import {
+  findNodeById,
+  parseTaskTreeYaml,
+  requirementMarkdownToTree,
+  taskTreeToMarkdown,
+  taskTreeToYaml,
+  updateNodeInTree,
+  type RequirementNode,
+} from "../lib/taskTree";
 import type {
   RequirementDetail,
   RequirementVisualState,
@@ -19,6 +28,7 @@ import type {
   SubmissionSourcePayload,
   SubmissionTraceabilityPayload,
   SubmissionVisualEvent,
+  SubmissionEditableTaskPayload,
 } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
@@ -738,6 +748,12 @@ export default function PlaygroundSubmissionDetailPage() {
   const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
   const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
   const [selectedDiffFilePath, setSelectedDiffFilePath] = useState<string | null>(null);
+  const [editableTask, setEditableTask] = useState<SubmissionEditableTaskPayload | null>(null);
+  const [editableTree, setEditableTree] = useState<RequirementNode | null>(null);
+  const [editableNodeId, setEditableNodeId] = useState<string | null>("ROOT");
+  const [editableDetailExpanded, setEditableDetailExpanded] = useState(true);
+  const [savingEditableTask, setSavingEditableTask] = useState(false);
+  const executionPaused = submission?.status === "PAUSED";
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const activeSelectedNodeId = useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
@@ -754,6 +770,12 @@ export default function PlaygroundSubmissionDetailPage() {
     () => findNewestCommitForNode(commitHistory, activeSelectedNodeId),
     [activeSelectedNodeId, commitHistory],
   );
+  const editableSelectedNode = useMemo(() => {
+    if (!editableTree || !editableNodeId) {
+      return null;
+    }
+    return findNodeById(editableTree, editableNodeId);
+  }, [editableNodeId, editableTree]);
   const filePanelEmptyMessage = fileViewMode === "diff"
     ? "Select a commit history entry to inspect its diff."
     : "Select an interface or test to inspect source.";
@@ -805,6 +827,33 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [submissionId]);
 
   useEffect(() => {
+    if (!submissionId || !submission || submission.status !== "PAUSED") {
+      setEditableTask(null);
+      setEditableTree(null);
+      return;
+    }
+    let cancelled = false;
+    api.getSubmissionEditableTask(submissionId)
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setEditableTask(payload);
+        try {
+          setEditableTree(parseTaskTreeYaml(payload.requirements_yaml));
+        } catch {
+          setEditableTree(requirementMarkdownToTree(payload.requirements_md));
+        }
+        setEditableNodeId("ROOT");
+        setEditableDetailExpanded(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [submission, submissionId]);
+
+  useEffect(() => {
     setLoading(true);
     setLoadError(null);
     setLoadErrorStatus(null);
@@ -817,11 +866,11 @@ export default function PlaygroundSubmissionDetailPage() {
         setSubmission(detail);
         setLogs(latestLogs);
         setRequirement(requirementDetail);
-        if (["PENDING", "RUNNING"].includes(detail.status)) {
+        if (["PENDING", "RUNNING", "PAUSED"].includes(detail.status)) {
           pollRef.current = window.setInterval(() => {
             api.getSubmission(submissionId).then((latest) => {
               setSubmission(latest);
-              if (!["PENDING", "RUNNING"].includes(latest.status) && pollRef.current) {
+              if (!["PENDING", "RUNNING", "PAUSED"].includes(latest.status) && pollRef.current) {
                 window.clearInterval(pollRef.current);
                 pollRef.current = null;
               }
@@ -925,7 +974,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submission || !pollRef.current) {
       return;
     }
-    if (!["PENDING", "RUNNING"].includes(submission.status)) {
+    if (!["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
     }
@@ -965,7 +1014,7 @@ export default function PlaygroundSubmissionDetailPage() {
 
     checkPreview();
 
-    if (["PENDING", "RUNNING"].includes(submission.status)) {
+    if (["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
       const previewPoll = window.setInterval(checkPreview, 3000);
       return () => {
         cancelled = true;
@@ -1006,6 +1055,10 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     return findNodeById(tree, activeSelectedNodeId);
   }, [activeSelectedNodeId, tree]);
+  const editableModeActive = executionPaused;
+  const pausedCanvasTree = editableModeActive ? (editableTree ?? tree) : tree;
+  const pausedCanvasSelectedNodeId = editableModeActive ? editableNodeId : activeSelectedNodeId;
+  const pausedCanvasSelectedNode = editableModeActive ? (editableSelectedNode ?? selectedNode) : selectedNode;
 
   useEffect(() => {
     if (!useQuickStartSubmission || !quickStart.canvasDemo.active) {
@@ -1216,6 +1269,46 @@ export default function PlaygroundSubmissionDetailPage() {
     }
   };
 
+  const handlePause = async () => {
+    if (!submissionId) {
+      return;
+    }
+    setSubmission(await api.pauseSubmission(submissionId));
+  };
+
+  const handleResume = async () => {
+    if (!submissionId) {
+      return;
+    }
+    const nextSubmission = await api.resumeSubmission(submissionId);
+    setSubmission(nextSubmission);
+    if (nextSubmission.status !== "PAUSED") {
+      setEditableTask(null);
+      setEditableTree(null);
+      setEditableNodeId("ROOT");
+      setEditableDetailExpanded(true);
+    }
+  };
+
+  const handleSaveFix = async () => {
+    if (!submissionId || !editableTree || !editableTask) {
+      return;
+    }
+    setSavingEditableTask(true);
+    try {
+      const requirementsYaml = taskTreeToYaml(editableTree);
+      const requirementsMd = taskTreeToMarkdown(editableTree);
+      await api.updateSubmissionEditableTask(submissionId, {
+        requirements_md: requirementsMd,
+        requirements_yaml: requirementsYaml,
+        prerequisites_md: editableTask.prerequisites_md,
+      });
+      setEditableTask((current) => current ? { ...current, requirements_md: requirementsMd, requirements_yaml: requirementsYaml } : current);
+    } finally {
+      setSavingEditableTask(false);
+    }
+  };
+
   const onSidebarResizeMouseDown = (event: React.MouseEvent) => {
     event.preventDefault();
     isSidebarDragging.current = true;
@@ -1401,6 +1494,24 @@ export default function PlaygroundSubmissionDetailPage() {
                 </button>
               </div>
 
+              <div style={{ padding: "12px 16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {submission.status === "RUNNING" ? (
+                  <button type="button" className="btn-outline" onClick={() => void handlePause()}>
+                    Pause
+                  </button>
+                ) : null}
+                {submission.status === "PAUSED" ? (
+                  <>
+                    <button type="button" className="btn-outline" onClick={() => void handleResume()}>
+                      Resume
+                    </button>
+                    <button type="button" className="btn-primary" onClick={() => void handleSaveFix()} disabled={savingEditableTask}>
+                      Save Fix
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
               <div className="playground-submission-side-panel-body">
                 {sidebarTab === "status" ? (
                   <>
@@ -1515,28 +1626,43 @@ export default function PlaygroundSubmissionDetailPage() {
                 }}
               >
                 <RequirementTreeCanvas
-                  tree={tree}
-                  selectedNodeId={activeSelectedNodeId}
+                  tree={pausedCanvasTree ?? tree}
+                  selectedNodeId={pausedCanvasSelectedNodeId}
                   onSelectNode={(nodeId) => {
-                    setSelectedNodeId(nodeId);
-                    setDetailExpanded(Boolean(nodeId));
-                    if (useQuickStartSubmission) {
-                      quickStart.setSelectedNode(nodeId);
-                      quickStart.setDetailExpanded(Boolean(nodeId));
+                    if (submission?.status === "PAUSED") {
+                      setEditableNodeId(nodeId);
+                      setEditableDetailExpanded(Boolean(nodeId));
+                    } else {
+                      setSelectedNodeId(nodeId);
+                      setDetailExpanded(Boolean(nodeId));
+                      if (useQuickStartSubmission) {
+                        quickStart.setSelectedNode(nodeId);
+                        quickStart.setDetailExpanded(Boolean(nodeId));
+                      }
                     }
                   }}
-                  detailExpanded={useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded}
+                  detailExpanded={submission?.status === "PAUSED"
+                    ? editableDetailExpanded
+                    : (useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded)}
                   onDetailExpandedChange={(expanded) => {
-                    setDetailExpanded(expanded);
-                    if (useQuickStartSubmission) {
-                      quickStart.setDetailExpanded(expanded);
+                    if (submission?.status === "PAUSED") {
+                      setEditableDetailExpanded(expanded);
+                    } else {
+                      setDetailExpanded(expanded);
+                      if (useQuickStartSubmission) {
+                        quickStart.setDetailExpanded(expanded);
+                      }
                     }
                   }}
-                  mode="readonly"
+                  mode={submission?.status === "PAUSED" ? "editable" : "readonly"}
                   detailPlacement="bottom"
                   nodeStates={nodeStates}
-                  focusNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? focusNodeId) : focusNodeId}
-                  pulseNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId}
+                  focusNodeId={submission?.status === "PAUSED"
+                    ? (editableNodeId ?? focusNodeId)
+                    : (useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? focusNodeId) : focusNodeId)}
+                  pulseNodeId={submission?.status === "PAUSED"
+                    ? (editableNodeId ?? pulseNodeId)
+                    : (useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId)}
                   showLegend
                   detailTestId="quickstart-submission-node-detail"
                   autoFitOnTreeChange={false}
@@ -1547,6 +1673,16 @@ export default function PlaygroundSubmissionDetailPage() {
                     setSelectedTraceabilityId(id);
                     setSidebarTab("traceability");
                   }}
+                  renderDetailContent={submission?.status === "PAUSED" && pausedCanvasSelectedNode ? (node) => (
+                    <RequirementNodeDetailContent
+                      node={node}
+                      mode="editable"
+                      onNodeChange={(updater) => {
+                        setEditableTree((current) => current ? updateNodeInTree(current, node.id, updater) : current);
+                      }}
+                      onNodeIdChange={setEditableNodeId}
+                    />
+                  ) : undefined}
                 />
               </div>
             ) : null}

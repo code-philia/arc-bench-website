@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.submission import (
     SubmissionCommitHistoryPayload,
     SubmissionCreateResponse,
+    SubmissionEditableTaskPayload,
     SubmissionDetail,
     SubmissionLogs,
     SubmissionSourcePayload,
@@ -21,8 +22,10 @@ from app.schemas.submission import (
 from app.services.execution_service import ExecutionService
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.runtime_path_service import RuntimePathService
+from app.services.requirement_catalog import RequirementCatalogService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_service import SubmissionService
+from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -88,6 +91,46 @@ def start_submission(
     return service.to_detail(submission)
 
 
+@router.post("/{submission_id}/pause", response_model=SubmissionDetail)
+def pause_submission(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not service.can_pause(submission):
+        raise HTTPException(status_code=409, detail="Submission is not running")
+    try:
+        service.request_pause(submission)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return service.to_detail(submission)
+
+
+@router.post("/{submission_id}/resume", response_model=SubmissionDetail)
+def resume_submission(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not service.can_resume(submission):
+        raise HTTPException(status_code=409, detail="Submission is not paused")
+    try:
+        service.request_resume(submission)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return service.to_detail(submission)
+
+
 @router.get("/{submission_id}", response_model=SubmissionDetail)
 def get_submission(
     submission_id: str,
@@ -127,7 +170,52 @@ def get_submission_logs(
         with stderr_path.open("r", encoding="utf-8") as stderr_file:
             stderr = stderr_file.read()
     visual_events = service.read_visual_events(submission)
-    return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events)
+    runner_events = service.read_runner_events(submission)
+    return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events, runner_events=runner_events)
+
+
+@router.get("/{submission_id}/editable-task", response_model=SubmissionEditableTaskPayload)
+def get_submission_editable_task(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionEditableTaskPayload:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    payload = service.read_submission_task_documents(submission)
+    return SubmissionEditableTaskPayload(**{
+        "requirements_md": payload["requirements_md"],
+        "requirements_yaml": payload["requirements_yaml"],
+        "prerequisites_md": payload["prerequisites_md"],
+    })
+
+
+@router.post("/{submission_id}/editable-task")
+def update_submission_editable_task(
+    submission_id: str,
+    payload: SubmissionEditableTaskPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, str]:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        service.write_submission_task_documents(
+            submission,
+            requirements_md=payload.requirements_md,
+            requirements_yaml=payload.requirements_yaml,
+            prerequisites_md=payload.prerequisites_md,
+        )
+        service.write_submission_traceability_store(submission, payload.requirements_yaml)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"detail": "Submission workspace updated"}
 
 
 @router.get("/{submission_id}/traceability", response_model=SubmissionTraceabilityPayload)

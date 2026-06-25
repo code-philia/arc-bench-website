@@ -82,6 +82,9 @@ export type SubmissionDetail = SubmissionSummary & {
     duration_ms: number;
     error: string | null;
   }>;
+  can_pause: boolean;
+  can_resume: boolean;
+  pause_available: boolean;
 };
 
 export type SubmissionLogs = {
@@ -89,6 +92,7 @@ export type SubmissionLogs = {
   stdout: string;
   stderr: string;
   visual_events: SubmissionVisualEvent[];
+  runner_events?: SubmissionRunnerEvent[];
 };
 
 export type SubmissionTraceabilityInterface = {
@@ -156,7 +160,20 @@ export type SubmissionVisualEvent = {
   message: string | null;
 };
 
+export type SubmissionRunnerEvent = {
+  type: "runner_state";
+  state: "paused" | "resumed";
+  timestamp: string;
+  message: string | null;
+};
+
 export type RequirementVisualState = "default" | "design" | "implement" | "test-passed" | "test-failed";
+
+export type SubmissionEditableTaskPayload = {
+  requirements_md: string;
+  requirements_yaml: string;
+  prerequisites_md: string;
+};
 
 export type UserTaskSummary = {
   id: string;

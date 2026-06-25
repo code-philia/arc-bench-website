@@ -73,7 +73,7 @@ export default function SubmissionDetailPage() {
       .then(([detail, latestLogs]) => {
         setSubmission(detail);
         setLogs(latestLogs);
-        if (["PENDING", "RUNNING"].includes(detail.status)) {
+        if (["PENDING", "RUNNING", "PAUSED"].includes(detail.status)) {
           pollRef.current = window.setInterval(() => {
             api.getSubmission(submissionId).then(setSubmission).catch(() => undefined);
             api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
@@ -99,7 +99,7 @@ export default function SubmissionDetailPage() {
     if (!submission || !pollRef.current) {
       return;
     }
-    if (!["PENDING", "RUNNING"].includes(submission.status)) {
+    if (!["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
     }
@@ -139,7 +139,7 @@ export default function SubmissionDetailPage() {
 
     checkPreview();
 
-    if (["PENDING", "RUNNING"].includes(submission.status)) {
+    if (["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
       const previewPoll = window.setInterval(checkPreview, 3000);
       return () => {
         cancelled = true;

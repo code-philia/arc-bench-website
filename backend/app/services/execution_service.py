@@ -57,9 +57,20 @@ class ExecutionService:
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
         processed_runner_event_count = 0
+        pause_notified = False
+        paused = False
 
         def emit_event(step_key: str, message: str, status: str = "info") -> None:
             submission_service.append_step_event(submission_id, step_key=step_key, message=message, status=status)
+
+        def mark_paused(reason: str) -> None:
+            nonlocal paused
+            paused = True
+            submission_service.update_status(
+                submission_service.get_submission(submission_id),
+                SubmissionStatus.PAUSED,
+                failure_reason=reason,
+            )
 
         def import_runner_events() -> list[dict]:
             nonlocal processed_runner_event_count
@@ -174,6 +185,25 @@ class ExecutionService:
                 latest_events = import_runner_events()
                 if latest_events:
                     refresh_running_steps(latest_events)
+                current_status = submission_service.get_submission(submission_id).status
+                if current_status == SubmissionStatus.PAUSED.value:
+                    if not pause_notified:
+                        pause_notified = True
+                        mark_paused("Execution paused by user request")
+                        try:
+                            exit_code, _ = manager.kill_agent_process(container)
+                            debug_log.append("backend", f"Sent SIGTERM to agent main.py (pkill exit={exit_code})")
+                        except Exception as exc:  # noqa: BLE001
+                            debug_log.append("backend", f"Failed to signal agent process: {exc}")
+                        debug_log.append("backend", "Execution paused cleanly")
+                    wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
+                    time.sleep(1)
+                    continue
+                if pause_notified and current_status == SubmissionStatus.RUNNING.value:
+                    pause_notified = False
+                    paused = False
+                    wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
+                    debug_log.append("backend", "Execution resumed")
                 try:
                     container.reload()
                 except NotFound as exc:
@@ -184,6 +214,9 @@ class ExecutionService:
                 time.sleep(1)
             if exit_result is None:
                 raise TimeoutError("Runner did not finish before timeout")
+            if paused or submission_service.get_submission(submission_id).status == SubmissionStatus.PAUSED.value:
+                debug_log.append("backend", "Skipping test execution because submission is paused")
+                return
             debug_log.append("backend", f"Container exited with result={exit_result}")
             latest_events = import_runner_events()
             if latest_events:
@@ -238,6 +271,9 @@ class ExecutionService:
             debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
         except Exception as exc:  # noqa: BLE001
             submission = submission_service.get_submission(submission_id)
+            if str(exc) == "Execution paused by user request":
+                debug_log.append("backend", "Execution paused cleanly")
+                return
             emit_event(active_step_key, str(exc), status="error")
             debug_log.append("backend", f"Execution failed during {active_step_key}: {exc}")
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
