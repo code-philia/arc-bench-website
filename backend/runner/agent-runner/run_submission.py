@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -509,7 +510,13 @@ def count_playwright_tests() -> int:
         return 0
     if completed.returncode != 0:
         raise RuntimeError("Failed to enumerate Playwright tests before execution")
-    return sum(1 for line in completed.stdout.splitlines() if line.strip().startswith("["))
+    total_match = re.search(r"Total:\s+(\d+)\s+tests?\b", stdout_text)
+    if total_match:
+        return int(total_match.group(1))
+
+    # Fallback for older or alternative Playwright list formats where tests are
+    # emitted one per line but the final total summary is unavailable.
+    return sum(1 for line in stdout_text.splitlines() if line.strip().startswith("["))
 
 
 def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.Popen | subprocess.CompletedProcess:
