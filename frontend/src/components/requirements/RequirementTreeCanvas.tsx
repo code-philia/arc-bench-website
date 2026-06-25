@@ -113,6 +113,9 @@ const FLOW_MARGIN_Y = 32;
 const DEPENDENCY_EDGE_COLOR = "#d44949";
 const DEPENDENCY_EDGE_STROKE_WIDTH = 1.8;
 const DEPENDENCY_EDGE_DASHARRAY = "6 5";
+const INTERFACE_RELATION_EDGE_COLOR = "#8b5cf6";
+const INTERFACE_RELATION_EDGE_STROKE_WIDTH = 1.5;
+const INTERFACE_RELATION_EDGE_DASHARRAY = "6 5";
 const DEPENDENCY_EDGE_CONTROL_OFFSET = 56;
 const DEPENDENCY_ARROW_SIZE = 7;
 
@@ -320,9 +323,11 @@ function buildFlowFromTree(
       });
       const interfacePositions = centeredColumnYPositions(interfaceHeights, anchorCenterY);
       const testPositions = centeredColumnYPositions(testHeights, anchorCenterY);
+      const interfaceNodeIdByInterfaceId = new Map<string, string>();
 
       traceabilityNodes.interfaces.forEach((item, index) => {
         const nodeId = `traceability-interface:${item.interface_id}`;
+        interfaceNodeIdByInterfaceId.set(item.interface_id, nodeId);
         const subtitle = formatInterfaceMeta(item);
         nodes.push({
           id: nodeId,
@@ -360,6 +365,46 @@ function buildFlowFromTree(
           type: "traceabilityEdge",
           animated: false,
           zIndex: 1,
+        });
+      });
+
+      const relationEdgeIds = new Set<string>();
+      traceabilityNodes.interfaces.forEach((item) => {
+        const sourceNodeId = interfaceNodeIdByInterfaceId.get(item.interface_id);
+        if (!sourceNodeId) {
+          return;
+        }
+        item.callees.forEach((calleeId) => {
+          const targetNodeId = interfaceNodeIdByInterfaceId.get(calleeId);
+          if (!targetNodeId || targetNodeId === sourceNodeId) {
+            return;
+          }
+          const edgeId = `traceability-interface-relation:${item.interface_id}->${calleeId}`;
+          if (relationEdgeIds.has(edgeId)) {
+            return;
+          }
+          relationEdgeIds.add(edgeId);
+          structureEdges.push({
+            id: edgeId,
+            source: sourceNodeId,
+            target: targetNodeId,
+            sourceHandle: "interface-relation-source",
+            targetHandle: "interface-relation-target",
+            type: "interfaceRelationEdge",
+            animated: false,
+            zIndex: 2,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 16,
+              height: 16,
+              color: INTERFACE_RELATION_EDGE_COLOR,
+            },
+            style: {
+              stroke: INTERFACE_RELATION_EDGE_COLOR,
+              strokeWidth: INTERFACE_RELATION_EDGE_STROKE_WIDTH,
+              strokeDasharray: INTERFACE_RELATION_EDGE_DASHARRAY,
+            },
+          });
         });
       });
 
@@ -478,6 +523,41 @@ function TraceabilityEdge({
   );
 }
 
+function InterfaceRelationEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  style,
+  markerEnd,
+}: EdgeProps<Edge>) {
+  const [path] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition: Position.Right,
+    targetX,
+    targetY,
+    targetPosition: Position.Left,
+    curvature: 0.28,
+  });
+
+  return (
+    <BaseEdge
+      id={id}
+      path={path}
+      markerEnd={markerEnd}
+      style={{
+        stroke: INTERFACE_RELATION_EDGE_COLOR,
+        strokeWidth: INTERFACE_RELATION_EDGE_STROKE_WIDTH,
+        strokeDasharray: INTERFACE_RELATION_EDGE_DASHARRAY,
+        ...style,
+      }}
+      interactionWidth={18}
+    />
+  );
+}
+
 function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
   const sideNodeRef = useRef<HTMLDivElement | null>(null);
   const storeApi = useStoreApi();
@@ -511,6 +591,24 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
         className="task-flow-handle traceability-target"
         isConnectable={false}
       />
+      {data.kind === "interface" ? (
+        <>
+          <Handle
+            id="interface-relation-target"
+            type="target"
+            position={Position.Left}
+            className="task-flow-handle interface-relation-target"
+            isConnectable={false}
+          />
+          <Handle
+            id="interface-relation-source"
+            type="source"
+            position={Position.Right}
+            className="task-flow-handle interface-relation-source"
+            isConnectable={false}
+          />
+        </>
+      ) : null}
       <div className="task-flow-traceability-head">
         <span className="task-flow-traceability-kicker">{data.kind === "interface" ? "INTERFACE" : "TEST"}</span>
       </div>
@@ -680,7 +778,11 @@ function TreeCanvasInner({
   );
   const flow = baseFlow;
   const edgeTypes = useMemo(
-    () => ({ dependencyEdge: DependencyEdge, traceabilityEdge: TraceabilityEdge }),
+    () => ({
+      dependencyEdge: DependencyEdge,
+      traceabilityEdge: TraceabilityEdge,
+      interfaceRelationEdge: InterfaceRelationEdge,
+    }),
     [],
   );
   const nodeTypes = useMemo(

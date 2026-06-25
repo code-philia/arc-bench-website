@@ -6009,6 +6009,18 @@ button {
   transform: translate(-50%, -50%);
 }
 
+.task-flow-handle.interface-relation-source {
+  right: 0;
+  top: 50%;
+  transform: translate(50%, -50%);
+}
+
+.task-flow-handle.interface-relation-target {
+  left: 0;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
 .task-flow-preview-overlay {
   position: absolute;
   inset: 0;
