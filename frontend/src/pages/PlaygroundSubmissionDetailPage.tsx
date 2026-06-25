@@ -9,6 +9,7 @@ import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
 import {
+  cloneRequirementTree,
   findNodeById,
   parseTaskTreeYaml,
   requirementMarkdownToTree,
@@ -86,6 +87,41 @@ function codeLines(content: string) {
 
 function formatCommitDateTime(value: string) {
   return new Date(value).toLocaleString();
+}
+
+function countRequirementNodes(node: RequirementNode): number {
+  return 1 + node.children.reduce((count, child) => count + countRequirementNodes(child), 0);
+}
+
+function resolveEditableTree(
+  payload: SubmissionEditableTaskPayload,
+  fallbackTree: RequirementNode | null,
+): RequirementNode | null {
+  const candidates: RequirementNode[] = [];
+
+  if (payload.requirements_yaml.trim()) {
+    try {
+      candidates.push(parseTaskTreeYaml(payload.requirements_yaml));
+    } catch {
+      // Fall back to markdown parsing below.
+    }
+  }
+
+  if (payload.requirements_md.trim()) {
+    try {
+      candidates.push(requirementMarkdownToTree(payload.requirements_md));
+    } catch {
+      // Fall back to the current canvas tree below.
+    }
+  }
+
+  if (candidates.length === 0) {
+    return fallbackTree ? cloneRequirementTree(fallbackTree) : null;
+  }
+
+  return candidates.reduce((best, candidate) =>
+    countRequirementNodes(candidate) > countRequirementNodes(best) ? candidate : best,
+  );
 }
 
 function diffLineClassName(line: string) {
@@ -728,6 +764,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const previewDragStartX = useRef(0);
   const previewDragStartWidth = useRef(0);
   const suppressNodeToCommitSyncRef = useRef(false);
+  const editableTreeDirtyRef = useRef(false);
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
@@ -825,33 +862,6 @@ export default function PlaygroundSubmissionDetailPage() {
       commitHistoryPollRef.current = null;
     }
   }, [submissionId]);
-
-  useEffect(() => {
-    if (!submissionId || !submission || submission.status !== "PAUSED") {
-      setEditableTask(null);
-      setEditableTree(null);
-      return;
-    }
-    let cancelled = false;
-    api.getSubmissionEditableTask(submissionId)
-      .then((payload) => {
-        if (cancelled) {
-          return;
-        }
-        setEditableTask(payload);
-        try {
-          setEditableTree(parseTaskTreeYaml(payload.requirements_yaml));
-        } catch {
-          setEditableTree(requirementMarkdownToTree(payload.requirements_md));
-        }
-        setEditableNodeId("ROOT");
-        setEditableDetailExpanded(true);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [submission, submissionId]);
 
   useEffect(() => {
     setLoading(true);
@@ -1055,6 +1065,55 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     return findNodeById(tree, activeSelectedNodeId);
   }, [activeSelectedNodeId, tree]);
+
+  useEffect(() => {
+    if (!submissionId || submission?.status !== "PAUSED") {
+      editableTreeDirtyRef.current = false;
+      setEditableTask(null);
+      setEditableTree(null);
+      return;
+    }
+
+    if (!editableTree && tree) {
+      setEditableTree(cloneRequirementTree(tree));
+      setEditableNodeId(activeSelectedNodeId ?? "ROOT");
+      setEditableDetailExpanded(useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded);
+    }
+
+    let cancelled = false;
+    api.getSubmissionEditableTask(submissionId)
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setEditableTask(payload);
+        if (editableTreeDirtyRef.current) {
+          return;
+        }
+        const nextEditableTree = resolveEditableTree(payload, tree);
+        if (!nextEditableTree) {
+          return;
+        }
+        setEditableTree(nextEditableTree);
+        setEditableNodeId((current) => {
+          const preferredNodeId = current ?? activeSelectedNodeId ?? "ROOT";
+          return findNodeById(nextEditableTree, preferredNodeId) ? preferredNodeId : "ROOT";
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSelectedNodeId,
+    detailExpanded,
+    quickStart.canvasDemo.detailExpanded,
+    submission?.status,
+    submissionId,
+    tree,
+    useQuickStartSubmission,
+  ]);
+
   const editableModeActive = executionPaused;
   const pausedCanvasTree = editableModeActive ? (editableTree ?? tree) : tree;
   const pausedCanvasSelectedNodeId = editableModeActive ? editableNodeId : activeSelectedNodeId;
@@ -1273,6 +1332,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId) {
       return;
     }
+    editableTreeDirtyRef.current = false;
     setSubmission(await api.pauseSubmission(submissionId));
   };
 
@@ -1283,6 +1343,7 @@ export default function PlaygroundSubmissionDetailPage() {
     const nextSubmission = await api.resumeSubmission(submissionId);
     setSubmission(nextSubmission);
     if (nextSubmission.status !== "PAUSED") {
+      editableTreeDirtyRef.current = false;
       setEditableTask(null);
       setEditableTree(null);
       setEditableNodeId("ROOT");
@@ -1303,6 +1364,7 @@ export default function PlaygroundSubmissionDetailPage() {
         requirements_yaml: requirementsYaml,
         prerequisites_md: editableTask.prerequisites_md,
       });
+      editableTreeDirtyRef.current = false;
       setEditableTask((current) => current ? { ...current, requirements_md: requirementsMd, requirements_yaml: requirementsYaml } : current);
     } finally {
       setSavingEditableTask(false);
@@ -1494,7 +1556,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 </button>
               </div>
 
-              <div style={{ padding: "12px 16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div className={`submission-side-actions ${submission.status === "RUNNING" ? "single" : ""}`}>
                 {submission.status === "RUNNING" ? (
                   <button type="button" className="btn-outline" onClick={() => void handlePause()}>
                     Pause
@@ -1678,9 +1740,18 @@ export default function PlaygroundSubmissionDetailPage() {
                       node={node}
                       mode="editable"
                       onNodeChange={(updater) => {
-                        setEditableTree((current) => current ? updateNodeInTree(current, node.id, updater) : current);
+                        editableTreeDirtyRef.current = true;
+                        setEditableTree((current) => {
+                          if (!current) {
+                            return current;
+                          }
+                          return updateNodeInTree(current, node.id, updater);
+                        });
                       }}
-                      onNodeIdChange={setEditableNodeId}
+                      onNodeIdChange={(nextNodeId) => {
+                        editableTreeDirtyRef.current = true;
+                        setEditableNodeId(nextNodeId);
+                      }}
                     />
                   ) : undefined}
                 />

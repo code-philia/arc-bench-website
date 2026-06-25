@@ -619,6 +619,18 @@ export function findNodeById(root: RequirementNode, nodeId: string): Requirement
   return null;
 }
 
+export function cloneRequirementTree(node: RequirementNode): RequirementNode {
+  return {
+    ...node,
+    dependencies: [...node.dependencies],
+    children: node.children.map(cloneRequirementTree),
+    scenarios: node.scenarios.map((scenario) => ({
+      ...scenario,
+      steps: scenario.steps.map((step) => ({ ...step })),
+    })),
+  };
+}
+
 export function updateNodeInTree(
   root: RequirementNode,
   nodeId: string,

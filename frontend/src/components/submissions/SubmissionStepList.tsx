@@ -17,6 +17,15 @@ function normalizeSteps(
   submissionStatus?: string,
   failureReason?: string | null,
 ): SubmissionStep[] {
+  if (submissionStatus === "PAUSED") {
+    return steps.map((step) => (step.status === "running"
+      ? {
+          ...step,
+          status: "paused",
+        }
+      : step));
+  }
+
   if (submissionStatus !== "FAILED") {
     return steps;
   }
