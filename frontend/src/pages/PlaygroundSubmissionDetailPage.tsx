@@ -668,6 +668,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [traceability, setTraceability] = useState<SubmissionTraceabilityPayload | null>(null);
   const [traceabilityLoading, setTraceabilityLoading] = useState(false);
   const [traceabilityError, setTraceabilityError] = useState<string | null>(null);
+  const [traceabilityNodeId, setTraceabilityNodeId] = useState<string | null>(null);
   const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -679,6 +680,9 @@ export default function PlaygroundSubmissionDetailPage() {
   const [selectedDiffFilePath, setSelectedDiffFilePath] = useState<string | null>(null);
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
+  const activeSelectedNodeId = useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
+    ? quickStart.canvasDemo.selectedNodeId
+    : selectedNodeId;
   const previewUrl = getHostDemoPreviewBase();
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
   const previewPanelWidth = previewMinimized ? "80px" : `${previewWidth}px`;
@@ -687,12 +691,14 @@ export default function PlaygroundSubmissionDetailPage() {
     [commitHistory, selectedCommitOid],
   );
   const selectedNodeCommit = useMemo(
-    () => findNewestCommitForNode(commitHistory, selectedNodeId),
-    [commitHistory, selectedNodeId],
+    () => findNewestCommitForNode(commitHistory, activeSelectedNodeId),
+    [activeSelectedNodeId, commitHistory],
   );
   const filePanelEmptyMessage = fileViewMode === "diff"
     ? "Select a commit history entry to inspect its diff."
     : "Select an interface or test to inspect source.";
+  const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
+  const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
@@ -720,6 +726,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setPreviewTab("preview");
     setTraceability(null);
     setTraceabilityError(null);
+    setTraceabilityNodeId(null);
     setSource(null);
     setSourceError(null);
     setFileViewMode(null);
@@ -880,11 +887,11 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [logs]);
 
   const selectedNode = useMemo(() => {
-    if (!tree || !selectedNodeId) {
+    if (!tree || !activeSelectedNodeId) {
       return null;
     }
-    return findNodeById(tree, selectedNodeId);
-  }, [selectedNodeId, tree]);
+    return findNodeById(tree, activeSelectedNodeId);
+  }, [activeSelectedNodeId, tree]);
 
   useEffect(() => {
     if (!useQuickStartSubmission || !quickStart.canvasDemo.active) {
@@ -938,16 +945,19 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [selectedNodeCommit]);
 
   useEffect(() => {
-    if (!submissionId || !selectedNodeId || !submission) {
+    if (!submissionId || !activeSelectedNodeId || !submission) {
       setTraceability(null);
       setTraceabilityError(null);
+      setTraceabilityNodeId(null);
       return;
     }
 
     let cancelled = false;
+    setTraceability(null);
     setTraceabilityLoading(true);
     setTraceabilityError(null);
-    api.getSubmissionTraceability(submissionId, selectedNodeId)
+    setTraceabilityNodeId(activeSelectedNodeId);
+    api.getSubmissionTraceability(submissionId, activeSelectedNodeId)
       .then((payload) => {
         if (!cancelled) {
           setTraceability(payload);
@@ -968,7 +978,7 @@ export default function PlaygroundSubmissionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedNodeId, submission, submissionId]);
+  }, [activeSelectedNodeId, submission, submissionId]);
 
   const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: number | null }) => {
     if (!submissionId) {
@@ -1254,11 +1264,11 @@ export default function PlaygroundSubmissionDetailPage() {
                   </>
                 ) : (
                   <TraceabilityPanel
-                    traceability={traceability}
-                    nodeId={selectedNode?.id ?? selectedNodeId}
+                    traceability={visibleTraceability}
+                    nodeId={selectedNode?.id ?? activeSelectedNodeId}
                     nodeName={selectedNode?.name ?? null}
                     loading={traceabilityLoading}
-                    error={traceabilityError}
+                    error={visibleTraceabilityError}
                     onOpenSource={openSource}
                   />
                 )}
@@ -1347,9 +1357,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 >
                   <RequirementTreeCanvas
                     tree={tree}
-                    selectedNodeId={useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
-                      ? quickStart.canvasDemo.selectedNodeId
-                      : selectedNodeId}
+                    selectedNodeId={activeSelectedNodeId}
                     onSelectNode={(nodeId) => {
                       setSelectedNodeId(nodeId);
                       setDetailExpanded(Boolean(nodeId));
@@ -1372,7 +1380,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     pulseNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId}
                     showLegend
                     detailTestId="quickstart-submission-node-detail"
-                    traceabilityNodes={traceability}
+                    traceabilityNodes={visibleTraceability}
                     onTraceabilityNodeClick={({ filePath, firstLine }) => {
                       if (!filePath) {
                         return;
