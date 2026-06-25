@@ -559,8 +559,24 @@ function CommitHistoryPanel({
   }, [menuState]);
 
   useEffect(() => {
-    selectedItemRef.current?.scrollIntoView({ block: "center" });
-  }, [selectedCommitOid]);
+    if (!selectedItemRef.current) {
+      return;
+    }
+    const parent = selectedItemRef.current.parentElement;
+    if (!parent) {
+      return;
+    }
+    const item = selectedItemRef.current;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = parent.scrollTop;
+    const viewBottom = viewTop + parent.clientHeight;
+    if (itemTop < viewTop) {
+      parent.scrollTop = itemTop;
+    } else if (itemBottom > viewBottom) {
+      parent.scrollTop = itemBottom - parent.clientHeight;
+    }
+  }, [selectedCommitOid, orderedCommits]);
 
   if (loading) {
     return <div className="commit-history-empty">Loading commit history...</div>;
@@ -597,7 +613,7 @@ function CommitHistoryPanel({
                 commit.short_oid,
                 commit.node_id,
                 formatCommitDateTime(commit.committed_at),
-              ].filter(Boolean).join(" 闂?")}</span>
+              ].filter(Boolean).join(" · ")}</span>
             </button>
           );
         })}

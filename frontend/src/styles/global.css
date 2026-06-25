@@ -6074,8 +6074,11 @@ button {
 }
 
 .task-flow-requirement-node.active {
-  --task-flow-node-accent: rgba(0, 160, 124, 0.62);
-  box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.16), 0 10px 24px rgba(0, 0, 0, 0.08);
+  --task-flow-node-accent: rgba(0, 160, 124, 0.95);
+  background: #e6fbf3;
+  box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.42), 0 12px 28px rgba(0, 0, 0, 0.12);
+  transform: scale(1.04);
+  z-index: 5;
 }
 
 .task-flow-requirement-node.atomic {
@@ -6501,9 +6504,10 @@ button {
 }
 
 .task-flow-toolbar .icon-tool-btn.active {
-  border-color: rgba(0, 126, 101, 0.18);
-  background: rgba(255, 255, 255, 0.92);
-  color: #123024;
+  border-color: rgba(0, 160, 124, 0.85);
+  background: #00a07c;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(0, 184, 148, 0.22);
 }
 
 .task-flow-toolbar .icon-tool-btn {

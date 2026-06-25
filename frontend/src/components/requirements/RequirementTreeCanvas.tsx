@@ -182,11 +182,11 @@ function fileBasename(filePath: string): string {
 
 function formatTraceabilitySubtitle(filePath: string, lineNumber: number | null, badge: string): string {
   const safeLine = lineNumber && lineNumber > 0 ? lineNumber : 1;
-  return `${badge} 闂?${fileBasename(filePath)}:${safeLine}`;
+  return `${badge} · ${fileBasename(filePath)}:${safeLine}`;
 }
 
 function formatInterfaceMeta(item: SubmissionTraceabilityInterface): string {
-  return `${item.type} 闂?${item.implemented ? "Implemented" : "Planned"}`;
+  return `${item.type} · ${item.implemented ? "Implemented" : "Planned"}`;
 }
 
 function formatTestMeta(item: SubmissionTraceabilityTest): string {
@@ -222,19 +222,6 @@ function measureTraceabilityNodeHeight(element: HTMLDivElement): number | null {
     return boxHeight;
   }
   return null;
-}
-
-function centeredColumnYPositions(heights: number[], anchorCenterY: number): number[] {
-  if (heights.length === 0) {
-    return [];
-  }
-  const totalHeight = heights.reduce((sum, height) => sum + height, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
-  let cursor = anchorCenterY - totalHeight / 2;
-  return heights.map((height) => {
-    const y = cursor;
-    cursor += height + TRACEABILITY_ROW_GAP;
-    return y;
-  });
 }
 
 function buildFlowFromTree(
@@ -330,8 +317,12 @@ function buildFlowFromTree(
     };
   });
   const traceabilityEnabled = showInterfaces || showTests;
-  const effectiveTraceability = traceabilityEnabled ? allTraceability : traceabilityNodes;
-  if (effectiveTraceability && (traceabilityEnabled || selectedNodeId)) {
+  const layoutTraceability = allTraceability ?? traceabilityNodes;
+  const hasNeededTraceability = traceabilityEnabled
+    ? Boolean(layoutTraceability)
+    : Boolean(traceabilityNodes && layoutTraceability);
+  if (hasNeededTraceability && (traceabilityEnabled || selectedNodeId) && layoutTraceability) {
+    const layoutData = layoutTraceability;
     const rightmostX = Math.max(...positionedNodes.map((node) => FLOW_MARGIN_X + (node.y - minY) - NODE_WIDTH / 2));
     const INTERFACE_TYPES = ["UI", "API", "FUNC", "DB"];
     const TEST_TYPES = ["Unit", "Integration", "E2E"];
@@ -343,10 +334,10 @@ function buildFlowFromTree(
     const testColumnX: Record<string, number> = {};
     TEST_TYPES.forEach((t, i) => { testColumnX[t] = testBaseX + i * COL_STRIDE; });
     const requirementNodeMap = new Map(positionedNodes.map((pn) => [pn.data.id, pn]));
-    const interfacesByReqId = new Map<string, typeof effectiveTraceability.interfaces>();
-    const testsByReqId = new Map<string, typeof effectiveTraceability.tests>();
+    const interfacesByReqId = new Map<string, typeof layoutData.interfaces>();
+    const testsByReqId = new Map<string, typeof layoutData.tests>();
     const interfaceNodeIdByInterfaceId = new Map<string, string>();
-    effectiveTraceability.interfaces.forEach((item) => {
+    layoutData.interfaces.forEach((item) => {
       item.req_ids.forEach((reqId) => {
         if (!requirementNodeMap.has(reqId)) return;
         const list = interfacesByReqId.get(reqId) ?? [];
@@ -354,16 +345,13 @@ function buildFlowFromTree(
         interfacesByReqId.set(reqId, list);
       });
     });
-    effectiveTraceability.tests.forEach((item) => {
+    layoutData.tests.forEach((item) => {
       if (!requirementNodeMap.has(item.req_id)) return;
       const list = testsByReqId.get(item.req_id) ?? [];
       list.push(item);
       testsByReqId.set(item.req_id, list);
     });
-    const interfaceById = new Map(effectiveTraceability.interfaces.map((item) => [item.interface_id, item]));
-    const anchorNodeIds = traceabilityEnabled
-      ? positionedNodes.map((pn) => pn.data.id)
-      : (selectedNodeId ? [selectedNodeId] : []);
+    const anchorNodeIds = positionedNodes.map((pn) => pn.data.id);
     const placedRangesByColumn: Record<string, Array<[number, number]>> = {};
     [...INTERFACE_TYPES, ...TEST_TYPES].forEach((key) => { placedRangesByColumn[key] = []; });
     const placeBlockNear = (column: string, desiredStartY: number, blockHeight: number): number => {
@@ -398,33 +386,9 @@ function buildFlowFromTree(
       const anchorY = FLOW_MARGIN_Y + (anchorPn.x - minX) - NODE_HEIGHT / 2;
       const anchorCenterY = anchorY + NODE_HEIGHT / 2;
       const isDimmed = traceabilityEnabled && selectedNodeId !== null && anchorNodeId !== selectedNodeId;
+      const shouldRender = traceabilityEnabled || anchorNodeId === selectedNodeId;
       const directInterfaces = interfacesByReqId.get(anchorNodeId) ?? [];
-      const expandClosure = !traceabilityEnabled || (selectedNodeId !== null && anchorNodeId === selectedNodeId);
-      const nodeInterfaces = expandClosure
-        ? (() => {
-            const seedIds = new Set(directInterfaces.map((item) => item.interface_id));
-            const visited = new Set<string>();
-            const queue: string[] = [];
-            seedIds.forEach((id) => { if (!visited.has(id)) { visited.add(id); queue.push(id); } });
-            while (queue.length > 0) {
-              const currentId = queue.shift()!;
-              const current = interfaceById.get(currentId);
-              if (!current) continue;
-              for (const relatedId of [...current.callers, ...current.callees]) {
-                if (!visited.has(relatedId) && interfaceById.has(relatedId)) {
-                  visited.add(relatedId);
-                  queue.push(relatedId);
-                }
-              }
-            }
-            const result: typeof effectiveTraceability.interfaces = [];
-            visited.forEach((id) => {
-              const item = interfaceById.get(id);
-              if (item) result.push(item);
-            });
-            return result;
-          })()
-        : directInterfaces;
+      const nodeInterfaces = directInterfaces;
       const nodeTests = testsByReqId.get(anchorNodeId) ?? [];
       const interfacesByType: Record<string, typeof nodeInterfaces> = {};
       INTERFACE_TYPES.forEach((t) => { interfacesByType[t] = []; });
@@ -435,66 +399,63 @@ function buildFlowFromTree(
       for (const ifaceType of INTERFACE_TYPES) {
         const typeInterfaces = interfacesByType[ifaceType];
         if (typeInterfaces.length === 0) continue;
-        const colX = traceabilityEnabled ? interfaceColumnX[ifaceType] : (baseX + INTERFACE_TYPES.indexOf(ifaceType) * COL_STRIDE);
+        const colX = interfaceColumnX[ifaceType];
         const heights = typeInterfaces.map((item) => {
           const nodeId = `traceability-interface:${item.interface_id}`;
           return measuredTraceabilityHeights[nodeId]
             ?? estimateTraceabilityNodeHeight(item.interface_id, fileBasename(item.file_path), formatTraceabilitySubtitle(item.file_path, item.first_line, item.type));
         });
-        let positions: number[];
-        if (traceabilityEnabled) {
-          const blockHeight = heights.reduce((s, h) => s + h, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
-          const desiredStartY = anchorCenterY - blockHeight / 2;
-          const startY = placeBlockNear(ifaceType, desiredStartY, blockHeight);
-          positions = [];
-          let cursor = startY;
-          for (const h of heights) { positions.push(cursor); cursor += h + TRACEABILITY_ROW_GAP; }
-        } else {
-          positions = centeredColumnYPositions(heights, anchorCenterY);
-        }
-        typeInterfaces.forEach((item, index) => {
-          const nodeId = `traceability-interface:${item.interface_id}`;
-          interfaceNodeIdByInterfaceId.set(item.interface_id, nodeId);
-          const subtitle = formatInterfaceMeta(item);
-          nodes.push({
-            id: nodeId,
-            type: "traceabilityNode",
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-            position: { x: colX, y: positions[index] ?? anchorCenterY },
-            data: {
-              kind: "interface",
-              label: item.interface_id,
-              title: fileBasename(item.file_path),
-              subtitle,
-              filePath: item.file_path,
-              firstLine: item.first_line,
-              itemType: item.type,
-              dimmed: isDimmed,
-              onMeasuredHeightChange,
-              selected: false,
-              visualState: "default",
-              pulse: false,
-              dependencySourcesVisible: false,
-              dependencyTargetsVisible: false,
-            },
-            draggable: false,
-            selectable: false,
-            zIndex: 4,
-          });
-          if (ifaceType === "UI") {
-            structureEdges.push({
-              id: `traceability-link:${anchorNodeId}:${nodeId}`,
-              source: anchorNodeId,
-              target: nodeId,
-              sourceHandle: "traceability-source",
-              targetHandle: "traceability-target",
-              type: "traceabilityEdge",
-              animated: false,
-              zIndex: 1,
+        const blockHeight = heights.reduce((s, h) => s + h, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
+        const desiredStartY = anchorCenterY - blockHeight / 2;
+        const startY = placeBlockNear(ifaceType, desiredStartY, blockHeight);
+        const positions: number[] = [];
+        let cursor = startY;
+        for (const h of heights) { positions.push(cursor); cursor += h + TRACEABILITY_ROW_GAP; }
+        if (shouldRender) {
+          typeInterfaces.forEach((item, index) => {
+            const nodeId = `traceability-interface:${item.interface_id}`;
+            interfaceNodeIdByInterfaceId.set(item.interface_id, nodeId);
+            const subtitle = formatInterfaceMeta(item);
+            nodes.push({
+              id: nodeId,
+              type: "traceabilityNode",
+              sourcePosition: Position.Right,
+              targetPosition: Position.Left,
+              position: { x: colX, y: positions[index] ?? anchorCenterY },
+              data: {
+                kind: "interface",
+                label: item.interface_id,
+                title: fileBasename(item.file_path),
+                subtitle,
+                filePath: item.file_path,
+                firstLine: item.first_line,
+                itemType: item.type,
+                dimmed: isDimmed,
+                onMeasuredHeightChange,
+                selected: false,
+                visualState: "default",
+                pulse: false,
+                dependencySourcesVisible: false,
+                dependencyTargetsVisible: false,
+              },
+              draggable: false,
+              selectable: false,
+              zIndex: 4,
             });
-          }
-        });
+            if (ifaceType === "UI") {
+              structureEdges.push({
+                id: `traceability-link:${anchorNodeId}:${nodeId}`,
+                source: anchorNodeId,
+                target: nodeId,
+                sourceHandle: "traceability-source",
+                targetHandle: "traceability-target",
+                type: "traceabilityEdge",
+                animated: false,
+                zIndex: 1,
+              });
+            }
+          });
+        }
       }
       const testsByType: Record<string, typeof nodeTests> = {};
       TEST_TYPES.forEach((t) => { testsByType[t] = []; });
@@ -505,67 +466,64 @@ function buildFlowFromTree(
       for (const testType of TEST_TYPES) {
         const typeTests = testsByType[testType];
         if (typeTests.length === 0) continue;
-        const colX = traceabilityEnabled ? testColumnX[testType] : (testBaseX + TEST_TYPES.indexOf(testType) * COL_STRIDE);
+        const colX = testColumnX[testType];
         const heights = typeTests.map((item) => {
           const nodeId = `traceability-test:${item.test_id}`;
           return measuredTraceabilityHeights[nodeId]
             ?? estimateTraceabilityNodeHeight(item.test_id, fileBasename(item.file_path), formatTraceabilitySubtitle(item.file_path, item.first_line, item.type));
         });
-        let positions: number[];
-        if (traceabilityEnabled) {
-          const blockHeight = heights.reduce((s, h) => s + h, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
-          const desiredStartY = anchorCenterY - blockHeight / 2;
-          const startY = placeBlockNear(testType, desiredStartY, blockHeight);
-          positions = [];
-          let cursor = startY;
-          for (const h of heights) { positions.push(cursor); cursor += h + TRACEABILITY_ROW_GAP; }
-        } else {
-          positions = centeredColumnYPositions(heights, anchorCenterY);
+        const blockHeight = heights.reduce((s, h) => s + h, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
+        const desiredStartY = anchorCenterY - blockHeight / 2;
+        const startY = placeBlockNear(testType, desiredStartY, blockHeight);
+        const positions: number[] = [];
+        let cursor = startY;
+        for (const h of heights) { positions.push(cursor); cursor += h + TRACEABILITY_ROW_GAP; }
+        if (shouldRender) {
+          typeTests.forEach((item, index) => {
+            const nodeId = `traceability-test:${item.test_id}`;
+            const subtitle = formatTestMeta(item);
+            nodes.push({
+              id: nodeId,
+              type: "traceabilityNode",
+              sourcePosition: Position.Right,
+              targetPosition: Position.Left,
+              position: { x: colX, y: positions[index] ?? anchorCenterY },
+              data: {
+                kind: "test",
+                label: item.test_id,
+                title: fileBasename(item.file_path),
+                subtitle,
+                filePath: item.file_path,
+                firstLine: item.first_line,
+                itemType: item.type,
+                dimmed: isDimmed,
+                onMeasuredHeightChange,
+                selected: false,
+                visualState: "default",
+                pulse: false,
+                dependencySourcesVisible: false,
+                dependencyTargetsVisible: false,
+              },
+              draggable: false,
+              selectable: false,
+              zIndex: 4,
+            });
+            structureEdges.push({
+              id: `traceability-link:${anchorNodeId}:${nodeId}`,
+              source: anchorNodeId,
+              target: nodeId,
+              sourceHandle: "traceability-source",
+              targetHandle: "traceability-target",
+              type: "traceabilityEdge",
+              animated: false,
+              zIndex: 1,
+            });
+          });
         }
-        typeTests.forEach((item, index) => {
-          const nodeId = `traceability-test:${item.test_id}`;
-          const subtitle = formatTestMeta(item);
-          nodes.push({
-            id: nodeId,
-            type: "traceabilityNode",
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-            position: { x: colX, y: positions[index] ?? anchorCenterY },
-            data: {
-              kind: "test",
-              label: item.test_id,
-              title: fileBasename(item.file_path),
-              subtitle,
-              filePath: item.file_path,
-              firstLine: item.first_line,
-              itemType: item.type,
-              dimmed: isDimmed,
-              onMeasuredHeightChange,
-              selected: false,
-              visualState: "default",
-              pulse: false,
-              dependencySourcesVisible: false,
-              dependencyTargetsVisible: false,
-            },
-            draggable: false,
-            selectable: false,
-            zIndex: 4,
-          });
-          structureEdges.push({
-            id: `traceability-link:${anchorNodeId}:${nodeId}`,
-            source: anchorNodeId,
-            target: nodeId,
-            sourceHandle: "traceability-source",
-            targetHandle: "traceability-target",
-            type: "traceabilityEdge",
-            animated: false,
-            zIndex: 1,
-          });
-        });
       }
     }
     const relationEdgeIds = new Set<string>();
-    effectiveTraceability.interfaces.forEach((item) => {
+    layoutData.interfaces.forEach((item) => {
       const sourceNodeId = interfaceNodeIdByInterfaceId.get(item.interface_id);
       if (!sourceNodeId) return;
       item.callees.forEach((calleeId) => {
@@ -1018,6 +976,13 @@ function TreeCanvasInner({
             currentData?.selected === incomingData?.selected &&
             currentData?.visualState === incomingData?.visualState &&
             currentData?.pulse === incomingData?.pulse &&
+            currentData?.dimmed === incomingData?.dimmed &&
+            currentData?.label === incomingData?.label &&
+            currentData?.title === incomingData?.title &&
+            currentData?.subtitle === incomingData?.subtitle &&
+            currentData?.itemType === incomingData?.itemType &&
+            currentData?.filePath === incomingData?.filePath &&
+            currentData?.firstLine === incomingData?.firstLine &&
             currentData?.dependencySourcesVisible === incomingData?.dependencySourcesVisible &&
             currentData?.dependencyTargetsVisible === incomingData?.dependencyTargetsVisible
           ) {
@@ -1075,36 +1040,8 @@ function TreeCanvasInner({
     if (!focusNodeId) {
       return;
     }
-    const focusKey = `${focusNodeId}:${pulseNodeId ?? ""}`;
-    if (lastFocusKeyRef.current === focusKey) {
-      return;
-    }
-    lastFocusKeyRef.current = focusKey;
-    const focusNodeIds = new Set<string>([focusNodeId]);
-    for (const edge of baseFlow.edges) {
-      if (edge.source === focusNodeId && edge.type === "traceabilityEdge") {
-        focusNodeIds.add(edge.target);
-      }
-    }
-    const focusNodes = baseFlow.nodes.filter((node) => focusNodeIds.has(node.id));
-    if (focusNodes.length === 0) {
-      return;
-    }
-    const minXVal = Math.min(...focusNodes.map((n) => n.position.x));
-    const minYVal = Math.min(...focusNodes.map((n) => n.position.y));
-    const maxXVal = Math.max(...focusNodes.map((n) => n.position.x + TRACEABILITY_NODE_WIDTH));
-    const maxYVal = Math.max(...focusNodes.map((n) => n.position.y + 80));
-    const centerX = (minXVal + maxXVal) / 2;
-    const centerY = (minYVal + maxYVal) / 2;
-    const timer = window.setTimeout(() => {
-      reactFlow.setCenter(
-        centerX,
-        centerY,
-        { zoom: 1.0, duration: 420 },
-      );
-    }, 80);
-    return () => window.clearTimeout(timer);
-  }, [baseFlow.nodes, focusNodeId, pulseNodeId, reactFlow]);
+    lastFocusKeyRef.current = `${focusNodeId}:${pulseNodeId ?? ""}`;
+  }, [focusNodeId, pulseNodeId]);
   const detailContent = selectedNode
     ? (renderDetailContent ? renderDetailContent(selectedNode) : <RequirementNodeDetailContent node={selectedNode} mode="readonly" />)
     : null;
@@ -1221,7 +1158,7 @@ function TreeCanvasInner({
           <Tooltip title={showInterfaces ? "Hide interfaces" : "Show interfaces"}>
             <button
               type="button"
-              className={"icon-tool-btn "}
+              className={`icon-tool-btn ${showInterfaces ? "active" : ""}`}
               onClick={() => setShowInterfaces((current) => !current)}
             >
               <span style={{ fontSize: 11, fontWeight: 600 }}>IF</span>
@@ -1230,7 +1167,7 @@ function TreeCanvasInner({
           <Tooltip title={showTests ? "Hide tests" : "Show tests"}>
             <button
               type="button"
-              className={"icon-tool-btn "}
+              className={`icon-tool-btn ${showTests ? "active" : ""}`}
               onClick={() => setShowTests((current) => !current)}
             >
               <span style={{ fontSize: 11, fontWeight: 600 }}>T</span>
