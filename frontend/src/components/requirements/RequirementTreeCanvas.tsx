@@ -14,7 +14,7 @@ import {
 } from "@ant-design/icons";
 import { Tooltip } from "antd";
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   BaseEdge,
   Connection,
@@ -28,6 +28,7 @@ import {
   getBezierPath,
   useStoreApi,
   useReactFlow,
+  useUpdateNodeInternals,
   type EdgeProps,
   type Edge,
   type Node,
@@ -185,6 +186,18 @@ function estimateTraceabilityNodeHeight(label: string, title: string, subtitle?:
   const contentHeight = (labelLines * 19) + (titleLines * 16) + (subtitleLines * 15);
   const spacingHeight = 20 + 8 + (subtitleLines > 0 ? 6 : 0);
   return Math.max(70, contentHeight + spacingHeight);
+}
+
+function measureTraceabilityNodeHeight(element: HTMLDivElement): number | null {
+  const layoutHeight = element.offsetHeight;
+  if (Number.isFinite(layoutHeight) && layoutHeight > 0) {
+    return layoutHeight;
+  }
+  const boxHeight = element.getBoundingClientRect().height;
+  if (Number.isFinite(boxHeight) && boxHeight > 0) {
+    return boxHeight;
+  }
+  return null;
 }
 
 function centeredColumnYPositions(heights: number[], anchorCenterY: number): number[] {
@@ -560,24 +573,49 @@ function InterfaceRelationEdge({
 
 function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
   const sideNodeRef = useRef<HTMLDivElement | null>(null);
-  const storeApi = useStoreApi();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const lastMeasuredHeightRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!sideNodeRef.current || !data.onMeasuredHeightChange) {
       return;
     }
     const element = sideNodeRef.current;
+    let disposed = false;
+    let frameId: number | null = null;
     const reportHeight = () => {
-      const zoom = storeApi.getState().transform[2] || 1;
-      data.onMeasuredHeightChange?.(id, element.getBoundingClientRect().height / zoom);
+      const measuredHeight = measureTraceabilityNodeHeight(element);
+      if (!measuredHeight) {
+        return;
+      }
+      const normalizedHeight = Math.ceil(measuredHeight);
+      if (lastMeasuredHeightRef.current === normalizedHeight) {
+        return;
+      }
+      lastMeasuredHeightRef.current = normalizedHeight;
+      data.onMeasuredHeightChange?.(id, normalizedHeight);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        if (!disposed) {
+          updateNodeInternals(id);
+        }
+      });
     };
     reportHeight();
     const observer = new ResizeObserver(() => {
       reportHeight();
     });
     observer.observe(element);
-    return () => observer.disconnect();
-  }, [data.onMeasuredHeightChange, id, storeApi]);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [data.onMeasuredHeightChange, id, updateNodeInternals]);
 
   return (
     <div
@@ -990,7 +1028,6 @@ function TreeCanvasInner({
               }
               onSelectNode(null);
             }}
-            fitView
             panOnDrag
             zoomOnScroll
             zoomOnPinch
