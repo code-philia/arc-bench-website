@@ -158,6 +158,9 @@ function TraceabilityPanel({
   nodeName,
   loading,
   error,
+  selectedItemId,
+  selectedItemKind,
+  onSelectItem,
   onOpenSource,
 }: {
   traceability: SubmissionTraceabilityPayload | null;
@@ -165,8 +168,29 @@ function TraceabilityPanel({
   nodeName: string | null;
   loading: boolean;
   error: string | null;
+  selectedItemId: string | null;
+  selectedItemKind: "interface" | "test" | null;
+  onSelectItem: (kind: "interface" | "test", id: string) => void;
   onOpenSource: (payload: { filePath: string; firstLine?: number | null }) => void;
 }) {
+  const selectedCardRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const item = selectedCardRef.current;
+    const panel = panelRef.current;
+    if (!item || !panel) {
+      return;
+    }
+    const itemRect = item.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    if (itemRect.top < panelRect.top) {
+      panel.scrollTop -= panelRect.top - itemRect.top;
+    } else if (itemRect.bottom > panelRect.bottom) {
+      panel.scrollTop += itemRect.bottom - panelRect.bottom;
+    }
+  }, [selectedItemId, selectedItemKind, traceability]);
+
   if (!nodeId || !nodeName) {
     return (
       <div className="traceability-empty-state">
@@ -188,7 +212,7 @@ function TraceabilityPanel({
   }
 
   return (
-    <div className="traceability-panel">
+    <div className="traceability-panel" ref={panelRef}>
       <div className="traceability-panel-header">
         <div className="traceability-panel-kicker">Selected Requirement</div>
         <div className="traceability-panel-title">{nodeId}</div>
@@ -201,16 +225,23 @@ function TraceabilityPanel({
           <span>{traceability.interfaces.length}</span>
         </div>
         <div className="traceability-card-list">
-          {traceability.interfaces.map((item) => (
+          {traceability.interfaces.map((item) => {
+            const isCardSelected = selectedItemKind === "interface" && selectedItemId === item.interface_id;
+            return (
             <article
               key={item.interface_id}
-              className="traceability-card"
+              ref={isCardSelected ? selectedCardRef : null}
+              className={`traceability-card${isCardSelected ? " selected" : ""}`}
               role="button"
               tabIndex={0}
-              onClick={() => onOpenSource({ filePath: item.file_path, firstLine: item.first_line })}
+              onClick={() => {
+                onSelectItem("interface", item.interface_id);
+                onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
+                  onSelectItem("interface", item.interface_id);
                   onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
                 }
               }}
@@ -243,7 +274,8 @@ function TraceabilityPanel({
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -253,16 +285,23 @@ function TraceabilityPanel({
           <span>{traceability.tests.length}</span>
         </div>
         <div className="traceability-card-list">
-          {traceability.tests.map((item) => (
+          {traceability.tests.map((item) => {
+            const isCardSelected = selectedItemKind === "test" && selectedItemId === item.test_id;
+            return (
             <article
               key={item.test_id}
-              className="traceability-card"
+              ref={isCardSelected ? selectedCardRef : null}
+              className={`traceability-card${isCardSelected ? " selected" : ""}`}
               role="button"
               tabIndex={0}
-              onClick={() => onOpenSource({ filePath: item.file_path, firstLine: item.first_line })}
+              onClick={() => {
+                onSelectItem("test", item.test_id);
+                onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
+                  onSelectItem("test", item.test_id);
                   onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
                 }
               }}
@@ -285,7 +324,8 @@ function TraceabilityPanel({
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
@@ -687,6 +727,8 @@ export default function PlaygroundSubmissionDetailPage() {
   const [traceabilityLoading, setTraceabilityLoading] = useState(false);
   const [traceabilityError, setTraceabilityError] = useState<string | null>(null);
   const [traceabilityNodeId, setTraceabilityNodeId] = useState<string | null>(null);
+  const [selectedTraceabilityId, setSelectedTraceabilityId] = useState<string | null>(null);
+  const [selectedTraceabilityKind, setSelectedTraceabilityKind] = useState<"interface" | "test" | null>(null);
   const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -745,6 +787,8 @@ export default function PlaygroundSubmissionDetailPage() {
     setTraceability(null);
     setTraceabilityError(null);
     setTraceabilityNodeId(null);
+    setSelectedTraceabilityId(null);
+    setSelectedTraceabilityKind(null);
     setAllTraceability(null);
     setSource(null);
     setSourceError(null);
@@ -1374,6 +1418,12 @@ export default function PlaygroundSubmissionDetailPage() {
                     nodeName={selectedNode?.name ?? null}
                     loading={traceabilityLoading}
                     error={visibleTraceabilityError}
+                    selectedItemId={selectedTraceabilityId}
+                    selectedItemKind={selectedTraceabilityKind}
+                    onSelectItem={(kind, id) => {
+                      setSelectedTraceabilityKind(kind);
+                      setSelectedTraceabilityId(id);
+                    }}
                     onOpenSource={openSource}
                   />
                 )}
@@ -1454,53 +1504,58 @@ export default function PlaygroundSubmissionDetailPage() {
           </div>
 
           <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            {activeTab === "canvas" ? (
-              tree ? (
-                <div
-                  data-quickstart-id="quickstart-submission-canvas"
-                  style={{ flex: 1, position: "relative", overflow: "hidden" }}
-                >
-                  <RequirementTreeCanvas
-                    tree={tree}
-                    selectedNodeId={activeSelectedNodeId}
-                    onSelectNode={(nodeId) => {
-                      setSelectedNodeId(nodeId);
-                      setDetailExpanded(Boolean(nodeId));
-                      if (useQuickStartSubmission) {
-                        quickStart.setSelectedNode(nodeId);
-                        quickStart.setDetailExpanded(Boolean(nodeId));
-                      }
-                    }}
-                    detailExpanded={useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded}
-                    onDetailExpandedChange={(expanded) => {
-                      setDetailExpanded(expanded);
-                      if (useQuickStartSubmission) {
-                        quickStart.setDetailExpanded(expanded);
-                      }
-                    }}
-                    mode="readonly"
-                    detailPlacement="bottom"
-                    nodeStates={nodeStates}
-                    focusNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? focusNodeId) : focusNodeId}
-                    pulseNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId}
-                    showLegend
-                    detailTestId="quickstart-submission-node-detail"
-                    traceabilityNodes={visibleTraceability}
-                    allTraceability={allTraceability}
-                    onTraceabilityNodeClick={({ filePath, firstLine }) => {
-                      if (!filePath) {
-                        return;
-                      }
-                      void openSource({ filePath, firstLine });
-                    }}
-                  />
-                </div>
-              ) : (
-                <div style={{ padding: "40px", textAlign: "center", color: "var(--text-secondary)" }}>
-                  Canvas is not available.
-                </div>
-              )
-            ) : activeTab === "file" ? (
+            {tree ? (
+              <div
+                data-quickstart-id="quickstart-submission-canvas"
+                style={{
+                  flex: 1,
+                  position: "relative",
+                  overflow: "hidden",
+                  display: activeTab === "canvas" ? "block" : "none",
+                }}
+              >
+                <RequirementTreeCanvas
+                  tree={tree}
+                  selectedNodeId={activeSelectedNodeId}
+                  onSelectNode={(nodeId) => {
+                    setSelectedNodeId(nodeId);
+                    setDetailExpanded(Boolean(nodeId));
+                    if (useQuickStartSubmission) {
+                      quickStart.setSelectedNode(nodeId);
+                      quickStart.setDetailExpanded(Boolean(nodeId));
+                    }
+                  }}
+                  detailExpanded={useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded}
+                  onDetailExpandedChange={(expanded) => {
+                    setDetailExpanded(expanded);
+                    if (useQuickStartSubmission) {
+                      quickStart.setDetailExpanded(expanded);
+                    }
+                  }}
+                  mode="readonly"
+                  detailPlacement="bottom"
+                  nodeStates={nodeStates}
+                  focusNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? focusNodeId) : focusNodeId}
+                  pulseNodeId={useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId}
+                  showLegend
+                  detailTestId="quickstart-submission-node-detail"
+                  autoFitOnTreeChange={false}
+                  traceabilityNodes={visibleTraceability}
+                  allTraceability={allTraceability}
+                  onTraceabilityNodeClick={({ kind, id }) => {
+                    setSelectedTraceabilityKind(kind);
+                    setSelectedTraceabilityId(id);
+                    setSidebarTab("traceability");
+                  }}
+                />
+              </div>
+            ) : null}
+            {activeTab === "canvas" && !tree ? (
+              <div style={{ padding: "40px", textAlign: "center", color: "var(--text-secondary)" }}>
+                Canvas is not available.
+              </div>
+            ) : null}
+            {activeTab === "file" ? (
               <SubmissionFilePanel
                 source={source}
                 loading={sourceLoading}
@@ -1515,7 +1570,7 @@ export default function PlaygroundSubmissionDetailPage() {
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>
                 <SubmissionResultCard submission={submission} />
               </div>
-            ) : (
+            ) : activeTab === "stdio" ? (
               <div className="stdio-view">
                 <div className="doc-tabs" style={{ padding: "0 24px", borderBottom: "1px solid var(--border)" }}>
                   <button
@@ -1537,7 +1592,7 @@ export default function PlaygroundSubmissionDetailPage() {
                   {stdioTab === "stdout" ? (logs?.stdout || "No stdout yet.") : (logs?.stderr || "No stderr yet.")}
                 </pre>
               </div>
-            )}
+            ) : null}
           </div>
         </main>
 
