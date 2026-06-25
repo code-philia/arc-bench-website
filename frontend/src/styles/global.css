@@ -5919,10 +5919,14 @@ button {
   display: none;
 }
 
-.task-flow-node {
-  --task-flow-node-accent: rgba(12, 31, 24, 0.22);
+.task-flow-card {
   position: relative;
   isolation: isolate;
+  cursor: pointer;
+}
+
+.task-flow-requirement-node {
+  --task-flow-node-accent: rgba(12, 31, 24, 0.22);
   width: 124px;
   min-height: 48px;
   padding: 7px 9px;
@@ -5930,11 +5934,10 @@ button {
   border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 5px 14px rgba(12, 31, 24, 0.08);
-  cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
-.task-flow-node::after {
+.task-flow-requirement-node::after {
   content: "";
   position: absolute;
   inset: -1px;
@@ -5996,6 +5999,16 @@ button {
   transform: translate(-50%, -50%);
 }
 
+.task-flow-handle.traceability-source {
+  right: 0;
+  transform: translate(50%, -50%);
+}
+
+.task-flow-handle.traceability-target {
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
 .task-flow-preview-overlay {
   position: absolute;
   inset: 0;
@@ -6030,126 +6043,125 @@ button {
   opacity: 1;
 }
 
-.task-flow-node strong,
-.task-flow-node span {
+.task-flow-requirement-node strong,
+.task-flow-requirement-node span {
   display: block;
 }
 
-.task-flow-node strong {
+.task-flow-requirement-node strong {
   font-size: 0.84rem;
   line-height: 1.1;
   color: #0f1720;
 }
 
-.task-flow-node span {
+.task-flow-requirement-node span {
   margin-top: 2px;
   color: #556272;
   font-size: 0.63rem;
   line-height: 1.18;
 }
 
-.task-flow-node.active {
+.task-flow-requirement-node.active {
   --task-flow-node-accent: rgba(0, 160, 124, 0.62);
   box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.16), 0 10px 24px rgba(0, 0, 0, 0.08);
 }
 
-.task-flow-node.atomic {
+.task-flow-requirement-node.atomic {
   --task-flow-node-accent: rgba(182, 149, 52, 0.34);
 }
 
-.task-flow-node.visual-design {
+.task-flow-requirement-node.visual-design {
   --task-flow-node-accent: rgba(214, 126, 14, 0.56);
   background: #fff4df;
 }
 
-.task-flow-node.visual-implement {
+.task-flow-requirement-node.visual-implement {
   --task-flow-node-accent: rgba(45, 104, 214, 0.52);
   background: #eaf2ff;
 }
 
-.task-flow-node.visual-test-passed {
+.task-flow-requirement-node.visual-test-passed {
   --task-flow-node-accent: rgba(24, 138, 84, 0.54);
   background: #e8f8ef;
 }
 
-.task-flow-node.visual-test-failed {
+.task-flow-requirement-node.visual-test-failed {
   --task-flow-node-accent: rgba(215, 101, 101, 0.48);
   background: #fff0f0;
 }
 
-.task-flow-side-node {
-  width: 188px;
-  padding: 10px 12px;
-  border-color: rgba(148, 163, 184, 0.42);
-  box-shadow: 0 10px 20px rgba(15, 23, 32, 0.1);
+.task-flow-traceability-node {
+  width: 212px;
+  padding: 7px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 16px;
+  box-shadow: 0 8px 18px rgba(15, 23, 32, 0.08);
 }
 
-.task-flow-side-node.interface {
-  --task-flow-node-accent: rgba(37, 99, 235, 0.34);
-  background: linear-gradient(180deg, #eff6ff, #f8fafc);
+.task-flow-traceability-node--interface {
+  border-color: rgba(140, 126, 255, 0.42);
+  background: linear-gradient(180deg, #efecff, #f3f0ff);
 }
 
-.task-flow-side-node.test {
-  --task-flow-node-accent: rgba(22, 163, 74, 0.34);
-  background: linear-gradient(180deg, #f0fdf4, #f8fafc);
+.task-flow-traceability-node--test {
+  border-color: rgba(118, 176, 146, 0.42);
+  background: linear-gradient(180deg, #edf8f1, #edf8f1);
 }
 
-.task-flow-side-node:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(15, 23, 32, 0.12);
+.task-flow-traceability-node:hover {
+  transform: none;
+  box-shadow: 0 8px 18px rgba(15, 23, 32, 0.08);
 }
 
-.task-flow-side-node-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.task-flow-side-node strong {
+.task-flow-traceability-head {
   display: block;
+  margin-bottom: 4px;
 }
 
-.task-flow-side-node > span {
+.task-flow-traceability-kicker {
+  display: block;
+  color: #6a7386;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.task-flow-traceability-body {
+  margin-bottom: 4px;
+}
+
+.task-flow-traceability-body strong {
+  display: block;
+  color: #1f2937;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+
+.task-flow-traceability-filename {
+  display: block;
+  margin-top: 2px;
+  color: #7a8797;
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.3;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.task-flow-side-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 0.56rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.task-flow-side-badge.interface {
-  background: rgba(37, 99, 235, 0.12);
-  color: #1d4ed8;
-}
-
-.task-flow-side-badge.test {
-  background: rgba(22, 163, 74, 0.12);
-  color: #15803d;
-}
-
-.task-flow-side-subtitle {
+.task-flow-traceability-subtitle {
   display: block;
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 0.58rem;
-  line-height: 1.28;
-  font-family: var(--mono);
+  margin-top: 2px;
+  color: #5f6b7b;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.task-flow-node.pulse {
+.task-flow-requirement-node.pulse {
   animation: taskNodePulse 1.1s ease-out;
 }
 

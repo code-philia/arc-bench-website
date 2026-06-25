@@ -49,7 +49,6 @@ type FlowNodeData = {
   label: string;
   title: string;
   subtitle?: string;
-  badge?: string;
   filePath?: string;
   firstLine?: number | null;
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
@@ -156,6 +155,14 @@ function fileBasename(filePath: string): string {
 function formatTraceabilitySubtitle(filePath: string, lineNumber: number | null, badge: string): string {
   const safeLine = lineNumber && lineNumber > 0 ? lineNumber : 1;
   return `${badge} · ${fileBasename(filePath)}:${safeLine}`;
+}
+
+function formatInterfaceMeta(item: SubmissionTraceabilityInterface): string {
+  return `${item.type} · ${item.implemented ? "Implemented" : "Planned"}`;
+}
+
+function formatTestMeta(item: SubmissionTraceabilityTest): string {
+  return item.type;
 }
 
 function estimateWrappedLineCount(text: string, approxCharsPerLine: number): number {
@@ -316,7 +323,7 @@ function buildFlowFromTree(
 
       traceabilityNodes.interfaces.forEach((item, index) => {
         const nodeId = `traceability-interface:${item.interface_id}`;
-        const subtitle = formatTraceabilitySubtitle(item.file_path, item.first_line, item.type);
+        const subtitle = formatInterfaceMeta(item);
         nodes.push({
           id: nodeId,
           type: "traceabilityNode",
@@ -331,7 +338,6 @@ function buildFlowFromTree(
             label: item.interface_id,
             title: fileBasename(item.file_path),
             subtitle,
-            badge: item.type,
             filePath: item.file_path,
             firstLine: item.first_line,
             onMeasuredHeightChange,
@@ -349,20 +355,17 @@ function buildFlowFromTree(
           id: `traceability-link:${selectedNodeId}:${nodeId}`,
           source: selectedNodeId,
           target: nodeId,
-          type: "step",
+          sourceHandle: "traceability-source",
+          targetHandle: "traceability-target",
+          type: "traceabilityEdge",
           animated: false,
-          zIndex: 0,
-          style: {
-            stroke: "#94a3b8",
-            strokeWidth: 1.2,
-            strokeDasharray: "5 4",
-          },
+          zIndex: 1,
         });
       });
 
       traceabilityNodes.tests.forEach((item, index) => {
         const nodeId = `traceability-test:${item.test_id}`;
-        const subtitle = formatTraceabilitySubtitle(item.file_path, item.first_line, item.type);
+        const subtitle = formatTestMeta(item);
         nodes.push({
           id: nodeId,
           type: "traceabilityNode",
@@ -377,7 +380,6 @@ function buildFlowFromTree(
             label: item.test_id,
             title: fileBasename(item.file_path),
             subtitle,
-            badge: item.type,
             filePath: item.file_path,
             firstLine: item.first_line,
             onMeasuredHeightChange,
@@ -395,14 +397,11 @@ function buildFlowFromTree(
           id: `traceability-link:${selectedNodeId}:${nodeId}`,
           source: selectedNodeId,
           target: nodeId,
-          type: "step",
+          sourceHandle: "traceability-source",
+          targetHandle: "traceability-target",
+          type: "traceabilityEdge",
           animated: false,
-          zIndex: 0,
-          style: {
-            stroke: "#94a3b8",
-            strokeWidth: 1.2,
-            strokeDasharray: "5 4",
-          },
+          zIndex: 1,
         });
       });
     }
@@ -448,12 +447,43 @@ function DependencyEdge({
   );
 }
 
-function RequirementFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
+function TraceabilityEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+}: EdgeProps<Edge>) {
+  const [path] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition: Position.Right,
+    targetX,
+    targetY,
+    targetPosition: Position.Left,
+    curvature: 0.2,
+  });
+
+  return (
+    <BaseEdge
+      id={id}
+      path={path}
+      style={{
+        stroke: "#94a3b8",
+        strokeWidth: 1.3,
+        strokeDasharray: "6 5",
+      }}
+      interactionWidth={16}
+    />
+  );
+}
+
+function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
   const sideNodeRef = useRef<HTMLDivElement | null>(null);
   const storeApi = useStoreApi();
 
   useEffect(() => {
-    if (data.kind === "requirement" || !sideNodeRef.current || !data.onMeasuredHeightChange) {
+    if (!sideNodeRef.current || !data.onMeasuredHeightChange) {
       return;
     }
     const element = sideNodeRef.current;
@@ -467,24 +497,36 @@ function RequirementFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [data.kind, data.onMeasuredHeightChange, id, storeApi]);
-
-  if (data.kind !== "requirement") {
-    return (
-      <div ref={sideNodeRef} className={`task-flow-node task-flow-side-node ${data.kind}`}>
-        <div className="task-flow-side-node-head">
-          <strong>{data.label}</strong>
-          {data.badge ? <span className={`task-flow-side-badge ${data.kind}`}>{data.badge}</span> : null}
-        </div>
-        <span>{data.title}</span>
-        {data.subtitle ? <span className="task-flow-side-subtitle">{data.subtitle}</span> : null}
-      </div>
-    );
-  }
+  }, [data.onMeasuredHeightChange, id, storeApi]);
 
   return (
     <div
-      className={`task-flow-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
+      ref={sideNodeRef}
+      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind}`}
+    >
+      <Handle
+        id="traceability-target"
+        type="target"
+        position={Position.Left}
+        className="task-flow-handle traceability-target"
+        isConnectable={false}
+      />
+      <div className="task-flow-traceability-head">
+        <span className="task-flow-traceability-kicker">{data.kind === "interface" ? "INTERFACE" : "TEST"}</span>
+      </div>
+      <div className="task-flow-traceability-body">
+        <strong>{data.label}</strong>
+      </div>
+      <span className="task-flow-traceability-filename">{data.title}</span>
+      {data.subtitle ? <span className="task-flow-traceability-subtitle">{data.subtitle}</span> : null}
+    </div>
+  );
+}
+
+function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
+  return (
+    <div
+      className={`task-flow-card task-flow-requirement-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
     >
       {data.dependencyTargetsVisible ? <span className="task-flow-handle-visual dependency-target" aria-hidden="true" /> : null}
       <Handle
@@ -493,6 +535,13 @@ function RequirementFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
         position={Position.Left}
         className={`task-flow-handle dependency-target ${data.dependencyTargetsVisible ? "visible" : ""}`}
         isConnectable={data.dependencyTargetsVisible}
+      />
+      <Handle
+        id="traceability-source"
+        type="source"
+        position={Position.Right}
+        className="task-flow-handle traceability-source"
+        isConnectable={false}
       />
       <strong>{data.label}</strong>
       <span>{data.title}</span>
@@ -630,9 +679,12 @@ function TreeCanvasInner({
     ],
   );
   const flow = baseFlow;
-  const edgeTypes = useMemo(() => ({ dependencyEdge: DependencyEdge }), []);
+  const edgeTypes = useMemo(
+    () => ({ dependencyEdge: DependencyEdge, traceabilityEdge: TraceabilityEdge }),
+    [],
+  );
   const nodeTypes = useMemo(
-    () => ({ requirementNode: RequirementFlowNode, traceabilityNode: RequirementFlowNode }),
+    () => ({ requirementNode: RequirementFlowNode, traceabilityNode: TraceabilityFlowNode }),
     [],
   );
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
