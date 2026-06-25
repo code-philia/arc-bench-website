@@ -26,6 +26,8 @@ import {
   ReactFlowProvider,
   ViewportPortal,
   getBezierPath,
+  useEdgesState,
+  useNodesState,
   useStoreApi,
   useReactFlow,
   useUpdateNodeInternals,
@@ -158,11 +160,11 @@ function fileBasename(filePath: string): string {
 
 function formatTraceabilitySubtitle(filePath: string, lineNumber: number | null, badge: string): string {
   const safeLine = lineNumber && lineNumber > 0 ? lineNumber : 1;
-  return `${badge} · ${fileBasename(filePath)}:${safeLine}`;
+  return `${badge} 閻?${fileBasename(filePath)}:${safeLine}`;
 }
 
 function formatInterfaceMeta(item: SubmissionTraceabilityInterface): string {
-  return `${item.type} · ${item.implemented ? "Implemented" : "Planned"}`;
+  return `${item.type} 閻?${item.implemented ? "Implemented" : "Planned"}`;
 }
 
 function formatTestMeta(item: SubmissionTraceabilityTest): string {
@@ -814,7 +816,79 @@ function TreeCanvasInner({
       tree,
     ],
   );
-  const flow = baseFlow;
+  const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(baseFlow.nodes);
+  const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(baseFlow.edges);
+  const flow = { nodes: flowNodes, edges: flowEdges };
+
+  useEffect(() => {
+    setFlowEdges((currentEdges) => {
+      if (currentEdges.length === baseFlow.edges.length && currentEdges.every((edge, index) => edge.id === baseFlow.edges[index]?.id)) {
+        let changed = false;
+        const nextEdges = currentEdges.map((edge, index) => {
+          const incoming = baseFlow.edges[index];
+          if (
+            edge.source === incoming.source &&
+            edge.target === incoming.target &&
+            edge.type === incoming.type &&
+            edge.animated === incoming.animated &&
+            edge.zIndex === incoming.zIndex
+          ) {
+            return edge;
+          }
+          changed = true;
+          return { ...edge, ...incoming };
+        });
+        return changed ? nextEdges : currentEdges;
+      }
+      return baseFlow.edges;
+    });
+  }, [baseFlow.edges, setFlowEdges]);
+
+  useEffect(() => {
+    setFlowNodes((currentNodes) => {
+      const incomingById = new Map(baseFlow.nodes.map((node) => [node.id, node]));
+      if (currentNodes.length === baseFlow.nodes.length && currentNodes.every((node) => incomingById.has(node.id))) {
+        let changed = false;
+        const nextNodes = currentNodes.map((node) => {
+          const incoming = incomingById.get(node.id);
+          if (!incoming) {
+            return node;
+          }
+          const currentData = node.data;
+          const incomingData = incoming.data;
+          if (
+            node.position.x === incoming.position.x &&
+            node.position.y === incoming.position.y &&
+            node.type === incoming.type &&
+            node.zIndex === incoming.zIndex &&
+            node.hidden === incoming.hidden &&
+            currentData?.kind === incomingData?.kind &&
+            currentData?.label === incomingData?.label &&
+            currentData?.title === incomingData?.title &&
+            currentData?.type === incomingData?.type &&
+            currentData?.selected === incomingData?.selected &&
+            currentData?.visualState === incomingData?.visualState &&
+            currentData?.pulse === incomingData?.pulse &&
+            currentData?.dependencySourcesVisible === incomingData?.dependencySourcesVisible &&
+            currentData?.dependencyTargetsVisible === incomingData?.dependencyTargetsVisible
+          ) {
+            return node;
+          }
+          changed = true;
+          return {
+            ...node,
+            position: incoming.position,
+            type: incoming.type,
+            zIndex: incoming.zIndex,
+            hidden: incoming.hidden,
+            data: { ...currentData, ...incomingData },
+          };
+        });
+        return changed ? nextNodes : currentNodes;
+      }
+      return baseFlow.nodes;
+    });
+  }, [baseFlow.nodes, setFlowNodes]);
   const edgeTypes = useMemo(
     () => ({
       dependencyEdge: DependencyEdge,
@@ -1005,6 +1079,8 @@ function TreeCanvasInner({
           <ReactFlow
             nodes={flow.nodes}
             edges={flow.edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
             onNodeClick={(event, node) => {
               const target = event.target as HTMLElement | null;
               if (target?.closest(".task-flow-handle")) {

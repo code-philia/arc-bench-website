@@ -597,7 +597,7 @@ function CommitHistoryPanel({
                 commit.short_oid,
                 commit.node_id,
                 formatCommitDateTime(commit.committed_at),
-              ].filter(Boolean).join(" · ")}</span>
+              ].filter(Boolean).join(" 闂?")}</span>
             </button>
           );
         })}
@@ -653,6 +653,7 @@ export default function PlaygroundSubmissionDetailPage() {
     return Math.round(window.innerWidth * 0.333);
   });
   const pollRef = useRef<number | null>(null);
+  const commitHistoryPollRef = useRef<number | null>(null);
   const visualEventCountRef = useRef(0);
   const isSidebarDragging = useRef(false);
   const sidebarDragStartX = useRef(0);
@@ -735,6 +736,10 @@ export default function PlaygroundSubmissionDetailPage() {
     setSelectedCommitOid(null);
     setSelectedDiffFilePath(null);
     visualEventCountRef.current = 0;
+    if (commitHistoryPollRef.current) {
+      window.clearInterval(commitHistoryPollRef.current);
+      commitHistoryPollRef.current = null;
+    }
   }, [submissionId]);
 
   useEffect(() => {
@@ -752,7 +757,13 @@ export default function PlaygroundSubmissionDetailPage() {
         setRequirement(requirementDetail);
         if (["PENDING", "RUNNING"].includes(detail.status)) {
           pollRef.current = window.setInterval(() => {
-            api.getSubmission(submissionId).then(setSubmission).catch(() => undefined);
+            api.getSubmission(submissionId).then((latest) => {
+              setSubmission(latest);
+              if (!["PENDING", "RUNNING"].includes(latest.status) && pollRef.current) {
+                window.clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
+            }).catch(() => undefined);
             api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
           }, 2000);
         }
@@ -771,6 +782,10 @@ export default function PlaygroundSubmissionDetailPage() {
         window.clearInterval(pollRef.current);
         pollRef.current = null;
       }
+      if (commitHistoryPollRef.current) {
+        window.clearInterval(commitHistoryPollRef.current);
+        commitHistoryPollRef.current = null;
+      }
     };
   }, [requirementCatalog, requirementId, submissionId]);
 
@@ -782,25 +797,62 @@ export default function PlaygroundSubmissionDetailPage() {
     }
 
     let cancelled = false;
-    setCommitHistoryLoading(true);
+    const isInitial = commitHistory === null;
+    if (isInitial) {
+      setCommitHistoryLoading(true);
+    }
     setCommitHistoryError(null);
     api.getSubmissionCommitHistory(submissionId)
       .then((payload) => {
         if (!cancelled) {
-          setCommitHistory(payload);
+          setCommitHistory((current) => {
+            if (!current || current.commits.length === 0) {
+              return payload;
+            }
+            const existingOids = new Set(current.commits.map((c) => c.oid));
+            const newCommits = payload.commits.filter((c) => !existingOids.has(c.oid));
+            if (newCommits.length === 0) {
+              return current;
+            }
+            return { availability: payload.availability, commits: [...current.commits, ...newCommits] };
+          });
         }
       })
       .catch((error: Error) => {
-        if (!cancelled) {
+        if (!cancelled && isInitial) {
           setCommitHistory(null);
           setCommitHistoryError(error.message);
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!cancelled && isInitial) {
           setCommitHistoryLoading(false);
         }
       });
+
+    if (["PENDING", "RUNNING"].includes(submission.status) && !commitHistoryPollRef.current) {
+      commitHistoryPollRef.current = window.setInterval(() => {
+        api.getSubmissionCommitHistory(submissionId)
+          .then((payload) => {
+            setCommitHistory((current) => {
+              if (!current || current.commits.length === 0) {
+                return payload;
+              }
+              const existingOids = new Set(current.commits.map((c) => c.oid));
+              const newCommits = payload.commits.filter((c) => !existingOids.has(c.oid));
+              if (newCommits.length === 0) {
+                return current;
+              }
+              return { availability: payload.availability, commits: [...current.commits, ...newCommits] };
+            });
+          })
+          .catch(() => undefined);
+      }, 2000);
+    }
+    if (!["PENDING", "RUNNING"].includes(submission.status) && commitHistoryPollRef.current) {
+      window.clearInterval(commitHistoryPollRef.current);
+      commitHistoryPollRef.current = null;
+    }
 
     return () => {
       cancelled = true;
@@ -953,8 +1005,11 @@ export default function PlaygroundSubmissionDetailPage() {
     }
 
     let cancelled = false;
-    setTraceability(null);
-    setTraceabilityLoading(true);
+    const isNodeChange = traceabilityNodeId !== activeSelectedNodeId;
+    if (isNodeChange) {
+      setTraceability(null);
+      setTraceabilityLoading(true);
+    }
     setTraceabilityError(null);
     setTraceabilityNodeId(activeSelectedNodeId);
     api.getSubmissionTraceability(submissionId, activeSelectedNodeId)
@@ -970,7 +1025,7 @@ export default function PlaygroundSubmissionDetailPage() {
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!cancelled && isNodeChange) {
           setTraceabilityLoading(false);
         }
       });
@@ -979,7 +1034,6 @@ export default function PlaygroundSubmissionDetailPage() {
       cancelled = true;
     };
   }, [activeSelectedNodeId, submission, submissionId]);
-
   const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: number | null }) => {
     if (!submissionId) {
       return;
