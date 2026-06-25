@@ -12,9 +12,13 @@ import {
   ShareAltOutlined,
   UpOutlined,
 } from "@ant-design/icons";
+
 import { Tooltip } from "antd";
+
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
 import {
   BaseEdge,
   Connection,
@@ -38,11 +42,14 @@ import {
 } from "@xyflow/react";
 
 import { findNodeById, type RequirementNode } from "../../lib/taskTree";
+
 import type {
   RequirementVisualState,
   SubmissionTraceabilityInterface,
+  SubmissionTraceabilityPayload,
   SubmissionTraceabilityTest,
 } from "../../lib/types";
+
 import RequirementNodeDetailContent from "./RequirementNodeDetailContent";
 
 type FlowNodeKind = "requirement" | "interface" | "test";
@@ -56,6 +63,8 @@ type FlowNodeData = {
   firstLine?: number | null;
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
   type?: RequirementNode["type"];
+  itemType?: string;
+  dimmed?: boolean;
   selected: boolean;
   visualState: RequirementVisualState;
   pulse: boolean;
@@ -95,6 +104,9 @@ type RequirementTreeCanvasProps = {
   detailTestId?: string;
   autoFitOnTreeChange?: boolean;
   traceabilityNodes?: TraceabilityCanvasPayload | null;
+  showInterfaces?: boolean;
+  showTests?: boolean;
+  allTraceability?: SubmissionTraceabilityPayload | null;
   onTraceabilityNodeClick?: (payload: {
     kind: "interface" | "test";
     id: string;
@@ -112,6 +124,16 @@ const TRACEABILITY_COLUMN_GAP = 56;
 const TRACEABILITY_ROW_GAP = 20;
 const TRACEABILITY_OFFSET_X = 84;
 const FLOW_MARGIN_X = 32;
+const TRACEABILITY_TYPE_COLORS: Record<string, string> = {
+  ui: "#3b82f6",
+  api: "#10b981",
+  func: "#f59e0b",
+  db: "#ec4899",
+  unit: "#8b5cf6",
+  integration: "#06b6d4",
+  e2e: "#ef4444",
+};
+
 const FLOW_MARGIN_Y = 32;
 const DEPENDENCY_EDGE_COLOR = "#d44949";
 const DEPENDENCY_EDGE_STROKE_WIDTH = 1.8;
@@ -160,11 +182,11 @@ function fileBasename(filePath: string): string {
 
 function formatTraceabilitySubtitle(filePath: string, lineNumber: number | null, badge: string): string {
   const safeLine = lineNumber && lineNumber > 0 ? lineNumber : 1;
-  return `${badge} 閻?${fileBasename(filePath)}:${safeLine}`;
+  return `${badge} 闂?${fileBasename(filePath)}:${safeLine}`;
 }
 
 function formatInterfaceMeta(item: SubmissionTraceabilityInterface): string {
-  return `${item.type} 閻?${item.implemented ? "Implemented" : "Planned"}`;
+  return `${item.type} 闂?${item.implemented ? "Implemented" : "Planned"}`;
 }
 
 function formatTestMeta(item: SubmissionTraceabilityTest): string {
@@ -226,6 +248,9 @@ function buildFlowFromTree(
   showDependencies: boolean,
   traceabilityNodes: TraceabilityCanvasPayload | null,
   measuredTraceabilityHeights: Record<string, number>,
+  showInterfaces: boolean,
+  showTests: boolean,
+  allTraceability: TraceabilityCanvasPayload | null,
   onMeasuredHeightChange?: (nodeId: string, height: number) => void,
 ): FlowGraph {
   const root = hierarchy(tree, (node) => node.children);
@@ -233,10 +258,8 @@ function buildFlowFromTree(
     .nodeSize([NODE_HEIGHT + VERTICAL_GAP, NODE_WIDTH + HORIZONTAL_GAP]);
   const positionedRoot = layout(root);
   const positionedNodes = positionedRoot.descendants();
-
   const minX = Math.min(...positionedNodes.map((node) => node.x));
   const minY = Math.min(...positionedNodes.map((node) => node.y));
-
   const structureEdges: Edge[] = positionedRoot.links().map((link) => ({
     id: `${link.source.data.id}-${link.target.data.id}`,
     source: link.source.data.id,
@@ -245,11 +268,9 @@ function buildFlowFromTree(
     animated: false,
     zIndex: 1,
   }));
-
   const validNodeIds = new Set(positionedNodes.map((node) => node.data.id));
   const dependencyEdges: Edge[] = [];
   const showSelectedDependenciesOnly = Boolean(selectedNodeId);
-
   positionedNodes.forEach((positioned) => {
     const sourceNode = positioned.data;
     if (showSelectedDependenciesOnly && sourceNode.id !== selectedNodeId) {
@@ -282,7 +303,6 @@ function buildFlowFromTree(
       });
     });
   });
-
   const nodes: Node<FlowNodeData>[] = positionedNodes.map((positioned) => {
     const node = positioned.data;
     return {
@@ -309,16 +329,49 @@ function buildFlowFromTree(
       zIndex: 2,
     };
   });
-
-  if (selectedNodeId && traceabilityNodes) {
-    const selectedPositionedNode = positionedNodes.find((node) => node.data.id === selectedNodeId);
-    if (selectedPositionedNode) {
-      const anchorX = FLOW_MARGIN_X + (selectedPositionedNode.y - minY) - NODE_WIDTH / 2;
-      const anchorY = FLOW_MARGIN_Y + (selectedPositionedNode.x - minX) - NODE_HEIGHT / 2;
+  const traceabilityEnabled = showInterfaces || showTests;
+  const effectiveTraceability = traceabilityEnabled ? allTraceability : traceabilityNodes;
+  const traceabilityAnchorNodeId = traceabilityEnabled ? null : selectedNodeId;
+  if (effectiveTraceability && (traceabilityEnabled || selectedNodeId)) {
+    const rightmostX = Math.max(...positionedNodes.map((node) => FLOW_MARGIN_X + (node.y - minY) - NODE_WIDTH / 2));
+    const sharedInterfaceX = rightmostX + NODE_WIDTH + TRACEABILITY_OFFSET_X;
+    const sharedTestX = sharedInterfaceX + TRACEABILITY_NODE_WIDTH + TRACEABILITY_COLUMN_GAP;
+    const requirementNodeMap = new Map(positionedNodes.map((pn) => [pn.data.id, pn]));
+    const interfacesByReqId = new Map<string, typeof effectiveTraceability.interfaces>();
+    const testsByReqId = new Map<string, typeof effectiveTraceability.tests>();
+    const interfaceNodeIdByInterfaceId = new Map<string, string>();
+    effectiveTraceability.interfaces.forEach((item) => {
+      item.req_ids.forEach((reqId) => {
+        if (!requirementNodeMap.has(reqId)) return;
+        const list = interfacesByReqId.get(reqId) ?? [];
+        list.push(item);
+        interfacesByReqId.set(reqId, list);
+      });
+    });
+    effectiveTraceability.tests.forEach((item) => {
+      if (!requirementNodeMap.has(item.req_id)) return;
+      const list = testsByReqId.get(item.req_id) ?? [];
+      list.push(item);
+      testsByReqId.set(item.req_id, list);
+    });
+    const anchorNodeIds = traceabilityEnabled
+      ? positionedNodes.map((pn) => pn.data.id)
+      : (selectedNodeId ? [selectedNodeId] : []);
+    let nextInterfaceY = FLOW_MARGIN_Y;
+    let nextTestY = FLOW_MARGIN_Y;
+    for (const anchorNodeId of anchorNodeIds) {
+      const anchorPn = requirementNodeMap.get(anchorNodeId);
+      if (!anchorPn) continue;
+      const anchorX = FLOW_MARGIN_X + (anchorPn.y - minY) - NODE_WIDTH / 2;
+      const anchorY = FLOW_MARGIN_Y + (anchorPn.x - minX) - NODE_HEIGHT / 2;
       const anchorCenterY = anchorY + NODE_HEIGHT / 2;
-      const interfaceX = anchorX + NODE_WIDTH + TRACEABILITY_OFFSET_X;
-      const testX = interfaceX + TRACEABILITY_NODE_WIDTH + TRACEABILITY_COLUMN_GAP;
-      const interfaceHeights = traceabilityNodes.interfaces.map((item) => {
+      const isDimmed = traceabilityEnabled && selectedNodeId !== null && anchorNodeId !== selectedNodeId;
+      const nodeInterfaces = showInterfaces ? (interfacesByReqId.get(anchorNodeId) ?? []) : (traceabilityEnabled ? [] : (interfacesByReqId.get(anchorNodeId) ?? []));
+      const nodeTests = showTests ? (testsByReqId.get(anchorNodeId) ?? []) : (traceabilityEnabled ? [] : (testsByReqId.get(anchorNodeId) ?? []));
+      if (!showInterfaces && !traceabilityEnabled) {
+        // selected-only mode: use traceabilityNodes directly
+      }
+      const interfaceHeights = nodeInterfaces.map((item) => {
         const nodeId = `traceability-interface:${item.interface_id}`;
         return measuredTraceabilityHeights[nodeId]
           ?? estimateTraceabilityNodeHeight(
@@ -327,7 +380,7 @@ function buildFlowFromTree(
             formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
           );
       });
-      const testHeights = traceabilityNodes.tests.map((item) => {
+      const testHeights = nodeTests.map((item) => {
         const nodeId = `traceability-test:${item.test_id}`;
         return measuredTraceabilityHeights[nodeId]
           ?? estimateTraceabilityNodeHeight(
@@ -336,11 +389,28 @@ function buildFlowFromTree(
             formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
           );
       });
-      const interfacePositions = centeredColumnYPositions(interfaceHeights, anchorCenterY);
-      const testPositions = centeredColumnYPositions(testHeights, anchorCenterY);
-      const interfaceNodeIdByInterfaceId = new Map<string, string>();
-
-      traceabilityNodes.interfaces.forEach((item, index) => {
+      let interfacePositions: number[];
+      let testPositions: number[];
+      if (traceabilityEnabled) {
+        const interfaceBlockHeight = interfaceHeights.reduce((s, h) => s + h, 0) + TRACEABILITY_ROW_GAP * Math.max(0, interfaceHeights.length - 1);
+        const testBlockHeight = testHeights.reduce((s, h) => s + h, 0) + TRACEABILITY_ROW_GAP * Math.max(0, testHeights.length - 1);
+        const interfaceStartY = Math.max(anchorCenterY - interfaceBlockHeight / 2, nextInterfaceY);
+        const testStartY = Math.max(anchorCenterY - testBlockHeight / 2, nextTestY);
+        interfacePositions = [];
+        let cursor = interfaceStartY;
+        for (const h of interfaceHeights) { interfacePositions.push(cursor); cursor += h + TRACEABILITY_ROW_GAP; }
+        nextInterfaceY = cursor + 20;
+        testPositions = [];
+        cursor = testStartY;
+        for (const h of testHeights) { testPositions.push(cursor); cursor += h + TRACEABILITY_ROW_GAP; }
+        nextTestY = cursor + 20;
+      } else {
+        interfacePositions = centeredColumnYPositions(interfaceHeights, anchorCenterY);
+        testPositions = centeredColumnYPositions(testHeights, anchorCenterY);
+      }
+      const interfaceX = traceabilityEnabled ? sharedInterfaceX : (anchorX + NODE_WIDTH + TRACEABILITY_OFFSET_X);
+      const testX = traceabilityEnabled ? sharedTestX : (interfaceX + TRACEABILITY_NODE_WIDTH + TRACEABILITY_COLUMN_GAP);
+      nodeInterfaces.forEach((item, index) => {
         const nodeId = `traceability-interface:${item.interface_id}`;
         interfaceNodeIdByInterfaceId.set(item.interface_id, nodeId);
         const subtitle = formatInterfaceMeta(item);
@@ -360,6 +430,8 @@ function buildFlowFromTree(
             subtitle,
             filePath: item.file_path,
             firstLine: item.first_line,
+            itemType: item.type,
+            dimmed: isDimmed,
             onMeasuredHeightChange,
             selected: false,
             visualState: "default",
@@ -372,8 +444,8 @@ function buildFlowFromTree(
           zIndex: 4,
         });
         structureEdges.push({
-          id: `traceability-link:${selectedNodeId}:${nodeId}`,
-          source: selectedNodeId,
+          id: `traceability-link:${anchorNodeId}:${nodeId}`,
+          source: anchorNodeId,
           target: nodeId,
           sourceHandle: "traceability-source",
           targetHandle: "traceability-target",
@@ -382,48 +454,7 @@ function buildFlowFromTree(
           zIndex: 1,
         });
       });
-
-      const relationEdgeIds = new Set<string>();
-      traceabilityNodes.interfaces.forEach((item) => {
-        const sourceNodeId = interfaceNodeIdByInterfaceId.get(item.interface_id);
-        if (!sourceNodeId) {
-          return;
-        }
-        item.callees.forEach((calleeId) => {
-          const targetNodeId = interfaceNodeIdByInterfaceId.get(calleeId);
-          if (!targetNodeId || targetNodeId === sourceNodeId) {
-            return;
-          }
-          const edgeId = `traceability-interface-relation:${item.interface_id}->${calleeId}`;
-          if (relationEdgeIds.has(edgeId)) {
-            return;
-          }
-          relationEdgeIds.add(edgeId);
-          structureEdges.push({
-            id: edgeId,
-            source: sourceNodeId,
-            target: targetNodeId,
-            sourceHandle: "interface-relation-source",
-            targetHandle: "interface-relation-target",
-            type: "interfaceRelationEdge",
-            animated: false,
-            zIndex: 2,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 16,
-              height: 16,
-              color: INTERFACE_RELATION_EDGE_COLOR,
-            },
-            style: {
-              stroke: INTERFACE_RELATION_EDGE_COLOR,
-              strokeWidth: INTERFACE_RELATION_EDGE_STROKE_WIDTH,
-              strokeDasharray: INTERFACE_RELATION_EDGE_DASHARRAY,
-            },
-          });
-        });
-      });
-
-      traceabilityNodes.tests.forEach((item, index) => {
+      nodeTests.forEach((item, index) => {
         const nodeId = `traceability-test:${item.test_id}`;
         const subtitle = formatTestMeta(item);
         nodes.push({
@@ -442,6 +473,8 @@ function buildFlowFromTree(
             subtitle,
             filePath: item.file_path,
             firstLine: item.first_line,
+            itemType: item.type,
+            dimmed: isDimmed,
             onMeasuredHeightChange,
             selected: false,
             visualState: "default",
@@ -454,8 +487,8 @@ function buildFlowFromTree(
           zIndex: 4,
         });
         structureEdges.push({
-          id: `traceability-link:${selectedNodeId}:${nodeId}`,
-          source: selectedNodeId,
+          id: `traceability-link:${anchorNodeId}:${nodeId}`,
+          source: anchorNodeId,
           target: nodeId,
           sourceHandle: "traceability-source",
           targetHandle: "traceability-target",
@@ -465,8 +498,40 @@ function buildFlowFromTree(
         });
       });
     }
+    const relationEdgeIds = new Set<string>();
+    effectiveTraceability.interfaces.forEach((item) => {
+      const sourceNodeId = interfaceNodeIdByInterfaceId.get(item.interface_id);
+      if (!sourceNodeId) return;
+      item.callees.forEach((calleeId) => {
+        const targetNodeId = interfaceNodeIdByInterfaceId.get(calleeId);
+        if (!targetNodeId || targetNodeId === sourceNodeId) return;
+        const edgeId = `traceability-interface-relation:${item.interface_id}->${calleeId}`;
+        if (relationEdgeIds.has(edgeId)) return;
+        relationEdgeIds.add(edgeId);
+        structureEdges.push({
+          id: edgeId,
+          source: sourceNodeId,
+          target: targetNodeId,
+          sourceHandle: "interface-relation-source",
+          targetHandle: "interface-relation-target",
+          type: "interfaceRelationEdge",
+          animated: false,
+          zIndex: 2,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 16,
+            height: 16,
+            color: INTERFACE_RELATION_EDGE_COLOR,
+          },
+          style: {
+            stroke: INTERFACE_RELATION_EDGE_COLOR,
+            strokeWidth: INTERFACE_RELATION_EDGE_STROKE_WIDTH,
+            strokeDasharray: INTERFACE_RELATION_EDGE_DASHARRAY,
+          },
+        });
+      });
+    });
   }
-
   return {
     nodes,
     edges: showDependencies ? [...structureEdges, ...dependencyEdges] : structureEdges,
@@ -482,6 +547,7 @@ function DependencyEdge({
   style,
   markerEnd,
 }: EdgeProps<Edge>) {
+
   const [path] = getBezierPath({
     sourceX,
     sourceY,
@@ -490,7 +556,6 @@ function DependencyEdge({
     targetY,
     targetPosition: Position.Left,
   });
-
   return (
     <BaseEdge
       id={id}
@@ -514,6 +579,7 @@ function TraceabilityEdge({
   targetX,
   targetY,
 }: EdgeProps<Edge>) {
+
   const [path] = getBezierPath({
     sourceX,
     sourceY,
@@ -523,7 +589,6 @@ function TraceabilityEdge({
     targetPosition: Position.Left,
     curvature: 0.2,
   });
-
   return (
     <BaseEdge
       id={id}
@@ -547,6 +612,7 @@ function InterfaceRelationEdge({
   style,
   markerEnd,
 }: EdgeProps<Edge>) {
+
   const [path] = getBezierPath({
     sourceX,
     sourceY,
@@ -556,7 +622,6 @@ function InterfaceRelationEdge({
     targetPosition: Position.Left,
     curvature: 0.28,
   });
-
   return (
     <BaseEdge
       id={id}
@@ -577,7 +642,6 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
   const sideNodeRef = useRef<HTMLDivElement | null>(null);
   const updateNodeInternals = useUpdateNodeInternals();
   const lastMeasuredHeightRef = useRef<number | null>(null);
-
   useLayoutEffect(() => {
     if (!sideNodeRef.current || !data.onMeasuredHeightChange) {
       return;
@@ -618,11 +682,18 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
       }
     };
   }, [data.onMeasuredHeightChange, id, updateNodeInternals]);
-
+  const itemTypeKey = (data.itemType || "").toLowerCase();
+  const typeColor = TRACEABILITY_TYPE_COLORS[itemTypeKey];
+  const typeClassName = typeColor ? `task-flow-traceability-node--type-${itemTypeKey}` : "";
   return (
     <div
       ref={sideNodeRef}
-      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind}`}
+      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind} ${typeClassName}`}
+      style={{
+        borderLeftColor: typeColor,
+        borderLeftWidth: typeColor ? "4px" : undefined,
+        opacity: data.dimmed ? 0.4 : undefined,
+      }}
     >
       <Handle
         id="traceability-target"
@@ -651,6 +722,17 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
       ) : null}
       <div className="task-flow-traceability-head">
         <span className="task-flow-traceability-kicker">{data.kind === "interface" ? "INTERFACE" : "TEST"}</span>
+        {data.itemType ? (
+          <span
+            className="task-flow-traceability-type-badge"
+            style={{
+              backgroundColor: typeColor,
+              color: typeColor ? "#ffffff" : undefined,
+            }}
+          >
+            {data.itemType}
+          </span>
+        ) : null}
       </div>
       <div className="task-flow-traceability-body">
         <strong>{data.label}</strong>
@@ -743,6 +825,7 @@ function TreeCanvasInner({
   detailTestId,
   autoFitOnTreeChange = true,
   traceabilityNodes = null,
+  allTraceability = null,
   onTraceabilityNodeClick,
 }: RequirementTreeCanvasProps) {
   const reactFlow = useReactFlow();
@@ -754,10 +837,13 @@ function TreeCanvasInner({
   const previewPathRef = useRef<SVGPathElement | null>(null);
   const previewArrowPathRef = useRef<SVGPathElement | null>(null);
   const previewSourcePointRef = useRef<{ x: number; y: number } | null>(null);
+
   const [measuredTraceabilityHeights, setMeasuredTraceabilityHeights] = useState<Record<string, number>>({});
   const [dependencyConnectionActive, setDependencyConnectionActive] = useState(false);
   const [clickConnectionSourceId, setClickConnectionSourceId] = useState<string | null>(null);
   const [showDependencies, setShowDependencies] = useState(mode === "editable");
+  const [showInterfaces, setShowInterfaces] = useState(false);
+  const [showTests, setShowTests] = useState(false);
   const handleMeasuredTraceabilityHeightChange = useCallback((nodeId: string, height: number) => {
     if (!nodeId || !Number.isFinite(height)) {
       return;
@@ -788,7 +874,6 @@ function TreeCanvasInner({
       return Object.fromEntries(nextEntries);
     });
   }, [selectedNodeId, traceabilityNodes]);
-
   const baseFlow = useMemo(
     () => buildFlowFromTree(
       tree,
@@ -801,6 +886,9 @@ function TreeCanvasInner({
       showDependencies,
       traceabilityNodes,
       measuredTraceabilityHeights,
+      showInterfaces,
+      showTests,
+      allTraceability ?? null,
       handleMeasuredTraceabilityHeightChange,
     ),
     [
@@ -814,8 +902,12 @@ function TreeCanvasInner({
       showDependencies,
       traceabilityNodes,
       tree,
+      showInterfaces,
+      showTests,
+      allTraceability,
     ],
   );
+
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(baseFlow.nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(baseFlow.edges);
   const flow = { nodes: flowNodes, edges: flowEdges };
@@ -944,18 +1036,15 @@ function TreeCanvasInner({
     }, 80);
     return () => window.clearTimeout(timer);
   }, [baseFlow.nodes, focusNodeId, pulseNodeId, reactFlow]);
-
   const detailContent = selectedNode
     ? (renderDetailContent ? renderDetailContent(selectedNode) : <RequirementNodeDetailContent node={selectedNode} mode="readonly" />)
     : null;
-
   const handleConnectDependency = (connection: Connection) => {
     if (!onConnectDependency || !connection.source || !connection.target || connection.source === connection.target) {
       return;
     }
     onConnectDependency(connection.source, connection.target);
   };
-
   const cancelDependencyConnection = () => {
     storeApi.getState().cancelConnection();
     storeApi.setState({ connectionClickStartHandle: null });
@@ -974,7 +1063,6 @@ function TreeCanvasInner({
       previewArrowPathRef.current.setAttribute("d", "");
     }
   };
-
   const updateClickPreviewPath = (flowPoint: { x: number; y: number } | null) => {
     if (!previewPathRef.current || !previewArrowPathRef.current) {
       return;
@@ -990,7 +1078,6 @@ function TreeCanvasInner({
     previewPathRef.current.setAttribute("d", path);
     previewArrowPathRef.current.setAttribute("d", arrowPath);
   };
-
   const scheduleClickPreviewPointerUpdate = (clientPoint: { x: number; y: number }) => {
     previewPointRef.current = clientPoint;
     if (previewFrameRef.current !== null) {
@@ -1004,7 +1091,6 @@ function TreeCanvasInner({
       updateClickPreviewPath(reactFlow.screenToFlowPosition(previewPointRef.current));
     });
   };
-
   return (
     <div className={`requirement-tree-layout detail-${detailPlacement}`}>
       <div className="requirement-tree-canvas-region">
@@ -1034,7 +1120,6 @@ function TreeCanvasInner({
               <div className="task-flow-toolbar-divider" />
             </>
           ) : null}
-
           <Tooltip title="Zoom in">
             <button type="button" className="icon-tool-btn" onClick={() => reactFlow.zoomIn({ duration: 180 })}>
               <PlusOutlined />
@@ -1064,8 +1149,25 @@ function TreeCanvasInner({
               {showDependencies ? <EyeOutlined /> : <EyeInvisibleOutlined />}
             </button>
           </Tooltip>
+          <Tooltip title={showInterfaces ? "Hide interfaces" : "Show interfaces"}>
+            <button
+              type="button"
+              className={"icon-tool-btn "}
+              onClick={() => setShowInterfaces((current) => !current)}
+            >
+              <span style={{ fontSize: 11, fontWeight: 600 }}>IF</span>
+            </button>
+          </Tooltip>
+          <Tooltip title={showTests ? "Hide tests" : "Show tests"}>
+            <button
+              type="button"
+              className={"icon-tool-btn "}
+              onClick={() => setShowTests((current) => !current)}
+            >
+              <span style={{ fontSize: 11, fontWeight: 600 }}>T</span>
+            </button>
+          </Tooltip>
         </div>
-
         <div
           className="task-flow-shell"
           onMouseMoveCapture={(event) => {
@@ -1207,7 +1309,6 @@ function TreeCanvasInner({
           </ReactFlow>
         </div>
       </div>
-
       {selectedNode ? (
         <div
           data-quickstart-id={detailTestId}
@@ -1233,7 +1334,6 @@ function TreeCanvasInner({
               ) : null}
             </div>
           </div>
-
           {detailExpanded ? detailContent : null}
         </div>
       ) : null}

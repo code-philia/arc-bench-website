@@ -75,7 +75,7 @@ class SubmissionArtifactService:
             cursor = connection.cursor()
             for row in cursor.execute("SELECT * FROM interfaces ORDER BY interface_id"):
                 req_ids = self._parse_json_list(row["req_ids"])
-                if node_id not in req_ids:
+                if node_id and node_id != "__all__" and node_id not in req_ids:
                     continue
                 interfaces.append(
                     {
@@ -91,10 +91,14 @@ class SubmissionArtifactService:
                     }
                 )
 
-            for row in cursor.execute(
-                "SELECT * FROM tests WHERE req_id = ? ORDER BY test_id",
-                (node_id,),
-            ):
+            if node_id and node_id != "__all__":
+                test_cursor = cursor.execute(
+                    "SELECT * FROM tests WHERE req_id = ? ORDER BY test_id",
+                    (node_id,),
+                )
+            else:
+                test_cursor = cursor.execute("SELECT * FROM tests ORDER BY test_id")
+            for row in test_cursor:
                 tests.append(
                     {
                         "test_id": str(row["test_id"]),

@@ -132,6 +132,11 @@ export const api = {
       `/submissions/${submissionId}/traceability?node_id=${encodeURIComponent(nodeId)}`,
     );
   },
+  getSubmissionAllTraceability(submissionId: string) {
+    return request<SubmissionTraceabilityPayload>(
+      `/submissions/${submissionId}/traceability?node_id=__all__`,
+    );
+  },
   getSubmissionCommitHistory(submissionId: string) {
     return request<SubmissionCommitHistoryPayload>(`/submissions/${submissionId}/commit-history`);
   },

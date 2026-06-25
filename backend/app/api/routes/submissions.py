@@ -133,7 +133,7 @@ def get_submission_logs(
 @router.get("/{submission_id}/traceability", response_model=SubmissionTraceabilityPayload)
 def get_submission_traceability(
     submission_id: str,
-    node_id: str,
+    node_id: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionTraceabilityPayload:

@@ -667,6 +667,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const [previewTab, setPreviewTab] = useState<"preview" | "history">("preview");
   const [traceability, setTraceability] = useState<SubmissionTraceabilityPayload | null>(null);
+  const [allTraceability, setAllTraceability] = useState<SubmissionTraceabilityPayload | null>(null);
   const [traceabilityLoading, setTraceabilityLoading] = useState(false);
   const [traceabilityError, setTraceabilityError] = useState<string | null>(null);
   const [traceabilityNodeId, setTraceabilityNodeId] = useState<string | null>(null);
@@ -728,6 +729,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setTraceability(null);
     setTraceabilityError(null);
     setTraceabilityNodeId(null);
+    setAllTraceability(null);
     setSource(null);
     setSourceError(null);
     setFileViewMode(null);
@@ -1034,6 +1036,39 @@ export default function PlaygroundSubmissionDetailPage() {
       cancelled = true;
     };
   }, [activeSelectedNodeId, submission, submissionId]);
+
+  useEffect(() => {
+    if (!submissionId || !submission) {
+      setAllTraceability(null);
+      return;
+    }
+    let cancelled = false;
+    api.getSubmissionAllTraceability(submissionId)
+      .then((payload) => {
+        if (!cancelled) {
+          setAllTraceability(payload);
+        }
+      })
+      .catch(() => undefined);
+    if (["PENDING", "RUNNING"].includes(submission.status)) {
+      const interval = window.setInterval(() => {
+        api.getSubmissionAllTraceability(submissionId)
+          .then((payload) => {
+            if (!cancelled) {
+              setAllTraceability(payload);
+            }
+          })
+          .catch(() => undefined);
+      }, 2000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+      };
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [submission, submissionId]);
   const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: number | null }) => {
     if (!submissionId) {
       return;
@@ -1435,6 +1470,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     showLegend
                     detailTestId="quickstart-submission-node-detail"
                     traceabilityNodes={visibleTraceability}
+                    allTraceability={allTraceability}
                     onTraceabilityNodeClick={({ filePath, firstLine }) => {
                       if (!filePath) {
                         return;
