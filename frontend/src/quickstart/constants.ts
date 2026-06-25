@@ -1,6 +1,6 @@
 import type { QuickStartStep } from "./types";
 
-export const QUICK_START_REQUIREMENT_ID = "meetingroom";
+export const QUICK_START_REQUIREMENT_ID = "ticketbooking";
 export const QUICK_START_TASK_TYPE = "web";
 export const QUICK_START_DISPLAY_NAME = "Quick Start Demo Agent";
 export const QUICK_START_MODEL_NAME = "ArcBench Demo Runtime";

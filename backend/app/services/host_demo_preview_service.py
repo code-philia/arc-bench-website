@@ -12,7 +12,7 @@ from app.core.config import ROOT_DIR
 
 
 class HostDemoPreviewService:
-    DEMO_ROOT = ROOT_DIR / "runtime" / "demo" / "meetingroom"
+    DEMO_ROOT = ROOT_DIR / "runtime" / "demo" / "ticketbooking"
     FRONTEND_DIR = DEMO_ROOT / "frontend"
     BACKEND_DIR = DEMO_ROOT / "backend"
     HEALTH_URL = "http://127.0.0.1:3000/api/health"
