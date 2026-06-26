@@ -1,4 +1,4 @@
-# Arc Bench Website
+# ARC Bench
 
 ## Requirements
 
