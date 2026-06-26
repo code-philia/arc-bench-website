@@ -22,6 +22,7 @@ from app.schemas.submission import (
     SubmissionTraceabilityPayload,
 )
 from app.services.execution_service import ExecutionService
+from app.services.debug_log_service import DebugLogService
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.requirement_catalog import RequirementCatalogService
@@ -349,6 +350,7 @@ def get_submission_preview_status(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     template_path = runtime_paths.resolve_existing_path(submission.workspace_path)
+    debug_log = DebugLogService(template_path) if template_path is not None else None
     workspace_head_oid = None
     error = None
     if template_path is None:
@@ -364,13 +366,22 @@ def get_submission_preview_status(
                 workspace_head_oid = service._run_git(project_root, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
             except RuntimeError as exc:
                 error = str(exc)
-    return SubmissionPreviewStatus(
-        **HostDemoPreviewService.get_status(
+    payload = HostDemoPreviewService.get_status(
             submission_id=submission.id,
             workspace_head_oid=workspace_head_oid,
             error=error,
         )
-    )
+    if debug_log is not None:
+        debug_log.append(
+            "preview",
+            "HTTP status requested: "
+            f"available={payload.get('available')} "
+            f"stale={payload.get('stale')} "
+            f"workspace_head_oid={payload.get('workspace_head_oid')} "
+            f"preview_head_oid={payload.get('preview_head_oid')} "
+            f"error={payload.get('error')}",
+        )
+    return SubmissionPreviewStatus(**payload)
 
 
 @router.post("/{submission_id}/preview/refresh", response_model=SubmissionPreviewStatus)
@@ -393,8 +404,11 @@ def refresh_submission_preview(
             preview_head_oid=None,
             error="Submission workspace is not available",
         )
+    debug_log = DebugLogService(workspace_path)
+    debug_log.append("preview", f"HTTP refresh requested for submission {submission.id}")
     template_path = workspace_path / "template"
     if not template_path.is_dir():
+        debug_log.append("preview", f"Refresh rejected: preview workspace is not available: {template_path}")
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
@@ -405,6 +419,7 @@ def refresh_submission_preview(
     try:
         workspace_head_oid = service._run_git(template_path, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
     except RuntimeError as exc:
+        debug_log.append("preview", f"Refresh rejected: failed to resolve workspace HEAD: {exc}")
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
@@ -412,13 +427,22 @@ def refresh_submission_preview(
             preview_head_oid=None,
             error=str(exc),
         )
-    return SubmissionPreviewStatus(
-        **HostDemoPreviewService.refresh(
+    response_payload = HostDemoPreviewService.refresh(
             submission_id=submission.id,
             source_template_dir=template_path,
             workspace_head_oid=workspace_head_oid,
+            debug_log=debug_log,
         )
+    debug_log.append(
+        "preview",
+        "HTTP refresh finished: "
+        f"available={response_payload.get('available')} "
+        f"stale={response_payload.get('stale')} "
+        f"workspace_head_oid={response_payload.get('workspace_head_oid')} "
+        f"preview_head_oid={response_payload.get('preview_head_oid')} "
+        f"error={response_payload.get('error')}",
     )
+    return SubmissionPreviewStatus(**response_payload)
 
 @router.get("/{submission_id}/preview")
 @router.get("/{submission_id}/preview/{file_path:path}")
