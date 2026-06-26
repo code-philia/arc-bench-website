@@ -6633,6 +6633,12 @@ button {
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+.requirement-detail-description-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
 .requirement-detail-image-section {
   margin-top: 14px;
 }

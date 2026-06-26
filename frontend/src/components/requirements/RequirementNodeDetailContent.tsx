@@ -1,4 +1,6 @@
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PaperClipOutlined, PlusOutlined } from "@ant-design/icons";
+import { message } from "antd";
+import { useRef } from "react";
 
 import type { RequirementNode } from "../../lib/taskTree";
 import type { SubmissionTaskAssets } from "../../lib/types";
@@ -9,6 +11,7 @@ type RequirementNodeDetailContentProps = {
   onNodeChange?: (updater: (node: RequirementNode) => RequirementNode) => void;
   onNodeIdChange?: (nextId: string) => void;
   taskAssets?: SubmissionTaskAssets | null;
+  onDescriptionImageUpload?: (file: File) => Promise<string>;
 };
 
 const IMAGE_MARKDOWN_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
@@ -89,16 +92,52 @@ export default function RequirementNodeDetailContent({
   onNodeChange,
   onNodeIdChange,
   taskAssets = null,
+  onDescriptionImageUpload,
 }: RequirementNodeDetailContentProps) {
   const editable = mode === "editable";
   const descriptionValue = node.description || "No description available.";
   const descriptionImages = collectDescriptionImages(node.description || "", taskAssets);
+  const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const descriptionImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const updateNode = (updater: (node: RequirementNode) => RequirementNode) => {
     if (!editable || !onNodeChange) {
       return;
     }
     onNodeChange(updater);
+  };
+
+  const insertDescriptionImage = async (file: File) => {
+    if (!editable || !onDescriptionImageUpload) {
+      return;
+    }
+    try {
+      const relativePath = await onDescriptionImageUpload(file);
+      const markdownToken = `![image](${relativePath})`;
+      const textarea = descriptionInputRef.current;
+      const currentDescription = node.description || "";
+      const selectionStart = textarea?.selectionStart ?? currentDescription.length;
+      const selectionEnd = textarea?.selectionEnd ?? currentDescription.length;
+      const needsLeadingNewline = selectionStart > 0 && currentDescription[selectionStart - 1] !== "\n";
+      const prefix = currentDescription.slice(0, selectionStart);
+      const suffix = currentDescription.slice(selectionEnd);
+      const insertion = `${needsLeadingNewline ? "\n" : ""}${markdownToken}`;
+      updateNode((currentNode) => ({
+        ...currentNode,
+        description: `${prefix}${insertion}${suffix}`,
+      }));
+      window.setTimeout(() => {
+        const input = descriptionInputRef.current;
+        if (!input) {
+          return;
+        }
+        const caret = prefix.length + insertion.length;
+        input.focus();
+        input.setSelectionRange(caret, caret);
+      }, 0);
+    } catch (error) {
+      message.error((error as Error).message);
+    }
   };
 
   if (!editable) {
@@ -266,7 +305,31 @@ export default function RequirementNodeDetailContent({
 
       <label className="field-stack">
         <span>Description</span>
+        <div className="requirement-detail-description-actions">
+          <button
+            type="button"
+            className="mini-btn"
+            onClick={() => descriptionImageInputRef.current?.click()}
+            disabled={!editable || !onDescriptionImageUpload}
+          >
+            <PaperClipOutlined /> Upload Image
+          </button>
+          <input
+            ref={descriptionImageInputRef}
+            className="visually-hidden"
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void insertDescriptionImage(file);
+              }
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
         <textarea
+          ref={descriptionInputRef}
           className="text-area"
           rows={4}
           value={node.description}

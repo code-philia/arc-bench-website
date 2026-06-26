@@ -30,6 +30,7 @@ import {
   taskTreeToYaml,
   updateNodeInTree,
 } from "../lib/taskTree";
+import type { SubmissionTaskAssets, UserTaskDraft } from "../lib/types";
 
 type CreateTaskFormState = {
   title: string;
@@ -66,6 +67,7 @@ export default function CreateTaskPage() {
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(initialPreviewWidth);
   const [isResizingPreview, setIsResizingPreview] = useState(false);
+  const [taskDraft, setTaskDraft] = useState<UserTaskDraft | null>(null);
   const [createForm, setCreateForm] = useState<CreateTaskFormState>({
     title: "My Custom Task",
     taskType: "web",
@@ -75,6 +77,14 @@ export default function CreateTaskPage() {
   const yamlContent = useMemo(() => taskTreeToYaml(tree), [tree]);
   const stats = useMemo(() => summarizeTaskTree(tree), [tree]);
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
+  const draftTaskAssets = useMemo<SubmissionTaskAssets>(() => ({
+    assets_base_url: "",
+    references_base_url: taskDraft?.references_base_url ?? "",
+  }), [taskDraft]);
+
+  useEffect(() => {
+    api.createMyTaskDraft().then(setTaskDraft).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!isResizingPreview) {
@@ -190,6 +200,16 @@ export default function CreateTaskPage() {
     message.success(`Dependency added: ${sourceId} -> ${targetId}`);
   };
 
+  const handleUploadDescriptionImage = async (file: File) => {
+    let draft = taskDraft;
+    if (!draft) {
+      draft = await api.createMyTaskDraft();
+      setTaskDraft(draft);
+    }
+    const uploaded = await api.uploadMyTaskDraftReference(draft.draft_id, file);
+    return uploaded.relative_path;
+  };
+
   const handleCreateTask = async () => {
     if (!user) {
       navigate("/login", { state: { from: "/playground/create-task" } });
@@ -211,6 +231,7 @@ export default function CreateTaskPage() {
         atomic_count: stats.atomicCount,
         yaml_content: yamlContent,
         markdown_content: markdown,
+        draft_id: taskDraft?.draft_id ?? null,
       });
       message.success("Task created.");
       setIsCreateModalOpen(false);
@@ -282,7 +303,7 @@ export default function CreateTaskPage() {
             <MarkdownTocDocument
               markdown={markdown}
               assetsBaseUrl=""
-              referencesBaseUrl=""
+              referencesBaseUrl={taskDraft?.references_base_url ?? ""}
               tocTitle="Contents"
               bodyClassName="playground-readme-body"
               tocClassName="playground-readme-toc create-task-preview-toc"
@@ -331,6 +352,8 @@ export default function CreateTaskPage() {
                   mode="editable"
                   onNodeChange={updateSelectedNode}
                   onNodeIdChange={setSelectedNodeId}
+                  taskAssets={draftTaskAssets}
+                  onDescriptionImageUpload={handleUploadDescriptionImage}
                 />
               )}
             />

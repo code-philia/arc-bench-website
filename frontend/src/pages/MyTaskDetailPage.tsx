@@ -49,7 +49,7 @@ export default function MyTaskDetailPage() {
           <MarkdownTocDocument
             markdown={task.markdown_content}
             assetsBaseUrl=""
-            referencesBaseUrl=""
+            referencesBaseUrl={`/api/my-tasks/${task.id}/reference/`}
             tocTitle="Chapters"
           />
         </section>

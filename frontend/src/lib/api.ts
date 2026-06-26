@@ -13,6 +13,7 @@ import type {
   SubmissionPreviewStatus,
   SubmissionSummary,
   SubmissionTraceabilityPayload,
+  UserTaskDraft,
   UserTaskDetail,
   UserTaskSummary,
 } from "./types";
@@ -228,7 +229,7 @@ export const api = {
     });
   },
   getSubmissionPreviewUrl(submissionId: string) {
-    return "http://1.95.169.80:3001/";
+    return "http://127.0.0.1:3000/";
   },
   listMyTasks() {
     return request<UserTaskSummary[]>("/my-tasks");
@@ -245,10 +246,24 @@ export const api = {
     atomic_count: number;
     yaml_content: string;
     markdown_content: string;
+    draft_id?: string | null;
   }) {
     return request<UserTaskDetail>("/my-tasks", {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+  },
+  createMyTaskDraft() {
+    return request<UserTaskDraft>("/my-tasks/drafts", {
+      method: "POST",
+    });
+  },
+  async uploadMyTaskDraftReference(draftId: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return request<{ filename: string; relative_path: string; url: string }>(`/my-tasks/drafts/${draftId}/reference`, {
+      method: "POST",
+      body: form,
     });
   },
 };

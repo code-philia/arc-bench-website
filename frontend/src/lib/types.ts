@@ -206,6 +206,11 @@ export type UserTaskDetail = UserTaskSummary & {
   markdown_content: string;
 };
 
+export type UserTaskDraft = {
+  draft_id: string;
+  references_base_url: string;
+};
+
 export type UserSummary = {
   id: string;
   email: string;

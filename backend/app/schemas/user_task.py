@@ -16,6 +16,7 @@ class UserTaskCreateRequest(BaseModel):
     atomic_count: int = Field(default=0, ge=0, le=1000)
     yaml_content: str = Field(min_length=1, max_length=500000)
     markdown_content: str = Field(min_length=1, max_length=500000)
+    draft_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class UserTaskSummary(BaseModel):
@@ -33,3 +34,8 @@ class UserTaskSummary(BaseModel):
 class UserTaskDetail(UserTaskSummary):
     yaml_content: str
     markdown_content: str
+
+
+class UserTaskDraftResponse(BaseModel):
+    draft_id: str
+    references_base_url: str

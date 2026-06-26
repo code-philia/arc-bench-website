@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.user_task import UserTask
-from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskSummary
+from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskDraftResponse, UserTaskSummary
 
 
 class UserTaskService:
@@ -31,6 +33,25 @@ class UserTaskService:
             markdown_content=Path(task.markdown_path).read_text(encoding="utf-8"),
         )
 
+    def create_draft(self, user: User) -> UserTaskDraftResponse:
+        draft_id = f"draft_{uuid4().hex[:12]}"
+        draft_dir = self._draft_dir(user, draft_id)
+        (draft_dir / "reference").mkdir(parents=True, exist_ok=True)
+        return UserTaskDraftResponse(
+            draft_id=draft_id,
+            references_base_url=f"/api/my-tasks/drafts/{draft_id}/reference/",
+        )
+
+    def save_draft_reference(self, user: User, draft_id: str, filename: str, content: bytes) -> str:
+        safe_name = self._sanitize_filename(filename)
+        if not safe_name:
+            raise ValueError("Uploaded image filename is invalid")
+        target_dir = self._draft_dir(user, draft_id) / "reference"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = self._unique_path(target_dir, safe_name)
+        target_path.write_bytes(content)
+        return target_path.name
+
     def create_user_task(self, user: User, payload: UserTaskCreateRequest) -> UserTaskDetail:
         task_id = f"task_{uuid4().hex[:12]}"
         task_dir = self._task_dir(user, task_id)
@@ -43,6 +64,7 @@ class UserTaskService:
 
         yaml_path.write_text(yaml_content, encoding="utf-8")
         markdown_path.write_text(markdown_content, encoding="utf-8")
+        self._copy_draft_references(user, payload.draft_id, task_dir)
 
         task = UserTask(
             id=task_id,
@@ -69,6 +91,18 @@ class UserTaskService:
             return Path(task.markdown_path).read_text(encoding="utf-8"), f"{task.id}.md"
         raise LookupError("Unknown task document kind")
 
+    def get_draft_reference_path(self, user: User, draft_id: str, asset_path: str) -> Path:
+        reference_root = (self._draft_dir(user, draft_id) / "reference").resolve()
+        reference_root.mkdir(parents=True, exist_ok=True)
+        target = (reference_root / asset_path).resolve()
+        try:
+            target.relative_to(reference_root)
+        except ValueError as exc:
+            raise LookupError("Draft reference path is outside the draft directory") from exc
+        if not target.is_file():
+            raise LookupError("Draft reference image not found")
+        return target
+
     def _get_owned_task(self, user: User, task_id: str) -> UserTask:
         task = self.db.scalar(
             select(UserTask).where(
@@ -83,3 +117,36 @@ class UserTaskService:
     def _task_dir(self, user: User, task_id: str) -> Path:
         owner_slug = f"{user.username}-{user.id}"
         return self.settings.user_tasks_root / owner_slug / task_id
+
+    def _draft_dir(self, user: User, draft_id: str) -> Path:
+        owner_slug = f"{user.username}-{user.id}"
+        return self.settings.user_tasks_root / owner_slug / "_drafts" / draft_id
+
+    @staticmethod
+    def _sanitize_filename(filename: str) -> str:
+        cleaned = Path(filename).name.strip()
+        cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", cleaned)
+        return cleaned.strip(".-")
+
+    @staticmethod
+    def _unique_path(directory: Path, filename: str) -> Path:
+        candidate = directory / filename
+        if not candidate.exists():
+            return candidate
+        stem = candidate.stem
+        suffix = candidate.suffix
+        counter = 2
+        while True:
+            alternative = directory / f"{stem}-{counter}{suffix}"
+            if not alternative.exists():
+                return alternative
+            counter += 1
+
+    def _copy_draft_references(self, user: User, draft_id: str | None, task_dir: Path) -> None:
+        if not draft_id:
+            return
+        source_reference_dir = self._draft_dir(user, draft_id) / "reference"
+        if not source_reference_dir.is_dir():
+            return
+        target_reference_dir = task_dir / "reference"
+        shutil.copytree(source_reference_dir, target_reference_dir, dirs_exist_ok=True)
