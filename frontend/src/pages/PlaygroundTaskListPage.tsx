@@ -189,9 +189,8 @@ export default function PlaygroundTaskListPage() {
                   <th style={{ width: "120px" }}>ID</th>
                   <th>Task</th>
                   <th style={{ width: "120px" }}>Category</th>
-                  <th style={{ width: "110px" }}>Modules</th>
+                  <th style={{ width: "110px" }}>REQs</th>
                   <th style={{ width: "100px" }}>Tests</th>
-                  <th style={{ width: "120px" }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -215,9 +214,6 @@ export default function PlaygroundTaskListPage() {
                     </td>
                     <td>{task.module_count}</td>
                     <td>{task.total_tests}</td>
-                    <td>
-                      <span className="status-dot completed">Ready</span>
-                    </td>
                   </tr>
                 ))}
               </tbody>

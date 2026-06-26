@@ -1,4 +1,4 @@
-# BookStack Knowledge Base System (Demo)
+# BookStack Knowledge Base System
 Web-based knowledge base/document management system, completing the construction of front-end and back-end infrastructure.
 
 ## REQ-1 BookStack Homepage

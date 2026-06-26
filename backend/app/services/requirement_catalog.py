@@ -4,8 +4,10 @@ import io
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
+import yaml
 
 from app.core.config import get_settings
 from app.models.requirement import Requirement
@@ -94,6 +96,8 @@ class RequirementCatalogService:
                 continue
 
             requirements_md = requirements_path.read_text(encoding="utf-8")
+            requirement_yaml_path = self._resolve_requirement_yaml_path(requirements_path)
+            leaf_requirement_count = self._count_leaf_requirements(requirement_yaml_path)
             rows.append(
                 CatalogRequirementEntry(
                     id=requirement_id,
@@ -101,8 +105,8 @@ class RequirementCatalogService:
                     category="web",
                     summary=self._extract_summary(requirements_md),
                     test_runner="playwright",
-                    total_tests=len(list(tests_path.glob("*.spec.ts"))) if tests_path.exists() else 0,
-                    module_count=sum(1 for line in requirements_md.splitlines() if line.startswith("## REQ-")),
+                    total_tests=leaf_requirement_count * 3,
+                    module_count=leaf_requirement_count,
                     requirements_path=requirements_path,
                     prerequisites_path=prerequisites_path,
                     tests_path=tests_path,
@@ -366,6 +370,23 @@ class RequirementCatalogService:
         if not yaml_path.exists():
             return None
         return yaml_path.read_text(encoding="utf-8")
+
+    def _count_leaf_requirements(self, yaml_path: Path) -> int:
+        if not yaml_path.exists():
+            return 0
+        parsed = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(parsed, dict):
+            return 0
+        return self._count_leaf_nodes(parsed)
+
+    def _count_leaf_nodes(self, node: dict[str, Any]) -> int:
+        children = node.get("children")
+        if not isinstance(children, list) or len(children) == 0:
+            return 1
+        valid_children = [child for child in children if isinstance(child, dict)]
+        if len(valid_children) == 0:
+            return 1
+        return sum(self._count_leaf_nodes(child) for child in valid_children)
 
     @staticmethod
     def _read_text_if_exists(path: Path) -> str:

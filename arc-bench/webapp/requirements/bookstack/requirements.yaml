@@ -1,5 +1,5 @@
 id: REQ-ROOT
-name: BookStack Knowledge Base System (Demo)
+name: BookStack Knowledge Base System
 type: FOLDER
 description: Web-based knowledge base/document management system, completing the construction
   of front-end and back-end infrastructure.
