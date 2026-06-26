@@ -30,14 +30,14 @@ const rankBadges = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
 function competitionTypeLabel(type: string) {
   if (type === "web") return "WEB";
-  if (type === "android") return "MOBILE";
+  if (type === "mobile" || type === "android") return "MOBILE";
   if (type === "mixed") return "MIXED";
   return type.toUpperCase();
 }
 
 function competitionAccent(type: string) {
   if (type === "web") return "web";
-  if (type === "android") return "mobile";
+  if (type === "mobile" || type === "android") return "mobile";
   if (type === "mixed") return "mixed";
   return "web";
 }

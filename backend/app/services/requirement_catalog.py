@@ -78,45 +78,78 @@ class RequirementCatalogService:
 
     def scan_entries(self) -> list[CatalogRequirementEntry]:
         rows: list[CatalogRequirementEntry] = []
-        if not self.requirements_root.exists():
-            return rows
-
-        for requirement_dir in sorted(self.requirements_root.iterdir()):
-            if not requirement_dir.is_dir():
+        for category, requirements_root, tests_root, templates_root in self._iter_catalog_sources():
+            if not requirements_root.exists():
                 continue
 
-            requirement_id = requirement_dir.name
-            requirements_path = requirement_dir / "requirements.md"
-            prerequisites_path = requirement_dir / "prerequisites.md"
-            tests_path = self.tests_root / requirement_id
-            assets_path = requirement_dir / "assets"
-            references_path = requirement_dir / "reference"
+            for requirement_dir in sorted(requirements_root.iterdir()):
+                if not requirement_dir.is_dir():
+                    continue
 
-            if not requirements_path.exists():
-                continue
+                requirement_id = requirement_dir.name
+                requirements_path = requirement_dir / "requirements.md"
+                prerequisites_path = requirement_dir / "prerequisites.md"
+                tests_path = tests_root / requirement_id
+                assets_path = requirement_dir / "assets"
+                references_path = requirement_dir / "reference"
 
-            requirements_md = requirements_path.read_text(encoding="utf-8")
-            requirement_yaml_path = self._resolve_requirement_yaml_path(requirements_path)
-            leaf_requirement_count = self._count_leaf_requirements(requirement_yaml_path)
-            rows.append(
-                CatalogRequirementEntry(
-                    id=requirement_id,
-                    title=self._extract_title(requirements_md, fallback=requirement_id),
-                    category="web",
-                    summary=self._extract_summary(requirements_md),
-                    test_runner="playwright",
-                    total_tests=leaf_requirement_count * 3,
-                    module_count=leaf_requirement_count,
-                    requirements_path=requirements_path,
-                    prerequisites_path=prerequisites_path,
-                    tests_path=tests_path,
-                    assets_path=assets_path,
-                    references_path=references_path,
-                    templates_root=self.templates_root,
+                if not requirements_path.exists():
+                    continue
+
+                requirements_md = requirements_path.read_text(encoding="utf-8")
+                requirement_yaml_path = self._resolve_requirement_yaml_path(requirements_path)
+                leaf_requirement_count = self._count_leaf_requirements(requirement_yaml_path)
+                rows.append(
+                    CatalogRequirementEntry(
+                        id=requirement_id,
+                        title=self._extract_title(requirements_md, fallback=requirement_id),
+                        category=category,
+                        summary=self._extract_summary(requirements_md),
+                        test_runner="playwright",
+                        total_tests=leaf_requirement_count * 3,
+                        module_count=leaf_requirement_count,
+                        requirements_path=requirements_path,
+                        prerequisites_path=prerequisites_path,
+                        tests_path=tests_path,
+                        assets_path=assets_path,
+                        references_path=references_path,
+                        templates_root=templates_root,
+                    )
                 )
-            )
 
         return rows
+
+    def _iter_catalog_sources(self) -> list[tuple[str, Path, Path, Path]]:
+        if self.catalog_name != "competition":
+            return [("web", self.requirements_root, self.tests_root, self.templates_root)]
+
+        competition_root = self.requirements_root.parent.parent
+        if not competition_root.exists():
+            return []
+
+        sources: list[tuple[str, Path, Path, Path]] = []
+        for app_root in sorted(competition_root.iterdir()):
+            if not app_root.is_dir() or not app_root.name.endswith("app"):
+                continue
+            sources.append(
+                (
+                    self._normalize_competition_category(app_root.name),
+                    app_root / "requirements",
+                    app_root / "tests",
+                    app_root / "template",
+                )
+            )
+        return sources
+
+    @staticmethod
+    def _normalize_competition_category(app_dir_name: str) -> str:
+        if app_dir_name == "webapp":
+            return "web"
+        if app_dir_name == "mobileapp":
+            return "mobile"
+        if app_dir_name.endswith("app"):
+            return app_dir_name[:-3]
+        return app_dir_name
 
     def sync_to_db(self, requirement_id: str | None = None) -> None:
         for entry in self.scan_entries():
@@ -181,7 +214,7 @@ class RequirementCatalogService:
             grouped.setdefault(row.category, []).append(row)
 
         competitions: list[CompetitionSummary] = []
-        for category, items in sorted(grouped.items()):
+        for category, items in sorted(grouped.items(), key=lambda item: self._competition_sort_key(item[0])):
             competitions.append(
                 CompetitionSummary(
                     id=category,
@@ -356,10 +389,19 @@ class RequirementCatalogService:
             grouped.setdefault(row.category, []).append(row)
 
         display_ids: dict[str, str] = {}
-        for _, items in sorted(grouped.items()):
+        for _, items in sorted(grouped.items(), key=lambda item: RequirementCatalogService._competition_sort_key(item[0])):
             for index, row in enumerate(items, start=1):
                 display_ids[row.id] = f"TASK-{index:03d}"
         return display_ids
+
+    @staticmethod
+    def _competition_sort_key(category: str) -> tuple[int, str]:
+        priority = {
+            "web": 0,
+            "mobile": 1,
+            "android": 1,
+        }
+        return (priority.get(category, 99), category)
 
     @staticmethod
     def _resolve_requirement_yaml_path(requirements_path: Path) -> Path:
@@ -404,16 +446,18 @@ class RequirementCatalogService:
     def _competition_title(category: str) -> str:
         if category == "web":
             return "Web Competition"
+        if category == "mobile":
+            return "Mobile Competition"
         if category == "android":
-            return "Android Competition"
+            return "Mobile Competition"
         return f"{category.title()} Competition"
 
     @staticmethod
     def _competition_summary(category: str, task_count: int) -> str:
         if category == "web":
             return f"Browser-based product tasks with Playwright evaluation across {task_count} benchmark tasks."
-        if category == "android":
-            return f"Android application tasks across {task_count} benchmark tasks."
+        if category in {"mobile", "android"}:
+            return f"Mobile application tasks across {task_count} benchmark tasks."
         return f"{task_count} benchmark tasks in the {category} track."
 
     @staticmethod
