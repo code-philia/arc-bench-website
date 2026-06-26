@@ -59,6 +59,7 @@ type FlowNodeData = {
   label: string;
   title: string;
   subtitle?: string;
+  requirementNodeId?: string;
   filePath?: string;
   firstLine?: number | null;
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
@@ -110,6 +111,7 @@ type RequirementTreeCanvasProps = {
   onTraceabilityNodeClick?: (payload: {
     kind: "interface" | "test";
     id: string;
+    requirementNodeId: string | null;
     filePath: string;
     firstLine: number | null;
   }) => void;
@@ -317,10 +319,8 @@ function buildFlowFromTree(
     };
   });
   const traceabilityEnabled = showInterfaces || showTests;
-  const layoutTraceability = allTraceability ?? traceabilityNodes;
-  const hasNeededTraceability = traceabilityEnabled
-    ? Boolean(layoutTraceability)
-    : Boolean(traceabilityNodes && layoutTraceability);
+  const layoutTraceability = traceabilityEnabled ? allTraceability : traceabilityNodes;
+  const hasNeededTraceability = traceabilityEnabled ? Boolean(allTraceability) : Boolean(traceabilityNodes);
   if (hasNeededTraceability && (traceabilityEnabled || selectedNodeId) && layoutTraceability) {
     const layoutData = layoutTraceability;
     const rightmostX = Math.max(...positionedNodes.map((node) => FLOW_MARGIN_X + (node.y - minY) - NODE_WIDTH / 2));
@@ -388,8 +388,8 @@ function buildFlowFromTree(
       const isDimmed = traceabilityEnabled && selectedNodeId !== null && anchorNodeId !== selectedNodeId;
       const shouldRender = traceabilityEnabled || anchorNodeId === selectedNodeId;
       const directInterfaces = interfacesByReqId.get(anchorNodeId) ?? [];
-      const nodeInterfaces = directInterfaces;
-      const nodeTests = testsByReqId.get(anchorNodeId) ?? [];
+      const nodeInterfaces = showInterfaces || !traceabilityEnabled ? directInterfaces : [];
+      const nodeTests = showTests || !traceabilityEnabled ? (testsByReqId.get(anchorNodeId) ?? []) : [];
       const interfacesByType: Record<string, typeof nodeInterfaces> = {};
       INTERFACE_TYPES.forEach((t) => { interfacesByType[t] = []; });
       nodeInterfaces.forEach((item) => {
@@ -427,6 +427,7 @@ function buildFlowFromTree(
                 label: item.interface_id,
                 title: fileBasename(item.file_path),
                 subtitle,
+                requirementNodeId: anchorNodeId,
                 filePath: item.file_path,
                 firstLine: item.first_line,
                 itemType: item.type,
@@ -493,6 +494,7 @@ function buildFlowFromTree(
                 label: item.test_id,
                 title: fileBasename(item.file_path),
                 subtitle,
+                requirementNodeId: anchorNodeId,
                 filePath: item.file_path,
                 firstLine: item.first_line,
                 itemType: item.type,
@@ -1198,6 +1200,7 @@ function TreeCanvasInner({
                 onTraceabilityNodeClick?.({
                   kind: node.data.kind,
                   id: node.data.label,
+                  requirementNodeId: node.data.requirementNodeId ?? null,
                   filePath: node.data.filePath ?? "",
                   firstLine: node.data.firstLine ?? null,
                 });

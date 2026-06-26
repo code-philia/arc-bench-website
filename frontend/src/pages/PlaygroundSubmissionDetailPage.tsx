@@ -742,11 +742,18 @@ function CommitHistoryPanel({
               type="button"
               className="commit-history-context-action"
               onClick={() => {
+                const confirmed = window.confirm(
+                  `Rewind this submission to commit ${menuState.commit.short_oid}? Execution will pause and later commits in the workspace history will be discarded.`,
+                );
+                if (!confirmed) {
+                  setMenuState(null);
+                  return;
+                }
                 onRewind(menuState.commit);
                 setMenuState(null);
               }}
             >
-              Rewind To Here
+              Rewind to This Commit
             </button>
           ) : null}
           <button
@@ -1820,7 +1827,21 @@ export default function PlaygroundSubmissionDetailPage() {
                   autoFitOnTreeChange={false}
                   traceabilityNodes={visibleTraceability}
                   allTraceability={allTraceability}
-                  onTraceabilityNodeClick={({ kind, id }) => {
+                  onTraceabilityNodeClick={({ kind, id, requirementNodeId }) => {
+                    const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
+                    if (targetNodeId) {
+                      setSelectedNodeId(targetNodeId);
+                      setDetailExpanded(true);
+                      setFocusNodeId(targetNodeId);
+                      if (submission?.status === "PAUSED") {
+                        setEditableNodeId(targetNodeId);
+                        setEditableDetailExpanded(true);
+                      }
+                      if (useQuickStartSubmission) {
+                        quickStart.setSelectedNode(targetNodeId);
+                        quickStart.setDetailExpanded(true);
+                      }
+                    }
                     setSelectedTraceabilityKind(kind);
                     setSelectedTraceabilityId(id);
                     setSidebarTab("traceability");
