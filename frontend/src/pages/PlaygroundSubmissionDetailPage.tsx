@@ -77,6 +77,16 @@ function toVisualState(event: SubmissionVisualEvent): RequirementVisualState {
   return "default";
 }
 
+function commitPhaseToVisualState(phase: SubmissionCommitHistoryEntry["phase"]): RequirementVisualState {
+  if (phase === "design") {
+    return "design";
+  }
+  if (phase === "implement") {
+    return "implement";
+  }
+  return "default";
+}
+
 function formatLineNumber(value: number | null) {
   return value && value > 0 ? value : 1;
 }
@@ -1076,11 +1086,17 @@ export default function PlaygroundSubmissionDetailPage() {
 
   const nodeStates = useMemo(() => {
     const nextState: Record<string, RequirementVisualState> = {};
+    for (const commit of commitHistory?.commits ?? []) {
+      if (!commit.node_id || !commit.phase) {
+        continue;
+      }
+      nextState[commit.node_id] = commitPhaseToVisualState(commit.phase);
+    }
     for (const event of logs?.visual_events ?? []) {
       nextState[event.node_id] = toVisualState(event);
     }
     return nextState;
-  }, [logs]);
+  }, [commitHistory, logs]);
 
   const selectedNode = useMemo(() => {
     if (!tree || !activeSelectedNodeId) {

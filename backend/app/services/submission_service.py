@@ -266,9 +266,8 @@ class SubmissionService:
             raise RuntimeError("Failed to confirm rewound commit in repository history")
 
         checkpoint = self.read_checkpoint(submission)
-        existing_completed = checkpoint.get("completed")
         checkpoint["last_completed_index"] = rewound_index
-        checkpoint["completed"] = existing_completed[:rewound_index] if isinstance(existing_completed, list) else []
+        checkpoint["completed"] = self._build_checkpoint_completed_entries(rewound_commits)
         checkpoint["paused"] = False
         checkpoint["rewind_target"] = {
             "commit_oid": normalized_commit_oid,
@@ -279,9 +278,16 @@ class SubmissionService:
         checkpoint["resume_requires_restart"] = True
         self.write_checkpoint(submission, checkpoint)
 
+        historic_visual_events = self.read_visual_events(submission)
         self._stop_runner_container(submission.id)
         self._clear_execution_artifacts(submission)
-        self._rebuild_runner_events_from_commit_history(submission, rewound_commits)
+        self._rebuild_runner_events_from_commit_history(
+            submission,
+            rewound_commits,
+            historic_visual_events=historic_visual_events,
+            target_node_id=node_id,
+            target_phase=phase,
+        )
         self._rebuild_traceability_store(submission)
         self._mark_rewound_paused(submission, node_id=node_id, phase=phase, commit_oid=normalized_commit_oid)
 
@@ -659,13 +665,26 @@ class SubmissionService:
         if event_log_path.exists():
             event_log_path.unlink()
 
-    def _rebuild_runner_events_from_commit_history(self, submission: Submission, commits: list[dict]) -> None:
+    def _rebuild_runner_events_from_commit_history(
+        self,
+        submission: Submission,
+        commits: list[dict],
+        *,
+        historic_visual_events: list[SubmissionVisualEvent] | None = None,
+        target_node_id: str | None = None,
+        target_phase: str | None = None,
+    ) -> None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
         runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
         runner_events_path.parent.mkdir(parents=True, exist_ok=True)
         lines: list[str] = []
+        latest_test_event_by_node: dict[str, SubmissionVisualEvent] = {}
+        for event in historic_visual_events or []:
+            if event.phase != "test":
+                continue
+            latest_test_event_by_node[event.node_id] = event
         for commit in commits:
             node_id = str(commit.get("node_id") or "").strip()
             phase = str(commit.get("phase") or "").strip()
@@ -682,6 +701,26 @@ class SubmissionService:
                 "message": message,
             }
             lines.append(json.dumps(payload, ensure_ascii=True))
+            if phase != "implement" or not node_id:
+                continue
+            if target_node_id == node_id and target_phase == "implement":
+                continue
+            test_event = latest_test_event_by_node.get(node_id)
+            if test_event is None:
+                continue
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "requirement_state",
+                        "node_id": test_event.node_id,
+                        "phase": test_event.phase,
+                        "status": test_event.status,
+                        "timestamp": test_event.timestamp,
+                        "message": test_event.message,
+                    },
+                    ensure_ascii=True,
+                )
+            )
         runner_events_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
     def _rebuild_traceability_store(self, submission: Submission) -> None:
@@ -689,6 +728,19 @@ class SubmissionService:
         requirements_yaml = payload.get("requirements_yaml", "").strip()
         if requirements_yaml:
             self.write_submission_traceability_store(submission, requirements_yaml)
+
+    @staticmethod
+    def _build_checkpoint_completed_entries(commits: list[dict]) -> list[dict[str, int | str | None]]:
+        completed_entries: list[dict[str, int | str | None]] = []
+        for index, commit in enumerate(commits, start=1):
+            completed_entries.append(
+                {
+                    "index": index,
+                    "node_id": str(commit.get("node_id") or "").strip() or None,
+                    "phase": str(commit.get("phase") or "").strip() or None,
+                }
+            )
+        return completed_entries
 
     def _mark_rewound_paused(self, submission: Submission, *, node_id: str, phase: str, commit_oid: str) -> None:
         submission.status = SubmissionStatus.PAUSED.value
