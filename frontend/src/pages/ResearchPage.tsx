@@ -30,6 +30,20 @@ type BenchmarkEntry = {
 
 const agentEntries: AgentEntry[] = [
   {
+    name: "ARC",
+    organization: "Shanghai Jiao Tong University, National University of Singapore",
+    summary:
+      "A requirement-compilation framework that turns large multimodal DSL specifications into runnable web systems with modular designs, test-driven implementation, and end-to-end traceability.",
+    paper: {
+      label: "Paper",
+      href: "https://arxiv.org/abs/2602.13723",
+    },
+    repo: {
+      label: "Code",
+      href: "https://github.com/code-philia/agentic-requirement-compiler.git",
+    },
+  },
+  {
     name: "WebArena Agent",
     organization: "Carnegie Mellon University, ETH Zurich, Princeton University",
     summary:
