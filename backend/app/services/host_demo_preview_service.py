@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import atexit
+import os
+import shutil
 import subprocess
 import threading
 import time
@@ -12,33 +14,80 @@ from app.core.config import ROOT_DIR
 
 
 class HostDemoPreviewService:
-    DEMO_ROOT = ROOT_DIR / "runtime" / "demo" / "ticketbooking"
-    FRONTEND_DIR = DEMO_ROOT / "frontend"
-    BACKEND_DIR = DEMO_ROOT / "backend"
+    PREVIEW_ROOT = ROOT_DIR / "runtime" / "host-preview" / "ticketbooking"
+    FRONTEND_DIR = PREVIEW_ROOT / "frontend"
+    BACKEND_DIR = PREVIEW_ROOT / "backend"
     HEALTH_URL = "http://127.0.0.1:3000/api/health"
-    PREVIEW_URL = "http://127.0.0.1:3000"
+    PREVIEW_URL = "http://1.95.169.80:3001"
 
     _lock = threading.Lock()
     _backend_process: subprocess.Popen[str] | None = None
     _bootstrap_thread: threading.Thread | None = None
     _bootstrap_error: str | None = None
+    _current_submission_id: str | None = None
+    _current_workspace_head_oid: str | None = None
 
     @classmethod
-    def start_async(cls) -> None:
-        with cls._lock:
-            if cls._is_backend_running():
+    def get_status(
+        cls,
+        *,
+        submission_id: str,
+        workspace_head_oid: str | None,
+        error: str | None = None,
+    ) -> dict[str, bool | str | None]:
+        available = cls._check_health() and cls._current_submission_id == submission_id
+        stale = bool(available and workspace_head_oid and cls._current_workspace_head_oid and workspace_head_oid != cls._current_workspace_head_oid)
+        combined_error = error or cls.last_error()
+        if not available and not combined_error:
+            combined_error = "Preview is not running for this submission"
+        return {
+            "available": available,
+            "stale": stale,
+            "workspace_head_oid": workspace_head_oid,
+            "preview_head_oid": cls._current_workspace_head_oid,
+            "error": combined_error,
+        }
+
+    @classmethod
+    def refresh(
+        cls,
+        *,
+        submission_id: str,
+        source_template_dir: Path,
+        workspace_head_oid: str | None,
+    ) -> dict[str, bool | str | None]:
+        try:
+            cls._sync_template(source_template_dir)
+            cls._build_frontend()
+            cls._restart_backend()
+            if not cls._wait_until_ready(120):
+                raise RuntimeError(cls.last_error() or "Preview backend did not become ready in time")
+            with cls._lock:
+                cls._current_submission_id = submission_id
+                cls._current_workspace_head_oid = workspace_head_oid
                 cls._bootstrap_error = None
-                return
-            if cls._bootstrap_thread is not None and cls._bootstrap_thread.is_alive():
-                return
-            cls._bootstrap_error = None
-            cls._bootstrap_thread = threading.Thread(target=cls._bootstrap, name="host-demo-preview", daemon=True)
-            cls._bootstrap_thread.start()
+        except Exception as exc:  # noqa: BLE001
+            with cls._lock:
+                cls._bootstrap_error = str(exc)
+            return {
+                "available": False,
+                "stale": False,
+                "workspace_head_oid": workspace_head_oid,
+                "preview_head_oid": cls._current_workspace_head_oid,
+                "error": str(exc),
+            }
+        return cls.get_status(submission_id=submission_id, workspace_head_oid=workspace_head_oid)
 
     @classmethod
     def ensure_ready(cls, timeout_seconds: int = 120) -> bool:
-        cls.start_async()
         return cls._wait_until_ready(timeout_seconds)
+
+    @classmethod
+    def mark_stale(cls, submission_id: str) -> None:
+        with cls._lock:
+            if cls._current_submission_id == submission_id:
+                cls._current_workspace_head_oid = None
+        cls.stop_backend()
 
     @classmethod
     def preview_url(cls) -> str:
@@ -50,40 +99,49 @@ class HostDemoPreviewService:
             return cls._bootstrap_error
 
     @classmethod
-    def _bootstrap(cls) -> None:
-        try:
-            cls._build_frontend()
-            with cls._lock:
-                if not cls._is_backend_running():
-                    cls._start_backend()
-                cls._bootstrap_error = None
-        except Exception as exc:  # noqa: BLE001
-            with cls._lock:
-                cls._bootstrap_error = str(exc)
+    def _sync_template(cls, source_template_dir: Path) -> None:
+        if not source_template_dir.is_dir():
+            raise RuntimeError(f"Preview template directory not found: {source_template_dir}")
+        if cls.PREVIEW_ROOT.exists():
+            shutil.rmtree(cls.PREVIEW_ROOT)
+        shutil.copytree(
+            source_template_dir,
+            cls.PREVIEW_ROOT,
+            ignore=shutil.ignore_patterns(".git", "node_modules", "dist", "coverage", ".cache"),
+        )
 
     @classmethod
     def _build_frontend(cls) -> None:
         if not cls.FRONTEND_DIR.exists():
-            raise RuntimeError(f"Demo frontend directory not found: {cls.FRONTEND_DIR}")
+            raise RuntimeError(f"Preview frontend directory not found: {cls.FRONTEND_DIR}")
+        subprocess.run(
+            ["npm.cmd", "install"],
+            cwd=str(cls.FRONTEND_DIR),
+            check=True,
+        )
         subprocess.run(
             ["npm.cmd", "run", "build"],
             cwd=str(cls.FRONTEND_DIR),
             check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
 
     @classmethod
-    def _start_backend(cls) -> None:
+    def _restart_backend(cls) -> None:
+        cls.stop_backend()
         if not cls.BACKEND_DIR.exists():
-            raise RuntimeError(f"Demo backend directory not found: {cls.BACKEND_DIR}")
+            raise RuntimeError(f"Preview backend directory not found: {cls.BACKEND_DIR}")
+        subprocess.run(
+            ["npm.cmd", "install", "--omit=dev"],
+            cwd=str(cls.BACKEND_DIR),
+            check=True,
+        )
         env = {
-            **__import__("os").environ,
+            **os.environ,
             "HOST": "127.0.0.1",
             "PORT": "3000",
         }
         cls._backend_process = subprocess.Popen(
-            ["npm.cmd", "run", "dev"],
+            ["npm.cmd", "run", "start"],
             cwd=str(cls.BACKEND_DIR),
             env=env,
             stdout=subprocess.DEVNULL,
@@ -92,24 +150,19 @@ class HostDemoPreviewService:
         )
 
     @classmethod
-    def _is_backend_running(cls) -> bool:
-        process = cls._backend_process
-        if process is not None and process.poll() is None and cls._check_health():
-            return True
-        return cls._check_health()
-
-    @classmethod
     def _wait_until_ready(cls, timeout_seconds: int) -> bool:
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
             if cls._check_health():
                 return True
-            with cls._lock:
-                bootstrap_thread = cls._bootstrap_thread
-                bootstrap_error = cls._bootstrap_error
-            if bootstrap_error and (bootstrap_thread is None or not bootstrap_thread.is_alive()):
+            process = cls._backend_process
+            if process is not None and process.poll() is not None:
+                with cls._lock:
+                    cls._bootstrap_error = f"Preview backend exited with code {process.returncode}"
                 return False
             time.sleep(1)
+        with cls._lock:
+            cls._bootstrap_error = "Preview backend did not become ready before timeout"
         return False
 
     @classmethod

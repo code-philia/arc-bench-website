@@ -7,7 +7,6 @@ import RequirementNodeDetailContent from "../components/requirements/Requirement
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
-import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
 import {
   cloneRequirementTree,
   findNodeById,
@@ -26,6 +25,7 @@ import type {
   SubmissionCommitHistoryPayload,
   SubmissionDetail,
   SubmissionLogs,
+  SubmissionPreviewStatus,
   SubmissionSourcePayload,
   SubmissionTraceabilityPayload,
   SubmissionVisualEvent,
@@ -809,9 +809,10 @@ export default function PlaygroundSubmissionDetailPage() {
   const isPreviewDragging = useRef(false);
   const previewDragStartX = useRef(0);
   const previewDragStartWidth = useRef(0);
+  const previewPollRef = useRef<number | null>(null);
   const suppressNodeToCommitSyncRef = useRef(false);
   const editableTreeDirtyRef = useRef(false);
-  const [previewAvailable, setPreviewAvailable] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<SubmissionPreviewStatus | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const [previewTab, setPreviewTab] = useState<"preview" | "history">("preview");
@@ -844,8 +845,9 @@ export default function PlaygroundSubmissionDetailPage() {
   const activeSelectedNodeId = useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
     ? quickStart.canvasDemo.selectedNodeId
     : selectedNodeId;
-  const previewUrl = getHostDemoPreviewBase();
+  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
+  const previewAvailable = previewStatus?.available ?? false;
   const previewPanelWidth = previewMinimized ? "80px" : `${previewWidth}px`;
   const selectedDiffCommit = useMemo(
     () => commitHistory?.commits.find((commit) => commit.oid === selectedCommitOid) ?? null,
@@ -869,16 +871,40 @@ export default function PlaygroundSubmissionDetailPage() {
   const submissionStatus = submission?.status ?? null;
   const shouldPollSubmission = isSubmissionLive(submissionStatus);
 
+  const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
+    available: false,
+    stale: false,
+    workspace_head_oid: null,
+    preview_head_oid: null,
+    error: error.message,
+  });
+
+  const loadPreviewStatus = async (silent = false) => {
+    if (!silent) {
+      setPreviewLoading(true);
+    }
+    try {
+      const status = await api.getSubmissionPreviewStatus(submissionId);
+      setPreviewStatus(status);
+    } catch (error) {
+      setPreviewStatus(toPreviewErrorStatus(error as Error));
+    } finally {
+      if (!silent) {
+        setPreviewLoading(false);
+      }
+    }
+  };
+
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
-      const available = await checkHostDemoPreview(previewUrl);
-      setPreviewAvailable(available);
-      if (available) {
+      const status = await api.refreshSubmissionPreview(submissionId);
+      setPreviewStatus(status);
+      if (status.available) {
         setPreviewFrameVersion((current) => current + 1);
       }
-    } catch {
-      setPreviewAvailable(false);
+    } catch (error) {
+      setPreviewStatus(toPreviewErrorStatus(error as Error));
     } finally {
       setPreviewLoading(false);
     }
@@ -889,7 +915,7 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [quickStart, submissionId]);
 
   useEffect(() => {
-    setPreviewAvailable(false);
+    setPreviewStatus(null);
     setPreviewLoading(true);
     setPreviewFrameVersion(0);
     setPreviewTab("preview");
@@ -910,6 +936,10 @@ export default function PlaygroundSubmissionDetailPage() {
     if (commitHistoryPollRef.current) {
       window.clearInterval(commitHistoryPollRef.current);
       commitHistoryPollRef.current = null;
+    }
+    if (previewPollRef.current) {
+      window.clearInterval(previewPollRef.current);
+      previewPollRef.current = null;
     }
   }, [submissionId]);
 
@@ -944,6 +974,10 @@ export default function PlaygroundSubmissionDetailPage() {
       if (commitHistoryPollRef.current) {
         window.clearInterval(commitHistoryPollRef.current);
         commitHistoryPollRef.current = null;
+      }
+      if (previewPollRef.current) {
+        window.clearInterval(previewPollRef.current);
+        previewPollRef.current = null;
       }
     };
   }, [requirementCatalog, requirementId, submissionId]);
@@ -1041,50 +1075,34 @@ export default function PlaygroundSubmissionDetailPage() {
 
   useEffect(() => {
     if (!submission) {
-      setPreviewAvailable(false);
+      setPreviewStatus(null);
       setPreviewLoading(false);
       return;
     }
-    if (previewAvailable) {
-      setPreviewLoading(false);
-      return;
-    }
-
     let cancelled = false;
-    setPreviewLoading(true);
+    void loadPreviewStatus(previewStatus !== null);
 
-    const checkPreview = () => {
-      checkHostDemoPreview(previewUrl)
-        .then((available) => {
-          if (cancelled) {
-            return;
-          }
-          setPreviewAvailable(available);
-          setPreviewLoading(false);
-        })
-        .catch(() => {
-          if (cancelled) {
-            return;
-          }
-          setPreviewAvailable(false);
-          setPreviewLoading(false);
-        });
-    };
-
-    checkPreview();
-
-    if (isSubmissionLive(submission.status)) {
-      const previewPoll = window.setInterval(checkPreview, 3000);
-      return () => {
-        cancelled = true;
-        window.clearInterval(previewPoll);
-      };
+    if (isSubmissionLive(submission.status) && !previewPollRef.current) {
+      previewPollRef.current = window.setInterval(() => {
+        if (cancelled) {
+          return;
+        }
+        void loadPreviewStatus(true);
+      }, 5000);
+    }
+    if (!isSubmissionLive(submission.status) && previewPollRef.current) {
+      window.clearInterval(previewPollRef.current);
+      previewPollRef.current = null;
     }
 
     return () => {
       cancelled = true;
+      if (previewPollRef.current && !isSubmissionLive(submission.status)) {
+        window.clearInterval(previewPollRef.current);
+        previewPollRef.current = null;
+      }
     };
-  }, [previewAvailable, previewUrl, submission]);
+  }, [submissionId, submission?.status]);
 
   const tree = useMemo(() => {
     if (!requirement) {
@@ -2007,38 +2025,50 @@ export default function PlaygroundSubmissionDetailPage() {
           {!previewMinimized ? (
             <div className="preview-panel-body">
               {previewTab === "preview" ? (
-                previewLoading ? (
-                  <div className="preview-panel-empty">Loading preview...</div>
-                ) : submission && previewAvailable ? (
-                  <iframe
-                    key={`${submissionId}-${previewFrameVersion}`}
-                    src={previewFrameUrl}
-                    title="Live Website Preview"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      border: "none",
-                      background: "white",
-                    }}
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-                  />
-                ) : (
-                  <div className="preview-panel-empty">
-                    <div>
-                      <div className="preview-panel-empty-title">
-                        {submission ? "Preview not available yet" : "No submission selected"}
-                      </div>
-                      <div className="preview-panel-empty-copy">
-                        {submission
-                          ? "Waiting for host demo backend to build and start."
-                          : "Select a submission to view its preview"}
+                <>
+                  {previewStatus?.stale ? (
+                    <div className="submission-alert-wrap" style={{ padding: "12px 16px 0", position: "relative", zIndex: 1 }}>
+                      <div className="submission-alert">
+                        Preview is out of date. Refresh to rebuild from current workspace.
                       </div>
                     </div>
-                  </div>
-                )
+                  ) : null}
+                  {previewLoading ? (
+                    <div className="preview-panel-empty">Loading preview...</div>
+                  ) : submission && previewAvailable ? (
+                    <iframe
+                      key={`${submissionId}-${previewFrameVersion}`}
+                      src={previewFrameUrl}
+                      title="Live Website Preview"
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        border: "none",
+                        background: "white",
+                      }}
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                    />
+                  ) : (
+                    <div className="preview-panel-empty">
+                      <div>
+                        <div className="preview-panel-empty-title">
+                          {submission ? "Preview not available yet" : "No submission selected"}
+                        </div>
+                        <div className="preview-panel-empty-copy">
+                          {submission
+                            ? (previewStatus?.error
+                              ?? (["PENDING", "RUNNING"].includes(submission.status)
+                                ? "Preview has not been built yet. Refresh after the workspace is ready."
+                                : "Preview is not available for the current workspace."))
+                            : "Select a submission to view its preview"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <CommitHistoryPanel
                   commits={commitHistory}

@@ -175,6 +175,14 @@ export type SubmissionEditableTaskPayload = {
   prerequisites_md: string;
 };
 
+export type SubmissionPreviewStatus = {
+  available: boolean;
+  stale: boolean;
+  workspace_head_oid: string | null;
+  preview_head_oid: string | null;
+  error: string | null;
+};
+
 export type UserTaskSummary = {
   id: string;
   title: string;

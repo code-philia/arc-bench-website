@@ -12,6 +12,7 @@ from app.models.requirement import Requirement
 from app.models.user import User
 from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
+from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_service import SubmissionService
@@ -175,6 +176,7 @@ class ExecutionService:
             stderr_path = workspace_path / "artifacts" / "stderr.log"
             result_path = workspace_path / "artifacts" / "result.json"
             submission_service.mark_running(submission, workspace_path)
+            HostDemoPreviewService.mark_stale(submission.id)
             submission_service.update_steps(
                 submission,
                 submission_service.build_step_states(

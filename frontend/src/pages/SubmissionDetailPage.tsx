@@ -5,8 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
-import { checkHostDemoPreview, getHostDemoPreviewBase } from "../lib/preview";
-import type { SubmissionDetail, SubmissionLogs } from "../lib/types";
+import type { SubmissionDetail, SubmissionLogs, SubmissionPreviewStatus } from "../lib/types";
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -38,32 +37,62 @@ export default function SubmissionDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"results" | "events" | "stdout" | "stderr">("results");
-  const [previewAvailable, setPreviewAvailable] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<SubmissionPreviewStatus | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const pollRef = useRef<number | null>(null);
-  const previewUrl = getHostDemoPreviewBase();
+  const previewPollRef = useRef<number | null>(null);
+  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
+  const previewAvailable = previewStatus?.available ?? false;
+
+  const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
+    available: false,
+    stale: false,
+    workspace_head_oid: null,
+    preview_head_oid: null,
+    error: error.message,
+  });
+
+  const loadPreviewStatus = async (silent = false) => {
+    if (!silent) {
+      setPreviewLoading(true);
+    }
+    try {
+      const status = await api.getSubmissionPreviewStatus(submissionId);
+      setPreviewStatus(status);
+    } catch (error) {
+      setPreviewStatus(toPreviewErrorStatus(error as Error));
+    } finally {
+      if (!silent) {
+        setPreviewLoading(false);
+      }
+    }
+  };
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
-      const available = await checkHostDemoPreview(previewUrl);
-      setPreviewAvailable(available);
-      if (available) {
+      const status = await api.refreshSubmissionPreview(submissionId);
+      setPreviewStatus(status);
+      if (status.available) {
         setPreviewFrameVersion((current) => current + 1);
       }
-    } catch {
-      setPreviewAvailable(false);
+    } catch (error) {
+      setPreviewStatus(toPreviewErrorStatus(error as Error));
     } finally {
       setPreviewLoading(false);
     }
   };
 
   useEffect(() => {
-    setPreviewAvailable(false);
+    setPreviewStatus(null);
     setPreviewLoading(true);
     setPreviewFrameVersion(0);
+    if (previewPollRef.current) {
+      window.clearInterval(previewPollRef.current);
+      previewPollRef.current = null;
+    }
   }, [submissionId]);
 
   useEffect(() => {
@@ -92,6 +121,10 @@ export default function SubmissionDetailPage() {
       if (pollRef.current) {
         window.clearInterval(pollRef.current);
       }
+      if (previewPollRef.current) {
+        window.clearInterval(previewPollRef.current);
+        previewPollRef.current = null;
+      }
     };
   }, [submissionId]);
 
@@ -107,50 +140,34 @@ export default function SubmissionDetailPage() {
 
   useEffect(() => {
     if (!submission) {
-      setPreviewAvailable(false);
+      setPreviewStatus(null);
       setPreviewLoading(false);
       return;
     }
-    if (previewAvailable) {
-      setPreviewLoading(false);
-      return;
-    }
-
     let cancelled = false;
-    setPreviewLoading(true);
+    void loadPreviewStatus(previewStatus !== null);
 
-    const checkPreview = () => {
-      checkHostDemoPreview(previewUrl)
-        .then((available) => {
-          if (cancelled) {
-            return;
-          }
-          setPreviewAvailable(available);
-          setPreviewLoading(false);
-        })
-        .catch(() => {
-          if (cancelled) {
-            return;
-          }
-          setPreviewAvailable(false);
-          setPreviewLoading(false);
-        });
-    };
-
-    checkPreview();
-
-    if (["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
-      const previewPoll = window.setInterval(checkPreview, 3000);
-      return () => {
-        cancelled = true;
-        window.clearInterval(previewPoll);
-      };
+    if (["PENDING", "RUNNING", "PAUSED"].includes(submission.status) && !previewPollRef.current) {
+      previewPollRef.current = window.setInterval(() => {
+        if (cancelled) {
+          return;
+        }
+        void loadPreviewStatus(true);
+      }, 5000);
+    }
+    if (!["PENDING", "RUNNING", "PAUSED"].includes(submission.status) && previewPollRef.current) {
+      window.clearInterval(previewPollRef.current);
+      previewPollRef.current = null;
     }
 
     return () => {
       cancelled = true;
+      if (previewPollRef.current && !["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
+        window.clearInterval(previewPollRef.current);
+        previewPollRef.current = null;
+      }
     };
-  }, [previewAvailable, previewUrl, submission]);
+  }, [submissionId, submission?.status]);
 
   if (loading) {
     return (
@@ -295,6 +312,13 @@ export default function SubmissionDetailPage() {
             </div>
           </div>
           <div className="detail-tab-panel">
+            {previewStatus?.stale ? (
+              <div className="submission-alert-wrap">
+                <div className="submission-alert">
+                  Preview is out of date. Refresh to rebuild from current workspace.
+                </div>
+              </div>
+            ) : null}
             {previewLoading ? (
               <div className="results-empty">
                 <div className="loading-state">Loading preview...</div>
@@ -310,9 +334,11 @@ export default function SubmissionDetailPage() {
             ) : (
               <div className="results-empty">
                 <div className="empty-state">
-                  {["PENDING", "RUNNING"].includes(submission.status)
-                    ? "The website preview will appear after implementation artifacts are generated."
-                    : "This submission does not include previewable frontend artifacts."}
+                  {previewStatus?.error
+                    ? previewStatus.error
+                    : ["PENDING", "RUNNING"].includes(submission.status)
+                      ? "Preview has not been built yet. Refresh after the workspace is ready."
+                      : "Preview is not available for the current workspace."}
                 </div>
               </div>
             )}

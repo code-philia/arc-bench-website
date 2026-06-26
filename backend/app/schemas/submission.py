@@ -67,6 +67,14 @@ class SubmissionRewindPayload(BaseModel):
     commit_oid: str = Field(min_length=7, max_length=64)
 
 
+class SubmissionPreviewStatus(BaseModel):
+    available: bool
+    stale: bool = False
+    workspace_head_oid: str | None = None
+    preview_head_oid: str | None = None
+    error: str | None = None
+
+
 class SubmissionCreateResponse(BaseModel):
     submission: SubmissionSummary
 

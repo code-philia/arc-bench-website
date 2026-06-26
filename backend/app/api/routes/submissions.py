@@ -1,8 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
-from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
@@ -15,6 +13,7 @@ from app.schemas.submission import (
     SubmissionEditableTaskPayload,
     SubmissionDetail,
     SubmissionLogs,
+    SubmissionPreviewStatus,
     SubmissionRewindPayload,
     SubmissionSourcePayload,
     SubmissionSummary,
@@ -86,7 +85,7 @@ def start_submission(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if submission.status != SubmissionStatus.PENDING.value:
         raise HTTPException(status_code=409, detail="Submission is already running or completed")
-    HostDemoPreviewService.start_async()
+    HostDemoPreviewService.stop_backend()
     service.append_step_event(submission_id, step_key="deploy_agent", message="Submission accepted and queued", status="info")
     background_tasks.add_task(ExecutionService(db).run_submission, submission_id)
     return service.to_detail(submission)
@@ -137,7 +136,7 @@ def resume_submission(
                 description="Restarting runner from checkpoint",
             ),
         )
-        HostDemoPreviewService.start_async()
+        HostDemoPreviewService.stop_backend()
         background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -318,23 +317,88 @@ def get_submission_source(
     return SubmissionSourcePayload(**payload)
 
 
-@router.get("/{submission_id}/preview/status")
+@router.get("/{submission_id}/preview/status", response_model=SubmissionPreviewStatus)
 def get_submission_preview_status(
     submission_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
-) -> dict[str, bool | str]:
+) -> SubmissionPreviewStatus:
     service = SubmissionService(db)
     try:
         submission = service.get_submission(submission_id, current_user.id)
-    except LookupError:
-        return {"available": False}
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    template_path = runtime_paths.resolve_existing_path(submission.workspace_path)
+    workspace_head_oid = None
+    error = None
+    if template_path is None:
+        error = "Submission workspace is not available"
+    else:
+        project_root = Path(template_path) / "template"
+        if not project_root.is_dir():
+            error = f"Preview workspace is not available: {project_root}"
+        elif not (project_root / ".git").exists():
+            error = "Git history is not available for this submission preview"
+        else:
+            try:
+                workspace_head_oid = service._run_git(project_root, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
+            except RuntimeError as exc:
+                error = str(exc)
+    return SubmissionPreviewStatus(
+        **HostDemoPreviewService.get_status(
+            submission_id=submission.id,
+            workspace_head_oid=workspace_head_oid,
+            error=error,
+        )
+    )
 
-    available = HostDemoPreviewService.ensure_ready()
-    if not available:
-        return {"available": False}
-    return {"available": True, "entry_file": f"/api/submissions/{submission_id}/preview/"}
 
+@router.post("/{submission_id}/preview/refresh", response_model=SubmissionPreviewStatus)
+def refresh_submission_preview(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionPreviewStatus:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    workspace_path = runtime_paths.resolve_existing_path(submission.workspace_path)
+    if workspace_path is None:
+        return SubmissionPreviewStatus(
+            available=False,
+            stale=False,
+            workspace_head_oid=None,
+            preview_head_oid=None,
+            error="Submission workspace is not available",
+        )
+    template_path = workspace_path / "template"
+    if not template_path.is_dir():
+        return SubmissionPreviewStatus(
+            available=False,
+            stale=False,
+            workspace_head_oid=None,
+            preview_head_oid=None,
+            error=f"Preview workspace is not available: {template_path}",
+        )
+    try:
+        workspace_head_oid = service._run_git(template_path, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
+    except RuntimeError as exc:
+        return SubmissionPreviewStatus(
+            available=False,
+            stale=False,
+            workspace_head_oid=None,
+            preview_head_oid=None,
+            error=str(exc),
+        )
+    return SubmissionPreviewStatus(
+        **HostDemoPreviewService.refresh(
+            submission_id=submission.id,
+            source_template_dir=template_path,
+            workspace_head_oid=workspace_head_oid,
+        )
+    )
 
 @router.get("/{submission_id}/preview")
 @router.get("/{submission_id}/preview/{file_path:path}")
@@ -344,45 +408,12 @@ def get_submission_preview_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ):
-    if not HostDemoPreviewService.ensure_ready():
-        raise HTTPException(status_code=503, detail="Host demo preview is not ready")
-
-    demo_dist_path = HostDemoPreviewService.BACKEND_DIR / "dist"
-
-    if not file_path or file_path == "/" or file_path.endswith("/"):
-        index_file = demo_dist_path / "index.html"
-        if index_file.is_file():
-            with open(index_file, "r", encoding="utf-8") as file:
-                content = file.read()
-
-            content = content.replace('"/assets/', '"assets/')
-            content = content.replace("'/assets/", "'assets/")
-            content = content.replace('src="/', 'src="')
-            content = content.replace('href="/', 'href="')
-
-            from fastapi.responses import Response
-
-            return Response(content=content, media_type="text/html; charset=utf-8")
-        raise HTTPException(status_code=404, detail="Index not found")
-
-    requested_file = demo_dist_path / file_path
-    if not requested_file.is_file():
-        if file_path.startswith("/"):
-            file_path = file_path[1:]
-        requested_file = demo_dist_path / file_path
-
     try:
-        requested_file = requested_file.resolve()
-        demo_dist_resolved = demo_dist_path.resolve()
-        if not str(requested_file).startswith(str(demo_dist_resolved)):
-            raise HTTPException(status_code=403, detail="Access denied")
-    except Exception:
-        pass
+        SubmissionService(db).get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    if requested_file.is_file():
-        return FileResponse(requested_file)
-
-    index_file = demo_dist_path / "index.html"
-    if index_file.is_file():
-        return FileResponse(index_file)
-    raise HTTPException(status_code=404, detail="File not found")
+    raise HTTPException(
+        status_code=410,
+        detail="Submission-scoped preview proxy is disabled. Use the fixed host preview at http://1.95.169.80:3001/.",
+    )

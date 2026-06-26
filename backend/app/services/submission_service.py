@@ -18,6 +18,7 @@ from app.models.submission import Submission
 from app.models.user import User
 from app.schemas.submission import StepState, SubmissionDetail, SubmissionRunnerEvent, SubmissionSummary, SubmissionVisualEvent
 from app.services.docker_manager import DockerManager
+from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
@@ -289,6 +290,7 @@ class SubmissionService:
 
         historic_visual_events = self.read_visual_events(submission)
         self._stop_runner_container(submission.id)
+        self._stop_preview_container(submission.id)
         self._clear_execution_artifacts(submission)
         self._rebuild_runner_events_from_commit_history(
             submission,
@@ -791,6 +793,10 @@ class SubmissionService:
             DockerManager().remove_submission_container(submission_id)
         except Exception:  # noqa: BLE001
             return
+
+    @staticmethod
+    def _stop_preview_container(submission_id: str) -> None:
+        HostDemoPreviewService.mark_stale(submission_id)
 
     @staticmethod
     def _run_git(project_root: Path, args: list[str]) -> str:

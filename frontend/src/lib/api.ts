@@ -9,6 +9,7 @@ import type {
   SubmissionDetail,
   SubmissionCommitHistoryPayload,
   SubmissionLogs,
+  SubmissionPreviewStatus,
   SubmissionSummary,
   SubmissionTraceabilityPayload,
   UserTaskDetail,
@@ -183,7 +184,12 @@ export const api = {
     return request<SubmissionSourcePayload>(`/submissions/${submissionId}/source?${params.toString()}`);
   },
   getSubmissionPreviewStatus(submissionId: string) {
-    return request<{ available: boolean; entry_file?: string }>(`/submissions/${submissionId}/preview/status`);
+    return request<SubmissionPreviewStatus>(`/submissions/${submissionId}/preview/status`);
+  },
+  refreshSubmissionPreview(submissionId: string) {
+    return request<SubmissionPreviewStatus>(`/submissions/${submissionId}/preview/refresh`, {
+      method: "POST",
+    });
   },
   async createSubmission(
     requirementId: string,
@@ -215,7 +221,7 @@ export const api = {
     });
   },
   getSubmissionPreviewUrl(submissionId: string) {
-    return `${API_BASE}/submissions/${submissionId}/preview/`;
+    return "http://1.95.169.80:3001/";
   },
   listMyTasks() {
     return request<UserTaskSummary[]>("/my-tasks");
