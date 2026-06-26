@@ -18,6 +18,10 @@ from app.services.submission_service import SubmissionService
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
+PAUSE_GRACE_SECONDS = 3.0
+PAUSE_SIGTERM_GRACE_SECONDS = 1.5
+
+
 class ExecutionService:
     def __init__(self, db: Session):
         self.db = db
@@ -73,6 +77,9 @@ class ExecutionService:
         completed_steps: set[str] = set()
         processed_runner_event_count = 0
         pause_notified = False
+        pause_signal_sent = False
+        pause_requested_at: float | None = None
+        pause_signal_sent_at: float | None = None
         paused = False
 
         def emit_event(step_key: str, message: str, status: str = "info") -> None:
@@ -150,6 +157,11 @@ class ExecutionService:
                     raise RuntimeError("Submission workspace is not available for rewind resume")
                 workspace_path = existing_workspace_path
                 debug_log = DebugLogService(workspace_path)
+                manager = DockerManager()
+                manager.remove_submission_container(submission_id)
+                runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+                if runner_events_path.exists():
+                    processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
                 emit_event("deploy_agent", "Reusing rewound workspace")
                 debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")
                 emit_event("deploy_agent", "Existing workspace is ready", status="success")
@@ -173,7 +185,8 @@ class ExecutionService:
 
             emit_event("deploy_agent", "Connecting to Docker daemon")
             debug_log.append("backend", "Connecting to Docker daemon")
-            manager = DockerManager()
+            if manager is None:
+                manager = DockerManager()
             debug_log.append("backend", "Docker daemon ping succeeded")
             emit_event("deploy_agent", "Docker daemon is reachable", status="success")
             submission = submission_service.get_submission(submission_id)
@@ -183,6 +196,7 @@ class ExecutionService:
             )
             emit_event("deploy_agent", "Preparing runner image")
             debug_log.append("backend", f"Ensuring runner image is available: {self.settings.runner_image}")
+            manager.remove_submission_container(submission_id)
             container = manager.create_container(
                 submission.id,
                 workspace_path,
@@ -216,27 +230,41 @@ class ExecutionService:
                 if latest_events:
                     refresh_running_steps(latest_events)
                 current_status = submission_service.get_submission(submission_id).status
-                if current_status == SubmissionStatus.PAUSED.value:
+                if current_status == SubmissionStatus.PAUSE_REQUESTED.value:
                     if not pause_notified:
                         pause_notified = True
-                        mark_paused("Execution paused by user request")
+                        pause_requested_at = time.time()
+                        emit_event("start_agent", "Pause requested; waiting for checkpoint", status="info")
+                        submission_service.update_steps(
+                            submission_service.get_submission(submission_id),
+                            submission_service.build_step_states(
+                                active_key="start_agent",
+                                completed={"deploy_agent"},
+                                description="Pausing current run",
+                            ),
+                        )
+                        debug_log.append("backend", "Pause requested; waiting briefly for checkpoint flush")
+                    checkpoint = submission_service.read_checkpoint(submission_service.get_submission(submission_id))
+                    checkpoint_marked_paused = bool(checkpoint.get("paused"))
+                    if not pause_signal_sent and pause_requested_at is not None and time.time() - pause_requested_at >= PAUSE_GRACE_SECONDS:
                         try:
                             exit_code, _ = manager.kill_agent_process(container)
                             debug_log.append("backend", f"Sent SIGTERM to agent main.py (pkill exit={exit_code})")
+                            pause_signal_sent = True
+                            pause_signal_sent_at = time.time()
                         except Exception as exc:  # noqa: BLE001
                             debug_log.append("backend", f"Failed to signal agent process: {exc}")
-                        debug_log.append("backend", "Execution paused cleanly")
-                    if submission_service.checkpoint_requires_restart(submission_service.get_submission(submission_id)):
-                        debug_log.append("backend", "Rewind requested while paused; terminating current runner session")
+                    if checkpoint_marked_paused:
+                        debug_log.append("backend", "Pause checkpoint detected in workspace")
+                    if checkpoint_marked_paused or (
+                        pause_signal_sent_at is not None and time.time() - pause_signal_sent_at >= PAUSE_SIGTERM_GRACE_SECONDS
+                    ):
+                        submission_service.set_checkpoint_restart_flag(submission_service.get_submission(submission_id))
+                        mark_paused("Execution paused by user request")
+                        debug_log.append("backend", "Execution paused cleanly; terminating runner session")
                         return
-                    wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
                     time.sleep(1)
                     continue
-                if pause_notified and current_status == SubmissionStatus.RUNNING.value:
-                    pause_notified = False
-                    paused = False
-                    wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
-                    debug_log.append("backend", "Execution resumed")
                 try:
                     container.reload()
                 except NotFound as exc:

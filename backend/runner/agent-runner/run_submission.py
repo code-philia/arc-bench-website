@@ -804,8 +804,11 @@ def run_web_template(stdout_file, stderr_file) -> dict:
 
 def main() -> int:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
-    TRACEABILITY_EVENTS_PATH.write_text("", encoding="utf-8")
+    checkpoint = read_checkpoint()
+    resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
+    if not resume_from_checkpoint:
+        RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
+        TRACEABILITY_EVENTS_PATH.write_text("", encoding="utf-8")
     initialize_traceability_db()
     seeded_requirements, seeded_scenarios = seed_traceability_requirements()
     spec = read_spec()

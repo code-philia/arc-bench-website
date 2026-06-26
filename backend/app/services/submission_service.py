@@ -208,7 +208,7 @@ class SubmissionService:
             json.dumps({"requested_at": datetime.utcnow().isoformat(), "submission_id": submission.id}, indent=2) + "\n",
             encoding="utf-8",
         )
-        self.update_status(submission, SubmissionStatus.PAUSED)
+        self.update_status(submission, SubmissionStatus.PAUSE_REQUESTED)
 
     def request_resume(self, submission: Submission) -> None:
         request_path = self.get_resume_request_path(submission)
@@ -220,6 +220,15 @@ class SubmissionService:
             encoding="utf-8",
         )
         self.update_status(submission, SubmissionStatus.RUNNING)
+
+    def clear_runtime_request_files(self, submission: Submission) -> None:
+        for path in (self.get_pause_request_path(submission), self.get_resume_request_path(submission)):
+            if path is None:
+                continue
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
 
     def rewind_to_commit(self, submission: Submission, commit_oid: str) -> dict[str, str | int | None]:
         normalized_commit_oid = commit_oid.strip()
@@ -307,6 +316,11 @@ class SubmissionService:
         if not checkpoint.get("resume_requires_restart"):
             return
         checkpoint["resume_requires_restart"] = False
+        self.write_checkpoint(submission, checkpoint)
+
+    def set_checkpoint_restart_flag(self, submission: Submission) -> None:
+        checkpoint = self.read_checkpoint(submission)
+        checkpoint["resume_requires_restart"] = True
         self.write_checkpoint(submission, checkpoint)
 
     def append_event_log(self, submission_id: str, message: str) -> Path:

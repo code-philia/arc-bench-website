@@ -99,6 +99,14 @@ function formatCommitDateTime(value: string) {
   return new Date(value).toLocaleString();
 }
 
+function isSubmissionLive(status: string | null | undefined) {
+  return status ? ["PENDING", "RUNNING", "PAUSE_REQUESTED", "PAUSED"].includes(status) : false;
+}
+
+function isCommitHistoryStreaming(status: string | null | undefined) {
+  return status ? ["PENDING", "RUNNING", "PAUSE_REQUESTED"].includes(status) : false;
+}
+
 function countRequirementNodes(node: RequirementNode): number {
   return 1 + node.children.reduce((count, child) => count + countRequirementNodes(child), 0);
 }
@@ -823,6 +831,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [savingEditableTask, setSavingEditableTask] = useState(false);
   const [editableReloadToken, setEditableReloadToken] = useState(0);
   const executionPaused = submission?.status === "PAUSED";
+  const executionPausePending = submission?.status === "PAUSE_REQUESTED";
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const activeSelectedNodeId = useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
@@ -851,7 +860,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
   const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;
   const submissionStatus = submission?.status ?? null;
-  const shouldPollSubmission = submissionStatus ? ["PENDING", "RUNNING", "PAUSED"].includes(submissionStatus) : false;
+  const shouldPollSubmission = isSubmissionLive(submissionStatus);
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
@@ -946,7 +955,7 @@ export default function PlaygroundSubmissionDetailPage() {
     const refreshRuntimeState = () => {
       api.getSubmission(submissionId).then((latest) => {
         setSubmission(latest);
-        if (!["PENDING", "RUNNING", "PAUSED"].includes(latest.status) && pollRef.current) {
+        if (!isSubmissionLive(latest.status) && pollRef.current) {
           window.clearInterval(pollRef.current);
           pollRef.current = null;
         }
@@ -996,14 +1005,14 @@ export default function PlaygroundSubmissionDetailPage() {
         }
       });
 
-    if (["PENDING", "RUNNING"].includes(submission.status) && !commitHistoryPollRef.current) {
+    if (isCommitHistoryStreaming(submission.status) && !commitHistoryPollRef.current) {
       commitHistoryPollRef.current = window.setInterval(() => {
         api.getSubmissionCommitHistory(submissionId)
           .then(setCommitHistory)
           .catch(() => undefined);
       }, 2000);
     }
-    if (!["PENDING", "RUNNING"].includes(submission.status) && commitHistoryPollRef.current) {
+    if (!isCommitHistoryStreaming(submission.status) && commitHistoryPollRef.current) {
       window.clearInterval(commitHistoryPollRef.current);
       commitHistoryPollRef.current = null;
     }
@@ -1017,7 +1026,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submission || !pollRef.current) {
       return;
     }
-    if (!["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
+    if (!isSubmissionLive(submission.status)) {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
     }
@@ -1057,7 +1066,7 @@ export default function PlaygroundSubmissionDetailPage() {
 
     checkPreview();
 
-    if (["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
+    if (isSubmissionLive(submission.status)) {
       const previewPoll = window.setInterval(checkPreview, 3000);
       return () => {
         cancelled = true;
@@ -1266,7 +1275,7 @@ export default function PlaygroundSubmissionDetailPage() {
         }
       })
       .catch(() => undefined);
-    if (["PENDING", "RUNNING"].includes(submission.status)) {
+    if (isCommitHistoryStreaming(submission.status)) {
       const interval = window.setInterval(() => {
         api.getSubmissionAllTraceability(submissionId)
           .then((payload) => {
@@ -1632,10 +1641,15 @@ export default function PlaygroundSubmissionDetailPage() {
                 </button>
               </div>
 
-              <div className={`submission-side-actions ${submission.status === "RUNNING" ? "single" : ""}`}>
+              <div className={`submission-side-actions ${submission.status === "RUNNING" || executionPausePending ? "single" : ""}`}>
                 {submission.status === "RUNNING" ? (
                   <button type="button" className="btn-outline" onClick={() => void handlePause()}>
                     Pause
+                  </button>
+                ) : null}
+                {executionPausePending ? (
+                  <button type="button" className="btn-outline" disabled>
+                    Pausing...
                   </button>
                 ) : null}
                 {submission.status === "PAUSED" ? (

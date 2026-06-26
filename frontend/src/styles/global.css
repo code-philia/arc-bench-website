@@ -2873,6 +2873,7 @@ button {
   width: 100%;
   margin-top: 14px;
   padding: 12px 20px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--accent), var(--accent-grad-end));
   color: var(--bg-deep);
@@ -3741,6 +3742,7 @@ button {
 .submission-side-actions .btn-primary {
   width: 100%;
   min-height: 42px;
+  box-sizing: border-box;
   margin-top: 0;
   padding: 10px 20px;
 }

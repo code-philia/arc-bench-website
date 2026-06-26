@@ -127,19 +127,18 @@ def resume_submission(
     if not service.can_resume(submission):
         raise HTTPException(status_code=409, detail="Submission is not paused")
     try:
-        if service.checkpoint_requires_restart(submission):
-            service.update_status(submission, SubmissionStatus.RUNNING)
-            service.update_steps(
-                submission,
-                service.build_step_states(
-                    active_key="deploy_agent",
-                    description="Reusing rewound workspace",
-                ),
-            )
-            HostDemoPreviewService.start_async()
-            background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
-        else:
-            service.request_resume(submission)
+        service.clear_runtime_request_files(submission)
+        service.set_checkpoint_restart_flag(submission)
+        service.update_status(submission, SubmissionStatus.RUNNING)
+        service.update_steps(
+            submission,
+            service.build_step_states(
+                active_key="deploy_agent",
+                description="Restarting runner from checkpoint",
+            ),
+        )
+        HostDemoPreviewService.start_async()
+        background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return service.to_detail(submission)
