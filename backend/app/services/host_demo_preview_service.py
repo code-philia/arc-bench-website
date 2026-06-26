@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -23,6 +25,8 @@ class HostDemoPreviewService:
     PREVIEW_URL = "http://1.95.169.80:3001"
     LOG_DIR = ROOT_DIR / "runtime" / "host-preview"
     BACKEND_LOG_PATH = LOG_DIR / "preview-backend.log"
+    STATE_PATH = LOG_DIR / "preview-state.json"
+    SYNC_IGNORE_NAMES = {".git", "node_modules", "dist", "coverage", ".cache", ".vite"}
 
     _lock = threading.Lock()
     _backend_process: subprocess.Popen[str] | None = None
@@ -69,11 +73,64 @@ class HostDemoPreviewService:
             f"Refresh requested for submission={submission_id}, source_template_dir={source_template_dir}, workspace_head_oid={workspace_head_oid}"
         )
         try:
+            previous_state = cls._load_state()
+            current_state = cls._collect_source_state(source_template_dir)
             cls._sync_template(source_template_dir)
-            cls._build_frontend()
-            cls._restart_backend()
+            frontend_install_required = cls._should_install(
+                previous_state.get("frontend_lock_hash"),
+                current_state["frontend_lock_hash"],
+                cls.FRONTEND_DIR / "node_modules",
+            )
+            backend_install_required = cls._should_install(
+                previous_state.get("backend_lock_hash"),
+                current_state["backend_lock_hash"],
+                cls.BACKEND_DIR / "node_modules",
+            )
+            frontend_build_required = (
+                frontend_install_required
+                or previous_state.get("frontend_source_hash") != current_state["frontend_source_hash"]
+                or not (cls.BACKEND_DIR / "dist" / "index.html").exists()
+            )
+            backend_restart_required = (
+                backend_install_required
+                or previous_state.get("backend_source_hash") != current_state["backend_source_hash"]
+                or not cls._is_backend_running()
+            )
+            if not backend_restart_required and not cls._check_health():
+                cls._append_debug("Backend process exists but health check failed; forcing restart")
+                backend_restart_required = True
+
+            cls._append_debug(
+                "Refresh plan: "
+                f"frontend_install_required={frontend_install_required}, "
+                f"backend_install_required={backend_install_required}, "
+                f"frontend_build_required={frontend_build_required}, "
+                f"backend_restart_required={backend_restart_required}"
+            )
+
+            if frontend_install_required:
+                cls._install_frontend()
+            else:
+                cls._append_debug("Skipping frontend npm install; lockfile unchanged and node_modules exists")
+
+            if backend_install_required:
+                cls._install_backend()
+            else:
+                cls._append_debug("Skipping backend npm install; lockfile unchanged and node_modules exists")
+
+            if frontend_build_required:
+                cls._build_frontend()
+            else:
+                cls._append_debug("Skipping frontend build; source hash unchanged and dist/index.html already exists")
+
+            if backend_restart_required:
+                cls._restart_backend()
+            else:
+                cls._append_debug("Skipping backend restart; backend source unchanged and process is healthy")
+
             if not cls._wait_until_ready(120):
                 raise RuntimeError(cls.last_error() or "Preview backend did not become ready in time")
+            cls._save_state(current_state)
             with cls._lock:
                 cls._current_submission_id = submission_id
                 cls._current_workspace_head_oid = workspace_head_oid
@@ -117,25 +174,33 @@ class HostDemoPreviewService:
         if not source_template_dir.is_dir():
             raise RuntimeError(f"Preview template directory not found: {source_template_dir}")
         cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
-        if cls.PREVIEW_ROOT.exists():
-            cls._append_debug(f"Removing existing preview root: {cls.PREVIEW_ROOT}")
-            shutil.rmtree(cls.PREVIEW_ROOT)
-        cls._append_debug(f"Copying preview template from {source_template_dir} to {cls.PREVIEW_ROOT}")
-        shutil.copytree(
-            source_template_dir,
-            cls.PREVIEW_ROOT,
-            ignore=shutil.ignore_patterns(".git", "node_modules", "dist", "coverage", ".cache"),
-        )
-        cls._append_debug("Template copy completed")
+        cls.PREVIEW_ROOT.mkdir(parents=True, exist_ok=True)
+        cls._append_debug(f"Incrementally syncing preview template from {source_template_dir} to {cls.PREVIEW_ROOT}")
+        cls._sync_tree(source_template_dir, cls.PREVIEW_ROOT)
+        cls._append_debug("Template sync completed")
+
+    @classmethod
+    def _install_frontend(cls) -> None:
+        if not cls.FRONTEND_DIR.exists():
+            raise RuntimeError(f"Preview frontend directory not found: {cls.FRONTEND_DIR}")
+        npm = cls._npm_executable()
+        cls._append_debug(f"Preview frontend directory ready: {cls.FRONTEND_DIR}")
+        cls._run_command([npm, "install"], cwd=cls.FRONTEND_DIR, label="frontend npm install")
 
     @classmethod
     def _build_frontend(cls) -> None:
         if not cls.FRONTEND_DIR.exists():
             raise RuntimeError(f"Preview frontend directory not found: {cls.FRONTEND_DIR}")
         npm = cls._npm_executable()
-        cls._append_debug(f"Preview frontend directory ready: {cls.FRONTEND_DIR}")
-        cls._run_command([npm, "install"], cwd=cls.FRONTEND_DIR, label="frontend npm install")
         cls._run_command([npm, "run", "build"], cwd=cls.FRONTEND_DIR, label="frontend npm run build")
+
+    @classmethod
+    def _install_backend(cls) -> None:
+        if not cls.BACKEND_DIR.exists():
+            raise RuntimeError(f"Preview backend directory not found: {cls.BACKEND_DIR}")
+        npm = cls._npm_executable()
+        cls._append_debug(f"Preview backend directory ready: {cls.BACKEND_DIR}")
+        cls._run_command([npm, "install", "--omit=dev"], cwd=cls.BACKEND_DIR, label="backend npm install --omit=dev")
 
     @classmethod
     def _restart_backend(cls) -> None:
@@ -143,8 +208,6 @@ class HostDemoPreviewService:
         if not cls.BACKEND_DIR.exists():
             raise RuntimeError(f"Preview backend directory not found: {cls.BACKEND_DIR}")
         npm = cls._npm_executable()
-        cls._append_debug(f"Preview backend directory ready: {cls.BACKEND_DIR}")
-        cls._run_command([npm, "install", "--omit=dev"], cwd=cls.BACKEND_DIR, label="backend npm install --omit=dev")
         env = {
             **os.environ,
             "HOST": "127.0.0.1",
@@ -293,6 +356,111 @@ class HostDemoPreviewService:
         if debug_log is None:
             return
         debug_log.append("preview", message)
+
+    @classmethod
+    def _should_install(cls, previous_lock_hash: object, current_lock_hash: str | None, node_modules_dir: Path) -> bool:
+        if current_lock_hash is None:
+            return False
+        if not node_modules_dir.exists():
+            return True
+        return previous_lock_hash != current_lock_hash
+
+    @classmethod
+    def _is_backend_running(cls) -> bool:
+        process = cls._backend_process
+        return process is not None and process.poll() is None
+
+    @classmethod
+    def _load_state(cls) -> dict[str, str | None]:
+        if not cls.STATE_PATH.exists():
+            return {}
+        try:
+            payload = json.loads(cls.STATE_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            "frontend_lock_hash": cls._coerce_state_value(payload.get("frontend_lock_hash")),
+            "backend_lock_hash": cls._coerce_state_value(payload.get("backend_lock_hash")),
+            "frontend_source_hash": cls._coerce_state_value(payload.get("frontend_source_hash")),
+            "backend_source_hash": cls._coerce_state_value(payload.get("backend_source_hash")),
+        }
+
+    @classmethod
+    def _save_state(cls, state: dict[str, str | None]) -> None:
+        cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        cls.STATE_PATH.write_text(json.dumps(state, ensure_ascii=True, indent=2), encoding="utf-8")
+        cls._append_debug(f"Saved preview state to {cls.STATE_PATH}")
+
+    @staticmethod
+    def _coerce_state_value(value: object) -> str | None:
+        return value if isinstance(value, str) else None
+
+    @classmethod
+    def _collect_source_state(cls, source_template_dir: Path) -> dict[str, str | None]:
+        frontend_source_dir = source_template_dir / "frontend"
+        backend_source_dir = source_template_dir / "backend"
+        state = {
+            "frontend_lock_hash": cls._file_hash(frontend_source_dir / "package-lock.json") or cls._file_hash(frontend_source_dir / "package.json"),
+            "backend_lock_hash": cls._file_hash(backend_source_dir / "package-lock.json") or cls._file_hash(backend_source_dir / "package.json"),
+            "frontend_source_hash": cls._tree_hash(frontend_source_dir),
+            "backend_source_hash": cls._tree_hash(backend_source_dir),
+        }
+        cls._append_debug(
+            "Collected source state: "
+            f"frontend_lock_hash={state['frontend_lock_hash']}, "
+            f"backend_lock_hash={state['backend_lock_hash']}, "
+            f"frontend_source_hash={state['frontend_source_hash']}, "
+            f"backend_source_hash={state['backend_source_hash']}"
+        )
+        return state
+
+    @classmethod
+    def _sync_tree(cls, source_dir: Path, destination_dir: Path) -> None:
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        source_names = {child.name for child in source_dir.iterdir() if child.name not in cls.SYNC_IGNORE_NAMES}
+        destination_names = {child.name for child in destination_dir.iterdir()}
+
+        for extra_name in sorted(destination_names - source_names):
+            if extra_name in cls.SYNC_IGNORE_NAMES:
+                continue
+            extra_path = destination_dir / extra_name
+            if extra_path.is_dir():
+                shutil.rmtree(extra_path)
+            else:
+                extra_path.unlink()
+
+        for child in sorted(source_dir.iterdir(), key=lambda entry: entry.name):
+            if child.name in cls.SYNC_IGNORE_NAMES:
+                continue
+            destination_child = destination_dir / child.name
+            if child.is_dir():
+                cls._sync_tree(child, destination_child)
+                continue
+            destination_child.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(child, destination_child)
+
+    @classmethod
+    def _tree_hash(cls, root: Path) -> str | None:
+        if not root.exists():
+            return None
+        digest = hashlib.sha256()
+        for path in sorted(root.rglob("*")):
+            relative_path = path.relative_to(root)
+            if any(part in cls.SYNC_IGNORE_NAMES for part in relative_path.parts):
+                continue
+            digest.update(str(relative_path).replace("\\", "/").encode("utf-8"))
+            if path.is_file():
+                digest.update(b"\0")
+                digest.update(path.read_bytes())
+        return digest.hexdigest()
+
+    @staticmethod
+    def _file_hash(path: Path) -> str | None:
+        if not path.exists() or not path.is_file():
+            return None
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 atexit.register(HostDemoPreviewService.stop_backend)
