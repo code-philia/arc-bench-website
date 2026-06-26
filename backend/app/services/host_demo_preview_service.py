@@ -115,12 +115,12 @@ class HostDemoPreviewService:
         if not cls.FRONTEND_DIR.exists():
             raise RuntimeError(f"Preview frontend directory not found: {cls.FRONTEND_DIR}")
         subprocess.run(
-            ["npm.cmd", "install"],
+            [cls._npm_executable(), "install"],
             cwd=str(cls.FRONTEND_DIR),
             check=True,
         )
         subprocess.run(
-            ["npm.cmd", "run", "build"],
+            [cls._npm_executable(), "run", "build"],
             cwd=str(cls.FRONTEND_DIR),
             check=True,
         )
@@ -131,7 +131,7 @@ class HostDemoPreviewService:
         if not cls.BACKEND_DIR.exists():
             raise RuntimeError(f"Preview backend directory not found: {cls.BACKEND_DIR}")
         subprocess.run(
-            ["npm.cmd", "install", "--omit=dev"],
+            [cls._npm_executable(), "install", "--omit=dev"],
             cwd=str(cls.BACKEND_DIR),
             check=True,
         )
@@ -141,13 +141,17 @@ class HostDemoPreviewService:
             "PORT": "3000",
         }
         cls._backend_process = subprocess.Popen(
-            ["npm.cmd", "run", "start"],
+            [cls._npm_executable(), "run", "start"],
             cwd=str(cls.BACKEND_DIR),
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
         )
+
+    @staticmethod
+    def _npm_executable() -> str:
+        return "npm.cmd" if os.name == "nt" else "npm"
 
     @classmethod
     def _wait_until_ready(cls, timeout_seconds: int) -> bool:
