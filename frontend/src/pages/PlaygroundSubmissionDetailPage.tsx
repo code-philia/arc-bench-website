@@ -1441,7 +1441,6 @@ export default function PlaygroundSubmissionDetailPage() {
     setSubmission(nextSubmission);
     if (nextSubmission.status !== "PAUSED") {
       editableTreeDirtyRef.current = false;
-      setEditableTask(null);
       setEditableTree(null);
       setEditableNodeId("ROOT");
       setEditableDetailExpanded(true);
@@ -2025,9 +2024,9 @@ export default function PlaygroundSubmissionDetailPage() {
                           void refreshPreview();
                         }}
                       >
-                        {previewAvailable ? "Refresh" : "Retry"}
+                        Refresh
                       </button>
-                      {submission && previewAvailable ? (
+                      {submission ? (
                         <a
                           href={previewUrl}
                           target="_blank"

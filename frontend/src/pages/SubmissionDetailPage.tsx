@@ -304,13 +304,11 @@ export default function SubmissionDetailPage() {
                 }}
                 style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
               >
-                {previewAvailable ? "Refresh" : "Retry"}
+                Refresh
               </button>
-              {previewAvailable ? (
-                <a className="inline-link" href={previewUrl} target="_blank" rel="noreferrer">
-                  Open
-                </a>
-              ) : null}
+              <a className="inline-link" href={previewUrl} target="_blank" rel="noreferrer">
+                Open
+              </a>
             </div>
           </div>
           <div className="detail-tab-panel">

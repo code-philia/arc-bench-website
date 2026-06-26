@@ -5948,11 +5948,11 @@ button {
 
 .task-flow-requirement-node {
   --task-flow-node-accent: rgba(12, 31, 24, 0.22);
-  width: 176px;
-  min-height: 72px;
-  padding: 12px 14px;
+  width: 228px;
+  min-height: 88px;
+  padding: 14px 16px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 5px 14px rgba(12, 31, 24, 0.08);
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
@@ -5963,7 +5963,7 @@ button {
   position: absolute;
   inset: -1px;
   border: 1px solid var(--task-flow-node-accent);
-  border-radius: 14px;
+  border-radius: 16px;
   pointer-events: none;
   z-index: 3;
 }
@@ -6082,16 +6082,16 @@ button {
 }
 
 .task-flow-requirement-node strong {
-  font-size: 0.98rem;
-  line-height: 1.18;
+  font-size: 1.08rem;
+  line-height: 1.22;
   color: #0f1720;
 }
 
 .task-flow-requirement-node span {
-  margin-top: 4px;
+  margin-top: 6px;
   color: #556272;
-  font-size: 0.78rem;
-  line-height: 1.28;
+  font-size: 0.84rem;
+  line-height: 1.34;
 }
 
 .task-flow-requirement-node.active {
