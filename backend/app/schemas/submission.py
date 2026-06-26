@@ -63,6 +63,10 @@ class SubmissionEditableTaskPayload(BaseModel):
     prerequisites_md: str
 
 
+class SubmissionRewindPayload(BaseModel):
+    commit_oid: str = Field(min_length=7, max_length=64)
+
+
 class SubmissionCreateResponse(BaseModel):
     submission: SubmissionSummary
 

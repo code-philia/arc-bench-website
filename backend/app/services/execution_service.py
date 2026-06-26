@@ -27,6 +27,12 @@ class ExecutionService:
         self.runtime_paths = RuntimePathService()
 
     def run_submission(self, submission_id: str) -> None:
+        self._run_submission_internal(submission_id, reuse_workspace=False)
+
+    def rerun_submission(self, submission_id: str) -> None:
+        self._run_submission_internal(submission_id, reuse_workspace=True)
+
+    def _run_submission_internal(self, submission_id: str, *, reuse_workspace: bool) -> None:
         db = SessionLocal()
         try:
             submission_service = SubmissionService(db)
@@ -37,11 +43,20 @@ class ExecutionService:
             requirement = db.get(Requirement, submission.requirement_id)
             if not requirement:
                 raise RuntimeError(f"Requirement '{submission.requirement_id}' not found")
-            self._run(db, submission_service, submission_id, requirement, user)
+            self._run(db, submission_service, submission_id, requirement, user, reuse_workspace=reuse_workspace)
         finally:
             db.close()
 
-    def _run(self, db: Session, submission_service: SubmissionService, submission_id: str, requirement: Requirement, user: User) -> None:
+    def _run(
+        self,
+        db: Session,
+        submission_service: SubmissionService,
+        submission_id: str,
+        requirement: Requirement,
+        user: User,
+        *,
+        reuse_workspace: bool,
+    ) -> None:
         if requirement.category != "web":
             raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
 
@@ -129,18 +144,31 @@ class ExecutionService:
         try:
             debug_log.append("backend", f"Execution started for submission {submission_id}")
             debug_log.append("backend", f"Requirement category: {requirement.category}")
-            emit_event("deploy_agent", "Preparing workspace")
-            workspace_path = self.assembler.assemble(submission, requirement, user)
-            debug_log = DebugLogService(workspace_path)
-            debug_log.append("backend", f"Workspace assembled at {workspace_path}")
-            emit_event("deploy_agent", "Workspace assembled", status="success")
+            if reuse_workspace:
+                existing_workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+                if existing_workspace_path is None:
+                    raise RuntimeError("Submission workspace is not available for rewind resume")
+                workspace_path = existing_workspace_path
+                debug_log = DebugLogService(workspace_path)
+                emit_event("deploy_agent", "Reusing rewound workspace")
+                debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")
+                emit_event("deploy_agent", "Existing workspace is ready", status="success")
+            else:
+                emit_event("deploy_agent", "Preparing workspace")
+                workspace_path = self.assembler.assemble(submission, requirement, user)
+                debug_log = DebugLogService(workspace_path)
+                debug_log.append("backend", f"Workspace assembled at {workspace_path}")
+                emit_event("deploy_agent", "Workspace assembled", status="success")
             stdout_path = workspace_path / "artifacts" / "stdout.log"
             stderr_path = workspace_path / "artifacts" / "stderr.log"
             result_path = workspace_path / "artifacts" / "result.json"
             submission_service.mark_running(submission, workspace_path)
             submission_service.update_steps(
                 submission,
-                submission_service.build_step_states(active_key="deploy_agent", description="Preparing workspace"),
+                submission_service.build_step_states(
+                    active_key="deploy_agent",
+                    description="Reusing rewound workspace" if reuse_workspace else "Preparing workspace",
+                ),
             )
 
             emit_event("deploy_agent", "Connecting to Docker daemon")
@@ -165,6 +193,8 @@ class ExecutionService:
             manager.start_container(container)
             debug_log.append("backend", "Container start requested")
             emit_event("deploy_agent", "Runner container started", status="success")
+            if reuse_workspace:
+                submission_service.clear_checkpoint_restart_flag(submission_service.get_submission(submission_id))
             completed_steps = {"deploy_agent"}
             active_step_key = "start_agent"
 
@@ -196,6 +226,9 @@ class ExecutionService:
                         except Exception as exc:  # noqa: BLE001
                             debug_log.append("backend", f"Failed to signal agent process: {exc}")
                         debug_log.append("backend", "Execution paused cleanly")
+                    if submission_service.checkpoint_requires_restart(submission_service.get_submission(submission_id)):
+                        debug_log.append("backend", "Rewind requested while paused; terminating current runner session")
+                        return
                     wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
                     time.sleep(1)
                     continue
@@ -207,6 +240,9 @@ class ExecutionService:
                 try:
                     container.reload()
                 except NotFound as exc:
+                    if submission_service.checkpoint_requires_restart(submission_service.get_submission(submission_id)):
+                        debug_log.append("backend", "Runner container removed for rewind restart")
+                        return
                     raise RuntimeError("Runner container disappeared before completion") from exc
                 if container.status == "exited":
                     exit_result = container.wait(timeout=5)

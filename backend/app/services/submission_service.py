@@ -1,4 +1,5 @@
 import json
+import subprocess
 import shutil
 import uuid
 import zipfile
@@ -16,8 +17,10 @@ from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
 from app.schemas.submission import StepState, SubmissionDetail, SubmissionRunnerEvent, SubmissionSummary, SubmissionVisualEvent
+from app.services.docker_manager import DockerManager
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
+from app.services.submission_artifact_service import SubmissionArtifactService
 
 
 DEFAULT_STEPS = [
@@ -47,6 +50,7 @@ class SubmissionService:
         self.db = db
         self.settings = get_settings()
         self.runtime_paths = RuntimePathService()
+        self.artifact_service = SubmissionArtifactService()
 
     def _get_submission_user(self, user_id: str) -> User:
         user = self.db.get(User, user_id)
@@ -148,6 +152,13 @@ class SubmissionService:
         tmp_path.replace(checkpoint_path)
         return checkpoint_path
 
+    def get_template_repo_path(self, submission: Submission) -> Path | None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return None
+        template_path = workspace_path / "template"
+        return template_path if template_path.is_dir() else None
+
     def read_submission_task_documents(self, submission: Submission) -> dict[str, str]:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
@@ -209,6 +220,88 @@ class SubmissionService:
             encoding="utf-8",
         )
         self.update_status(submission, SubmissionStatus.RUNNING)
+
+    def rewind_to_commit(self, submission: Submission, commit_oid: str) -> dict[str, str | int | None]:
+        normalized_commit_oid = commit_oid.strip()
+        if not normalized_commit_oid:
+            raise ValueError("commit_oid is required")
+        if not self.can_rewind(submission):
+            raise ValueError("Submission must be paused or completed before rewinding")
+
+        project_root = self.get_template_repo_path(submission)
+        if project_root is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        git_dir = project_root / ".git"
+        if not git_dir.exists():
+            raise FileNotFoundError("Git history is not available for this submission")
+
+        history_payload = self.artifact_service.read_commit_history(submission)
+        if history_payload.get("availability") != "available":
+            raise FileNotFoundError("Git history is not available for this submission")
+
+        commits = history_payload.get("commits", [])
+        target_commit = next((commit for commit in commits if str(commit.get("oid", "")).strip() == normalized_commit_oid), None)
+        if target_commit is None:
+            raise FileNotFoundError(f"Commit not found: {normalized_commit_oid}")
+
+        node_id = str(target_commit.get("node_id") or "").strip() or None
+        phase = str(target_commit.get("phase") or "").strip() or None
+        if not node_id or phase not in {"design", "implement"}:
+            raise ValueError("Selected commit does not map to a requirement node and resumable phase")
+
+        self._run_git(project_root, ["reset", "--hard", normalized_commit_oid])
+        self._run_git(project_root, ["clean", "-fd"])
+
+        rewound_history_payload = self.artifact_service.read_commit_history(submission)
+        rewound_commits = rewound_history_payload.get("commits", [])
+        rewound_index = next(
+            (
+                index
+                for index, commit in enumerate(rewound_commits, start=1)
+                if str(commit.get("oid", "")).strip() == normalized_commit_oid
+            ),
+            0,
+        )
+        if rewound_index <= 0:
+            raise RuntimeError("Failed to confirm rewound commit in repository history")
+
+        checkpoint = self.read_checkpoint(submission)
+        existing_completed = checkpoint.get("completed")
+        checkpoint["last_completed_index"] = rewound_index
+        checkpoint["completed"] = existing_completed[:rewound_index] if isinstance(existing_completed, list) else []
+        checkpoint["paused"] = False
+        checkpoint["rewind_target"] = {
+            "commit_oid": normalized_commit_oid,
+            "node_id": node_id,
+            "phase": phase,
+            "commit_index": rewound_index,
+        }
+        checkpoint["resume_requires_restart"] = True
+        self.write_checkpoint(submission, checkpoint)
+
+        self._stop_runner_container(submission.id)
+        self._clear_execution_artifacts(submission)
+        self._rebuild_runner_events_from_commit_history(submission, rewound_commits)
+        self._rebuild_traceability_store(submission)
+        self._mark_rewound_paused(submission, node_id=node_id, phase=phase, commit_oid=normalized_commit_oid)
+
+        return {
+            "commit_oid": normalized_commit_oid,
+            "node_id": node_id,
+            "phase": phase,
+            "commit_index": rewound_index,
+        }
+
+    def checkpoint_requires_restart(self, submission: Submission) -> bool:
+        checkpoint = self.read_checkpoint(submission)
+        return bool(checkpoint.get("resume_requires_restart"))
+
+    def clear_checkpoint_restart_flag(self, submission: Submission) -> None:
+        checkpoint = self.read_checkpoint(submission)
+        if not checkpoint.get("resume_requires_restart"):
+            return
+        checkpoint["resume_requires_restart"] = False
+        self.write_checkpoint(submission, checkpoint)
 
     def append_event_log(self, submission_id: str, message: str) -> Path:
         submission = self.get_submission(submission_id)
@@ -532,10 +625,122 @@ class SubmissionService:
         return submission.status == SubmissionStatus.PAUSED.value
 
     @staticmethod
+    def can_rewind(submission: Submission) -> bool:
+        return submission.status in {
+            SubmissionStatus.PAUSED.value,
+            SubmissionStatus.PASSED.value,
+            SubmissionStatus.FAILED.value,
+        }
+
+    @staticmethod
     def _read_text(path: Path) -> str:
         if not path.is_file():
             return ""
         return path.read_text(encoding="utf-8")
+
+    def _clear_execution_artifacts(self, submission: Submission) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        artifacts_dir = workspace_path / "artifacts"
+        for filename in [
+            "stdout.log",
+            "stderr.log",
+            "result.json",
+            "runner-events.jsonl",
+            "traceability-events.jsonl",
+            "pause.request.json",
+            "resume.request.json",
+        ]:
+            target = artifacts_dir / filename
+            if target.exists():
+                target.unlink()
+        event_log_path = self.get_event_log_path(submission)
+        if event_log_path.exists():
+            event_log_path.unlink()
+
+    def _rebuild_runner_events_from_commit_history(self, submission: Submission, commits: list[dict]) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        runner_events_path.parent.mkdir(parents=True, exist_ok=True)
+        lines: list[str] = []
+        for commit in commits:
+            node_id = str(commit.get("node_id") or "").strip()
+            phase = str(commit.get("phase") or "").strip()
+            timestamp = str(commit.get("committed_at") or "").strip()
+            message = str(commit.get("summary") or commit.get("message") or "").strip() or None
+            if not node_id or phase not in {"design", "implement"} or not timestamp:
+                continue
+            payload = {
+                "type": "requirement_state",
+                "node_id": node_id,
+                "phase": phase,
+                "status": "completed",
+                "timestamp": timestamp,
+                "message": message,
+            }
+            lines.append(json.dumps(payload, ensure_ascii=True))
+        runner_events_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+
+    def _rebuild_traceability_store(self, submission: Submission) -> None:
+        payload = self.read_submission_task_documents(submission)
+        requirements_yaml = payload.get("requirements_yaml", "").strip()
+        if requirements_yaml:
+            self.write_submission_traceability_store(submission, requirements_yaml)
+
+    def _mark_rewound_paused(self, submission: Submission, *, node_id: str, phase: str, commit_oid: str) -> None:
+        submission.status = SubmissionStatus.PAUSED.value
+        submission.started_at = None
+        submission.finished_at = None
+        submission.score = None
+        submission.passed_count = 0
+        submission.failed_count = 0
+        submission.stdout_path = None
+        submission.stderr_path = None
+        submission.result_path = None
+        submission.failure_reason = None
+        self.db.add(submission)
+        self.db.commit()
+        self.db.refresh(submission)
+        self.update_steps(
+            submission,
+            self.build_step_states(
+                active_key="start_agent",
+                completed={"deploy_agent"},
+                description=f"Paused at rewound checkpoint {node_id} ({phase})",
+            ),
+        )
+        self.append_step_event(
+            submission.id,
+            step_key="start_agent",
+            message=f"Workspace rewound to commit {commit_oid[:7]} at {node_id} ({phase})",
+            status="info",
+        )
+
+    @staticmethod
+    def _stop_runner_container(submission_id: str) -> None:
+        try:
+            DockerManager().remove_submission_container(submission_id)
+        except Exception:  # noqa: BLE001
+            return
+
+    @staticmethod
+    def _run_git(project_root: Path, args: list[str]) -> str:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(project_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if completed.returncode != 0:
+            stderr = completed.stderr.strip() or completed.stdout.strip() or "git command failed"
+            raise RuntimeError(stderr)
+        return completed.stdout
 
     @staticmethod
     def build_step_states(active_key: str | None = None, completed: set[str] | None = None, description: str | None = None) -> list[StepState]:

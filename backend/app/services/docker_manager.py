@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import docker
-from docker.errors import APIError, BuildError, DockerException, ImageNotFound
+from docker.errors import APIError, BuildError, DockerException, ImageNotFound, NotFound
 
 from app.core.config import get_settings
 
@@ -107,6 +107,15 @@ class DockerManager:
     @staticmethod
     def remove_container(container) -> None:
         container.remove(force=True)
+
+    def remove_submission_container(self, submission_id: str) -> bool:
+        container_name = f"arcbench-{submission_id}"
+        try:
+            container = self.client.containers.get(container_name)
+        except NotFound:
+            return False
+        container.remove(force=True)
+        return True
 
     @staticmethod
     def collect_logs(container) -> tuple[str, str]:

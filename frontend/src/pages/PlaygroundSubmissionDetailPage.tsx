@@ -618,6 +618,7 @@ function CommitHistoryPanel({
   selectedCommitOid,
   onSelectCommit,
   onOpenDiff,
+  onRewind,
 }: {
   commits: SubmissionCommitHistoryPayload | null;
   loading: boolean;
@@ -626,21 +627,27 @@ function CommitHistoryPanel({
   selectedCommitOid: string | null;
   onSelectCommit: (commit: SubmissionCommitHistoryEntry) => void;
   onOpenDiff: (commit: SubmissionCommitHistoryEntry) => void;
+  onRewind?: (commit: SubmissionCommitHistoryEntry) => void;
 }) {
   const [menuState, setMenuState] = useState<{ commit: SubmissionCommitHistoryEntry; x: number; y: number } | null>(null);
   const selectedItemRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const orderedCommits = useMemo(() => [...(commits?.commits ?? [])].reverse(), [commits]);
 
   useEffect(() => {
     if (!menuState) {
       return;
     }
-    const closeMenu = () => setMenuState(null);
-    window.addEventListener("click", closeMenu);
-    window.addEventListener("contextmenu", closeMenu);
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return;
+      }
+      setMenuState(null);
+    };
+    window.addEventListener("pointerdown", closeMenu);
     return () => {
-      window.removeEventListener("click", closeMenu);
-      window.removeEventListener("contextmenu", closeMenu);
+      window.removeEventListener("pointerdown", closeMenu);
     };
   }, [menuState]);
 
@@ -690,6 +697,7 @@ function CommitHistoryPanel({
               onClick={() => onSelectCommit(commit)}
               onContextMenu={(event) => {
                 event.preventDefault();
+                event.stopPropagation();
                 onSelectCommit(commit);
                 setMenuState({ commit, x: event.clientX, y: event.clientY });
               }}
@@ -706,10 +714,23 @@ function CommitHistoryPanel({
       </div>
       {menuState ? (
         <div
+          ref={menuRef}
           className="commit-history-context-menu"
           style={{ left: `${menuState.x}px`, top: `${menuState.y}px` }}
           role="menu"
         >
+          {onRewind && menuState.commit.node_id && menuState.commit.phase ? (
+            <button
+              type="button"
+              className="commit-history-context-action"
+              onClick={() => {
+                onRewind(menuState.commit);
+                setMenuState(null);
+              }}
+            >
+              Rewind To Here
+            </button>
+          ) : null}
           <button
             type="button"
             className="commit-history-context-action"
@@ -790,6 +811,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [editableNodeId, setEditableNodeId] = useState<string | null>("ROOT");
   const [editableDetailExpanded, setEditableDetailExpanded] = useState(true);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
+  const [editableReloadToken, setEditableReloadToken] = useState(0);
   const executionPaused = submission?.status === "PAUSED";
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
@@ -818,6 +840,8 @@ export default function PlaygroundSubmissionDetailPage() {
     : "Select an interface or test to inspect source.";
   const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
   const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;
+  const submissionStatus = submission?.status ?? null;
+  const shouldPollSubmission = submissionStatus ? ["PENDING", "RUNNING", "PAUSED"].includes(submissionStatus) : false;
 
   const refreshPreview = async () => {
     setPreviewLoading(true);
@@ -876,18 +900,6 @@ export default function PlaygroundSubmissionDetailPage() {
         setSubmission(detail);
         setLogs(latestLogs);
         setRequirement(requirementDetail);
-        if (["PENDING", "RUNNING", "PAUSED"].includes(detail.status)) {
-          pollRef.current = window.setInterval(() => {
-            api.getSubmission(submissionId).then((latest) => {
-              setSubmission(latest);
-              if (!["PENDING", "RUNNING", "PAUSED"].includes(latest.status) && pollRef.current) {
-                window.clearInterval(pollRef.current);
-                pollRef.current = null;
-              }
-            }).catch(() => undefined);
-            api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
-          }, 2000);
-        }
       })
       .catch((error: Error) => {
         setSubmission(null);
@@ -912,6 +924,39 @@ export default function PlaygroundSubmissionDetailPage() {
 
   useEffect(() => {
     if (!submissionId || !submission) {
+      return;
+    }
+    if (!shouldPollSubmission) {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    const refreshRuntimeState = () => {
+      api.getSubmission(submissionId).then((latest) => {
+        setSubmission(latest);
+        if (!["PENDING", "RUNNING", "PAUSED"].includes(latest.status) && pollRef.current) {
+          window.clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      }).catch(() => undefined);
+      api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
+    };
+    refreshRuntimeState();
+    if (!pollRef.current) {
+      pollRef.current = window.setInterval(refreshRuntimeState, 2000);
+    }
+    return () => {
+      if (pollRef.current && !shouldPollSubmission) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [shouldPollSubmission, submissionId, submissionStatus]);
+
+  useEffect(() => {
+    if (!submissionId || !submission) {
       setCommitHistory(null);
       setCommitHistoryError(null);
       return;
@@ -926,17 +971,7 @@ export default function PlaygroundSubmissionDetailPage() {
     api.getSubmissionCommitHistory(submissionId)
       .then((payload) => {
         if (!cancelled) {
-          setCommitHistory((current) => {
-            if (!current || current.commits.length === 0) {
-              return payload;
-            }
-            const existingOids = new Set(current.commits.map((c) => c.oid));
-            const newCommits = payload.commits.filter((c) => !existingOids.has(c.oid));
-            if (newCommits.length === 0) {
-              return current;
-            }
-            return { availability: payload.availability, commits: [...current.commits, ...newCommits] };
-          });
+          setCommitHistory(payload);
         }
       })
       .catch((error: Error) => {
@@ -954,19 +989,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (["PENDING", "RUNNING"].includes(submission.status) && !commitHistoryPollRef.current) {
       commitHistoryPollRef.current = window.setInterval(() => {
         api.getSubmissionCommitHistory(submissionId)
-          .then((payload) => {
-            setCommitHistory((current) => {
-              if (!current || current.commits.length === 0) {
-                return payload;
-              }
-              const existingOids = new Set(current.commits.map((c) => c.oid));
-              const newCommits = payload.commits.filter((c) => !existingOids.has(c.oid));
-              if (newCommits.length === 0) {
-                return current;
-              }
-              return { availability: payload.availability, commits: [...current.commits, ...newCommits] };
-            });
-          })
+          .then(setCommitHistory)
           .catch(() => undefined);
       }, 2000);
     }
@@ -1107,6 +1130,7 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [
     activeSelectedNodeId,
     detailExpanded,
+    editableReloadToken,
     quickStart.canvasDemo.detailExpanded,
     submission?.status,
     submissionId,
@@ -1131,6 +1155,10 @@ export default function PlaygroundSubmissionDetailPage() {
     const events = logs?.visual_events ?? [];
     if (events.length === 0) {
       visualEventCountRef.current = 0;
+      return;
+    }
+    if (events.length < visualEventCountRef.current) {
+      visualEventCountRef.current = events.length;
       return;
     }
     if (events.length <= visualEventCountRef.current) {
@@ -1348,6 +1376,38 @@ export default function PlaygroundSubmissionDetailPage() {
       setEditableTree(null);
       setEditableNodeId("ROOT");
       setEditableDetailExpanded(true);
+    }
+  };
+
+  const handleRewind = async (commit: SubmissionCommitHistoryEntry) => {
+    if (!submissionId) {
+      return;
+    }
+    const nextSubmission = await api.rewindSubmission(submissionId, { commit_oid: commit.oid });
+    const [nextLogs, nextCommitHistory] = await Promise.all([
+      api.getSubmissionLogs(submissionId),
+      api.getSubmissionCommitHistory(submissionId),
+    ]);
+    editableTreeDirtyRef.current = false;
+    visualEventCountRef.current = 0;
+    setSubmission(nextSubmission);
+    setLogs(nextLogs);
+    setCommitHistory(nextCommitHistory);
+    setEditableTask(null);
+    setEditableTree(null);
+    setActiveTab("canvas");
+    setSelectedCommitOid(commit.oid);
+    const targetNodeId = commit.node_id ?? "ROOT";
+    setSelectedNodeId(targetNodeId);
+    setEditableNodeId(targetNodeId);
+    setDetailExpanded(true);
+    setEditableDetailExpanded(true);
+    setEditableReloadToken((current) => current + 1);
+    setFocusNodeId(targetNodeId);
+    setPulseNodeId(null);
+    if (useQuickStartSubmission) {
+      quickStart.setSelectedNode(targetNodeId);
+      quickStart.setDetailExpanded(true);
     }
   };
 
@@ -1937,6 +1997,11 @@ export default function PlaygroundSubmissionDetailPage() {
                   selectedCommitOid={selectedCommitOid}
                   onSelectCommit={selectCommitHistoryEntry}
                   onOpenDiff={openCommitDiff}
+                  onRewind={submission && (submission.status === "PAUSED" || submission.status === "PASSED" || submission.status === "FAILED")
+                    ? (commit) => {
+                        void handleRewind(commit);
+                      }
+                    : undefined}
                 />
               )}
             </div>

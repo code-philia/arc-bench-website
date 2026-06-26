@@ -15,6 +15,7 @@ from app.schemas.submission import (
     SubmissionEditableTaskPayload,
     SubmissionDetail,
     SubmissionLogs,
+    SubmissionRewindPayload,
     SubmissionSourcePayload,
     SubmissionSummary,
     SubmissionTraceabilityPayload,
@@ -114,6 +115,7 @@ def pause_submission(
 @router.post("/{submission_id}/resume", response_model=SubmissionDetail)
 def resume_submission(
     submission_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionDetail:
@@ -125,9 +127,46 @@ def resume_submission(
     if not service.can_resume(submission):
         raise HTTPException(status_code=409, detail="Submission is not paused")
     try:
-        service.request_resume(submission)
+        if service.checkpoint_requires_restart(submission):
+            service.update_status(submission, SubmissionStatus.RUNNING)
+            service.update_steps(
+                submission,
+                service.build_step_states(
+                    active_key="deploy_agent",
+                    description="Reusing rewound workspace",
+                ),
+            )
+            HostDemoPreviewService.start_async()
+            background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
+        else:
+            service.request_resume(submission)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return service.to_detail(submission)
+
+
+@router.post("/{submission_id}/rewind", response_model=SubmissionDetail)
+def rewind_submission(
+    submission_id: str,
+    payload: SubmissionRewindPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not service.can_rewind(submission):
+        raise HTTPException(status_code=409, detail="Submission must be paused or completed before rewinding")
+    try:
+        service.rewind_to_commit(submission, payload.commit_oid)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return service.to_detail(submission)
 
 

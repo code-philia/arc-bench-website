@@ -135,6 +135,12 @@ export const api = {
       method: "POST",
     });
   },
+  rewindSubmission(submissionId: string, payload: { commit_oid: string }) {
+    return request<SubmissionDetail>(`/submissions/${submissionId}/rewind`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
   getSubmissionEditableTask(submissionId: string) {
     return request<SubmissionEditableTaskPayload>(`/submissions/${submissionId}/editable-task`);
   },
