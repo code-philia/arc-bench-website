@@ -117,10 +117,10 @@ type RequirementTreeCanvasProps = {
   }) => void;
 };
 
-const NODE_WIDTH = 152;
-const NODE_HEIGHT = 60;
-const HORIZONTAL_GAP = 84;
-const VERTICAL_GAP = 52;
+const NODE_WIDTH = 176;
+const NODE_HEIGHT = 72;
+const HORIZONTAL_GAP = 96;
+const VERTICAL_GAP = 58;
 const TRACEABILITY_NODE_WIDTH = 188;
 const TRACEABILITY_COLUMN_GAP = 56;
 const TRACEABILITY_ROW_GAP = 20;
