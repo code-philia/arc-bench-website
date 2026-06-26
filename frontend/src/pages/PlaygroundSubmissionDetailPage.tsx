@@ -1998,42 +1998,60 @@ export default function PlaygroundSubmissionDetailPage() {
           <div className="preview-panel-header">
             {!previewMinimized ? (
               <>
-                <div className="preview-panel-tabs">
-                  <button
-                    type="button"
-                    className={`preview-panel-tab ${previewTab === "preview" ? "active" : ""}`}
-                    onClick={() => setPreviewTab("preview")}
-                  >
-                    Live Preview
-                  </button>
-                  <button
-                    type="button"
-                    className={`preview-panel-tab ${previewTab === "history" ? "active" : ""}`}
-                    onClick={() => setPreviewTab("history")}
-                  >
-                    Commit History
-                  </button>
+                <div className="preview-panel-header-main">
+                  <div className="preview-panel-tabs">
+                    <button
+                      type="button"
+                      className={`preview-panel-tab ${previewTab === "preview" ? "active" : ""}`}
+                      onClick={() => setPreviewTab("preview")}
+                    >
+                      Live Preview
+                    </button>
+                    <button
+                      type="button"
+                      className={`preview-panel-tab ${previewTab === "history" ? "active" : ""}`}
+                      onClick={() => setPreviewTab("history")}
+                    >
+                      Commit History
+                    </button>
+                  </div>
+                  {previewTab === "preview" && previewStatus?.stale ? (
+                    <span className="preview-panel-status-badge" title="Preview is out of date. Refresh to rebuild from current workspace.">
+                      Out of date
+                    </span>
+                  ) : null}
                 </div>
                 <div className="preview-panel-actions">
                   {previewTab === "preview" ? (
                     <>
                       <button
                         type="button"
-                        className="preview-panel-action"
+                        className="preview-panel-icon-button"
                         onClick={() => {
                           void refreshPreview();
                         }}
+                        aria-label="Refresh preview"
+                        title="Refresh preview"
                       >
-                        Refresh
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M20 11A8 8 0 1 0 18.2 16.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M20 4V11H13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
                       </button>
                       {submission ? (
                         <a
                           href={previewUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="preview-panel-link"
+                          className="preview-panel-icon-button"
+                          aria-label="Open preview in new tab"
+                          title="Open preview in new tab"
                         >
-                          Open
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M4 7.8A2.8 2.8 0 0 1 6.8 5H17.2A2.8 2.8 0 0 1 20 7.8V16.2A2.8 2.8 0 0 1 17.2 19H6.8A2.8 2.8 0 0 1 4 16.2V7.8Z" stroke="currentColor" strokeWidth="1.8" />
+                            <path d="M8 9.5H16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                            <path d="M8 14.5H12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
                         </a>
                       ) : null}
                     </>
@@ -2068,13 +2086,6 @@ export default function PlaygroundSubmissionDetailPage() {
             <div className="preview-panel-body">
               {previewTab === "preview" ? (
                 <>
-                  {previewStatus?.stale ? (
-                    <div className="submission-alert-wrap" style={{ padding: "12px 16px 0", position: "relative", zIndex: 1 }}>
-                      <div className="submission-alert">
-                        Preview is out of date. Refresh to rebuild from current workspace.
-                      </div>
-                    </div>
-                  ) : null}
                   {previewLoading ? (
                     <div className="preview-panel-empty">Loading preview...</div>
                   ) : submission && previewAvailable ? (
