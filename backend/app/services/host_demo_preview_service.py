@@ -22,7 +22,7 @@ class HostDemoPreviewService:
     FRONTEND_DIR = PREVIEW_ROOT / "frontend"
     BACKEND_DIR = PREVIEW_ROOT / "backend"
     HEALTH_URL = "http://127.0.0.1:3000/api/health"
-    PREVIEW_URL = "http://127.0.0.1:3000"
+    PREVIEW_URL = "http://1.95.169.80:3001"
     LOG_DIR = ROOT_DIR / "runtime" / "host-preview"
     BACKEND_LOG_PATH = LOG_DIR / "preview-backend.log"
     STATE_PATH = LOG_DIR / "preview-state.json"

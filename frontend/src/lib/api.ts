@@ -229,7 +229,7 @@ export const api = {
     });
   },
   getSubmissionPreviewUrl(submissionId: string) {
-    return "http://127.0.0.1:3000/";
+    return "http://1.95.169.80:3001/";
   },
   listMyTasks() {
     return request<UserTaskSummary[]>("/my-tasks");

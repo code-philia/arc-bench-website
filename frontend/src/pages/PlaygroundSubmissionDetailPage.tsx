@@ -161,6 +161,20 @@ function resolveEditableTree(
   );
 }
 
+function resolveRequirementCatalogTree(requirement: RequirementDetail | null): RequirementNode | null {
+  if (!requirement) {
+    return null;
+  }
+  if (requirement.requirements_yaml?.trim()) {
+    try {
+      return parseTaskTreeYaml(requirement.requirements_yaml);
+    } catch {
+      return requirementMarkdownToTree(requirement.requirements_markdown);
+    }
+  }
+  return requirementMarkdownToTree(requirement.requirements_markdown);
+}
+
 function diffLineClassName(line: string) {
   if (line.startsWith("+") && !line.startsWith("+++ ")) {
     return "diff-line added";
@@ -1128,33 +1142,14 @@ export default function PlaygroundSubmissionDetailPage() {
     };
   }, [submissionId, submission?.status]);
 
+  const catalogTree = useMemo(() => resolveRequirementCatalogTree(requirement), [requirement]);
+
   const tree = useMemo(() => {
-    const preferredYaml = editableTask?.requirements_yaml?.trim();
-    const preferredMarkdown = editableTask?.requirements_md?.trim();
-    if (preferredYaml) {
-      try {
-        return parseTaskTreeYaml(preferredYaml);
-      } catch {
-        if (preferredMarkdown) {
-          return requirementMarkdownToTree(preferredMarkdown);
-        }
-      }
+    if (editableTask) {
+      return resolveEditableTree(editableTask, catalogTree);
     }
-    if (preferredMarkdown) {
-      return requirementMarkdownToTree(preferredMarkdown);
-    }
-    if (!requirement) {
-      return null;
-    }
-    if (requirement.requirements_yaml?.trim()) {
-      try {
-        return parseTaskTreeYaml(requirement.requirements_yaml);
-      } catch {
-        return requirementMarkdownToTree(requirement.requirements_markdown);
-      }
-    }
-    return requirementMarkdownToTree(requirement.requirements_markdown);
-  }, [editableTask, requirement]);
+    return catalogTree;
+  }, [catalogTree, editableTask]);
 
   const nodeStates = useMemo(() => {
     const nextState: Record<string, RequirementVisualState> = {};
@@ -1178,17 +1173,15 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [activeSelectedNodeId, tree]);
 
   useEffect(() => {
-    if (!submissionId || submission?.status !== "PAUSED") {
+    if (!submissionId || !submission) {
       editableTreeDirtyRef.current = false;
       setEditableTask(null);
       setEditableTree(null);
       return;
     }
 
-    if (!editableTree && tree) {
-      setEditableTree(cloneRequirementTree(tree));
-      setEditableNodeId(activeSelectedNodeId ?? "ROOT");
-      setEditableDetailExpanded(useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded);
+    if (submission.status !== "PAUSED") {
+      setEditableTree(null);
     }
 
     let cancelled = false;
@@ -1198,10 +1191,10 @@ export default function PlaygroundSubmissionDetailPage() {
           return;
         }
         setEditableTask(payload);
-        if (editableTreeDirtyRef.current) {
+        if (submission.status !== "PAUSED" || editableTreeDirtyRef.current) {
           return;
         }
-        const nextEditableTree = resolveEditableTree(payload, tree);
+        const nextEditableTree = resolveEditableTree(payload, catalogTree);
         if (!nextEditableTree) {
           return;
         }
@@ -1217,12 +1210,13 @@ export default function PlaygroundSubmissionDetailPage() {
     };
   }, [
     activeSelectedNodeId,
+    catalogTree,
     detailExpanded,
     editableReloadToken,
     quickStart.canvasDemo.detailExpanded,
+    submission,
     submission?.status,
     submissionId,
-    tree,
     useQuickStartSubmission,
   ]);
 

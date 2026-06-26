@@ -459,5 +459,5 @@ def get_submission_preview_file(
 
     raise HTTPException(
         status_code=410,
-        detail="Submission-scoped preview proxy is disabled. Use the fixed host preview at http://127.0.0.1:3000/.",
+        detail="Submission-scoped preview proxy is disabled. Use the fixed host preview at http://1.95.169.80:3001/.",
     )
