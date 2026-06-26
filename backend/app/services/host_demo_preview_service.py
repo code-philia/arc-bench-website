@@ -26,7 +26,19 @@ class HostDemoPreviewService:
     LOG_DIR = ROOT_DIR / "runtime" / "host-preview"
     BACKEND_LOG_PATH = LOG_DIR / "preview-backend.log"
     STATE_PATH = LOG_DIR / "preview-state.json"
-    SYNC_IGNORE_NAMES = {".git", "node_modules", "dist", "coverage", ".cache", ".vite"}
+    SYNC_IGNORE_NAMES = {
+        ".git",
+        "node_modules",
+        "dist",
+        "coverage",
+        ".cache",
+        ".vite",
+        # Preserve host-side runtime SQLite files during refresh/rewind.
+        "database.db",
+        "database.db-wal",
+        "database.db-shm",
+        "database.db-journal",
+    }
 
     _lock = threading.Lock()
     _backend_process: subprocess.Popen[str] | None = None
