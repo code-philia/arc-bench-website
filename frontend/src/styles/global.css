@@ -5948,11 +5948,11 @@ button {
 
 .task-flow-requirement-node {
   --task-flow-node-accent: rgba(12, 31, 24, 0.22);
-  width: 124px;
-  min-height: 48px;
-  padding: 7px 9px;
+  width: 152px;
+  min-height: 60px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 5px 14px rgba(12, 31, 24, 0.08);
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
@@ -5963,7 +5963,7 @@ button {
   position: absolute;
   inset: -1px;
   border: 1px solid var(--task-flow-node-accent);
-  border-radius: 12px;
+  border-radius: 14px;
   pointer-events: none;
   z-index: 3;
 }
@@ -6082,16 +6082,16 @@ button {
 }
 
 .task-flow-requirement-node strong {
-  font-size: 0.84rem;
-  line-height: 1.1;
+  font-size: 0.92rem;
+  line-height: 1.15;
   color: #0f1720;
 }
 
 .task-flow-requirement-node span {
-  margin-top: 2px;
+  margin-top: 4px;
   color: #556272;
-  font-size: 0.63rem;
-  line-height: 1.18;
+  font-size: 0.72rem;
+  line-height: 1.24;
 }
 
 .task-flow-requirement-node.active {
@@ -6573,6 +6573,49 @@ button {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.requirement-detail-image-section {
+  margin-top: 14px;
+}
+
+.requirement-detail-image-title {
+  margin-bottom: 8px;
+  color: #395549;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.requirement-detail-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.requirement-detail-image-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(0, 126, 101, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 16px rgba(15, 23, 32, 0.06);
+}
+
+.requirement-detail-image-card img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: linear-gradient(180deg, #f8fbfa 0%, #eef5f2 100%);
+}
+
+.requirement-detail-image-card figcaption {
+  padding: 8px 10px 10px;
+  color: #546577;
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 .scenario-editor {

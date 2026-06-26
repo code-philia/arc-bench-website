@@ -4,6 +4,7 @@ import type {
   CompetitionSummary,
   RequirementDetail,
   SubmissionEditableTaskPayload,
+  SubmissionTaskAssets,
   SubmissionSourcePayload,
   RequirementSummary,
   SubmissionDetail,
@@ -150,6 +151,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+  getSubmissionTaskAssets(submissionId: string): SubmissionTaskAssets {
+    return {
+      assets_base_url: `${API_BASE}/submissions/${submissionId}/task-assets/assets/`,
+      references_base_url: `${API_BASE}/submissions/${submissionId}/task-assets/references/`,
+    };
   },
   getSubmissionLogs(submissionId: string) {
     return request<SubmissionLogs>(`/submissions/${submissionId}/logs`);

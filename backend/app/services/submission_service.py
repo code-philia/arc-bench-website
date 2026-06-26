@@ -4,7 +4,7 @@ import shutil
 import uuid
 import zipfile
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from fastapi import UploadFile
@@ -187,18 +187,48 @@ class SubmissionService:
             raise FileNotFoundError("Submission workspace is not available")
         task_dir = workspace_path / "task"
         task_dir.mkdir(parents=True, exist_ok=True)
-        (task_dir / "requirements.md").write_text(requirements_md, encoding="utf-8")
-        (task_dir / "requirements.yaml").write_text(requirements_yaml, encoding="utf-8")
-        (task_dir / "prerequisites.md").write_text(prerequisites_md, encoding="utf-8")
+        self._write_text_atomic(task_dir / "requirements.md", requirements_md)
+        self._write_text_atomic(task_dir / "requirements.yaml", requirements_yaml)
+        self._write_text_atomic(task_dir / "prerequisites.md", prerequisites_md)
 
     def write_submission_traceability_store(self, submission: Submission, requirements_yaml: str) -> None:
+        self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
+
+    def write_submission_task_runtime_artifacts(self, submission: Submission, requirements_yaml: str) -> None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
         traceability_db_path = workspace_path / "artifacts" / "traceability.db"
+        traceability_seed_path = workspace_path / "artifacts" / "traceability-seed.json"
         from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
-        TraceabilitySeedBuilder().write_sqlite_database_from_yaml_text(traceability_db_path, requirements_yaml)
+        seed_builder = TraceabilitySeedBuilder()
+        seed_builder.write_sqlite_database_from_yaml_text(traceability_db_path, requirements_yaml)
+        seed_builder.write_seed_file_from_yaml_text(traceability_seed_path, requirements_yaml)
+
+    def get_submission_task_asset_path(self, submission: Submission, asset_kind: str, asset_path: str) -> Path:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+
+        normalized_kind = "reference" if asset_kind == "references" else asset_kind
+        if normalized_kind not in {"assets", "reference"}:
+            raise FileNotFoundError(f"Unknown submission task asset kind: {asset_kind}")
+
+        asset_root = workspace_path / "task" / normalized_kind
+        if not asset_root.is_dir():
+            raise FileNotFoundError(f"Submission task asset directory is not available: {normalized_kind}")
+
+        normalized_relative_path = self._normalize_relative_path(asset_path)
+        resolved_root = asset_root.resolve()
+        resolved_target = (asset_root / normalized_relative_path).resolve()
+        try:
+            resolved_target.relative_to(resolved_root)
+        except ValueError as exc:
+            raise FileNotFoundError(f"Submission task asset path is outside the workspace: {asset_path}") from exc
+        if not resolved_target.is_file():
+            raise FileNotFoundError(f"Submission task asset not found: {normalized_relative_path.as_posix()}")
+        return resolved_target
 
     def request_pause(self, submission: Submission) -> None:
         request_path = self.get_pause_request_path(submission)
@@ -743,7 +773,7 @@ class SubmissionService:
         payload = self.read_submission_task_documents(submission)
         requirements_yaml = payload.get("requirements_yaml", "").strip()
         if requirements_yaml:
-            self.write_submission_traceability_store(submission, requirements_yaml)
+            self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
 
     @staticmethod
     def _build_checkpoint_completed_entries(commits: list[dict]) -> list[dict[str, int | str | None]]:
@@ -813,6 +843,22 @@ class SubmissionService:
             stderr = completed.stderr.strip() or completed.stdout.strip() or "git command failed"
             raise RuntimeError(stderr)
         return completed.stdout
+
+    @staticmethod
+    def _write_text_atomic(path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        tmp_path.replace(path)
+
+    @staticmethod
+    def _normalize_relative_path(file_path: str) -> Path:
+        normalized = PurePosixPath(file_path.strip())
+        if str(normalized) in {"", "."}:
+            raise FileNotFoundError("Submission task asset path is required")
+        if normalized.is_absolute() or ".." in normalized.parts:
+            raise FileNotFoundError(f"Invalid submission task asset path: {file_path}")
+        return Path(*normalized.parts)
 
     @staticmethod
     def build_step_states(active_key: str | None = None, completed: set[str] | None = None, description: str | None = None) -> list[StepState]:

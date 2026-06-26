@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
@@ -254,6 +255,24 @@ def update_submission_editable_task(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"detail": "Submission workspace updated"}
+
+
+@router.get("/{submission_id}/task-assets/{asset_kind}/{asset_path:path}")
+def get_submission_task_asset(
+    submission_id: str,
+    asset_kind: str,
+    asset_path: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> FileResponse:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+        return FileResponse(service.get_submission_task_asset_path(submission, asset_kind, asset_path))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/{submission_id}/traceability", response_model=SubmissionTraceabilityPayload)

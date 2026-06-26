@@ -30,6 +30,7 @@ import type {
   SubmissionTraceabilityPayload,
   SubmissionVisualEvent,
   SubmissionEditableTaskPayload,
+  SubmissionTaskAssets,
 } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
@@ -834,6 +835,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [selectedDiffFilePath, setSelectedDiffFilePath] = useState<string | null>(null);
   const [editableTask, setEditableTask] = useState<SubmissionEditableTaskPayload | null>(null);
   const [editableTree, setEditableTree] = useState<RequirementNode | null>(null);
+  const [submissionTaskAssets, setSubmissionTaskAssets] = useState<SubmissionTaskAssets | null>(null);
   const [editableNodeId, setEditableNodeId] = useState<string | null>("ROOT");
   const [editableDetailExpanded, setEditableDetailExpanded] = useState(true);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
@@ -934,6 +936,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setCommitHistoryError(null);
     setSelectedCommitOid(null);
     setSelectedDiffFilePath(null);
+    setSubmissionTaskAssets(submissionId ? api.getSubmissionTaskAssets(submissionId) : null);
     visualEventCountRef.current = 0;
     if (commitHistoryPollRef.current) {
       window.clearInterval(commitHistoryPollRef.current);
@@ -1107,6 +1110,20 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [submissionId, submission?.status]);
 
   const tree = useMemo(() => {
+    const preferredYaml = editableTask?.requirements_yaml?.trim();
+    const preferredMarkdown = editableTask?.requirements_md?.trim();
+    if (preferredYaml) {
+      try {
+        return parseTaskTreeYaml(preferredYaml);
+      } catch {
+        if (preferredMarkdown) {
+          return requirementMarkdownToTree(preferredMarkdown);
+        }
+      }
+    }
+    if (preferredMarkdown) {
+      return requirementMarkdownToTree(preferredMarkdown);
+    }
     if (!requirement) {
       return null;
     }
@@ -1118,7 +1135,7 @@ export default function PlaygroundSubmissionDetailPage() {
       }
     }
     return requirementMarkdownToTree(requirement.requirements_markdown);
-  }, [requirement]);
+  }, [editableTask, requirement]);
 
   const nodeStates = useMemo(() => {
     const nextState: Record<string, RequirementVisualState> = {};
@@ -1476,8 +1493,19 @@ export default function PlaygroundSubmissionDetailPage() {
         requirements_yaml: requirementsYaml,
         prerequisites_md: editableTask.prerequisites_md,
       });
+      const [nextTraceability, nextAllTraceability] = await Promise.all([
+        activeSelectedNodeId ? api.getSubmissionTraceability(submissionId, activeSelectedNodeId).catch(() => null) : Promise.resolve(null),
+        api.getSubmissionAllTraceability(submissionId).catch(() => null),
+      ]);
       editableTreeDirtyRef.current = false;
       setEditableTask((current) => current ? { ...current, requirements_md: requirementsMd, requirements_yaml: requirementsYaml } : current);
+      if (nextTraceability) {
+        setTraceability(nextTraceability);
+        setTraceabilityError(null);
+      }
+      if (nextAllTraceability) {
+        setAllTraceability(nextAllTraceability);
+      }
     } finally {
       setSavingEditableTask(false);
     }
@@ -1870,6 +1898,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     <RequirementNodeDetailContent
                       node={node}
                       mode="editable"
+                      taskAssets={submissionTaskAssets}
                       onNodeChange={(updater) => {
                         editableTreeDirtyRef.current = true;
                         setEditableTree((current) => {
@@ -1883,6 +1912,12 @@ export default function PlaygroundSubmissionDetailPage() {
                         editableTreeDirtyRef.current = true;
                         setEditableNodeId(nextNodeId);
                       }}
+                    />
+                  ) : selectedNode ? (node) => (
+                    <RequirementNodeDetailContent
+                      node={node}
+                      mode="readonly"
+                      taskAssets={submissionTaskAssets}
                     />
                   ) : undefined}
                 />

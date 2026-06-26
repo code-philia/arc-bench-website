@@ -175,6 +175,11 @@ export type SubmissionEditableTaskPayload = {
   prerequisites_md: string;
 };
 
+export type SubmissionTaskAssets = {
+  assets_base_url: string;
+  references_base_url: string;
+};
+
 export type SubmissionPreviewStatus = {
   available: boolean;
   stale: boolean;

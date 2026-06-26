@@ -1,21 +1,72 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 
 import type { RequirementNode } from "../../lib/taskTree";
+import type { SubmissionTaskAssets } from "../../lib/types";
+
+const IMAGE_MARKDOWN_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
+
+type ParsedDescription = {
+  text: string;
+  images: Array<{ alt: string; src: string }>;
+};
 
 type RequirementNodeDetailContentProps = {
   node: RequirementNode;
   mode?: "editable" | "readonly";
   onNodeChange?: (updater: (node: RequirementNode) => RequirementNode) => void;
   onNodeIdChange?: (nextId: string) => void;
+  taskAssets?: SubmissionTaskAssets | null;
 };
+
+function joinResourceUrl(baseUrl: string, relativePath: string) {
+  if (!baseUrl) {
+    return relativePath;
+  }
+  const normalizedBasePath = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBasePath}${relativePath.replace(/^\/+/, "")}`;
+}
+
+function resolveDescriptionImageSrc(rawPath: string, taskAssets?: SubmissionTaskAssets | null) {
+  const trimmedPath = rawPath.trim();
+  if (!trimmedPath) {
+    return "";
+  }
+  if (/^(https?:|data:)/i.test(trimmedPath)) {
+    return trimmedPath;
+  }
+  if (trimmedPath.startsWith("./reference/") || trimmedPath.startsWith("reference/")) {
+    const relativePath = trimmedPath.replace(/^\.\//, "").replace(/^reference\//, "");
+    return taskAssets?.references_base_url ? joinResourceUrl(taskAssets.references_base_url, relativePath) : trimmedPath;
+  }
+  if (trimmedPath.startsWith("./assets/") || trimmedPath.startsWith("assets/")) {
+    const relativePath = trimmedPath.replace(/^\.\//, "").replace(/^assets\//, "");
+    return taskAssets?.assets_base_url ? joinResourceUrl(taskAssets.assets_base_url, relativePath) : trimmedPath;
+  }
+  return trimmedPath;
+}
+
+function parseDescription(description: string, taskAssets?: SubmissionTaskAssets | null): ParsedDescription {
+  const images: Array<{ alt: string; src: string }> = [];
+  const text = description.replace(IMAGE_MARKDOWN_PATTERN, (_match, alt: string, src: string) => {
+    const resolvedSrc = resolveDescriptionImageSrc(src, taskAssets);
+    if (resolvedSrc) {
+      images.push({ alt: alt.trim(), src: resolvedSrc });
+    }
+    return "";
+  }).trim();
+  return { text, images };
+}
 
 export default function RequirementNodeDetailContent({
   node,
   mode = "readonly",
   onNodeChange,
   onNodeIdChange,
+  taskAssets = null,
 }: RequirementNodeDetailContentProps) {
   const editable = mode === "editable";
+  const parsedDescription = parseDescription(node.description || "", taskAssets);
+  const descriptionValue = parsedDescription.text || "No description available.";
 
   const updateNode = (updater: (node: RequirementNode) => RequirementNode) => {
     if (!editable || !onNodeChange) {
@@ -58,10 +109,24 @@ export default function RequirementNodeDetailContent({
           <textarea
             className="text-area"
             rows={4}
-            value={node.description || "No description available."}
+            value={descriptionValue}
             readOnly
           />
         </label>
+
+        {parsedDescription.images.length > 0 ? (
+          <div className="requirement-detail-image-section">
+            <div className="requirement-detail-image-title">Reference Images</div>
+            <div className="requirement-detail-image-grid">
+              {parsedDescription.images.map((image, index) => (
+                <figure key={`${node.id}-readonly-image-${index}`} className="requirement-detail-image-card">
+                  <img src={image.src} alt={image.alt || `Reference ${index + 1}`} loading="lazy" />
+                  {image.alt ? <figcaption>{image.alt}</figcaption> : null}
+                </figure>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="scenario-editor compact">
           <div className="scenario-editor-head">
@@ -183,6 +248,20 @@ export default function RequirementNodeDetailContent({
           onChange={(event) => updateNode((currentNode) => ({ ...currentNode, description: event.target.value }))}
         />
       </label>
+
+      {parsedDescription.images.length > 0 ? (
+        <div className="requirement-detail-image-section">
+          <div className="requirement-detail-image-title">Reference Images</div>
+          <div className="requirement-detail-image-grid">
+            {parsedDescription.images.map((image, index) => (
+              <figure key={`${node.id}-editable-image-${index}`} className="requirement-detail-image-card">
+                <img src={image.src} alt={image.alt || `Reference ${index + 1}`} loading="lazy" />
+                {image.alt ? <figcaption>{image.alt}</figcaption> : null}
+              </figure>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="scenario-editor compact">
         <div className="scenario-editor-head">
