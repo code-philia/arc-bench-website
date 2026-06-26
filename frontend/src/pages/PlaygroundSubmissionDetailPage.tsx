@@ -1453,20 +1453,26 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     const nextSubmission = await api.rewindSubmission(submissionId, { commit_oid: commit.oid });
-    const [nextLogs, nextCommitHistory] = await Promise.all([
+    const targetNodeId = commit.node_id ?? "ROOT";
+    const [nextLogs, nextCommitHistory, nextTraceability, nextAllTraceability] = await Promise.all([
       api.getSubmissionLogs(submissionId),
       api.getSubmissionCommitHistory(submissionId),
+      api.getSubmissionTraceability(submissionId, targetNodeId).catch(() => null),
+      api.getSubmissionAllTraceability(submissionId).catch(() => null),
     ]);
     editableTreeDirtyRef.current = false;
     visualEventCountRef.current = 0;
     setSubmission(nextSubmission);
     setLogs(nextLogs);
     setCommitHistory(nextCommitHistory);
+    setTraceability(nextTraceability);
+    setTraceabilityError(null);
+    setTraceabilityNodeId(targetNodeId);
+    setAllTraceability(nextAllTraceability);
     setEditableTask(null);
     setEditableTree(null);
     setActiveTab("canvas");
     setSelectedCommitOid(commit.oid);
-    const targetNodeId = commit.node_id ?? "ROOT";
     setSelectedNodeId(targetNodeId);
     setEditableNodeId(targetNodeId);
     setDetailExpanded(true);

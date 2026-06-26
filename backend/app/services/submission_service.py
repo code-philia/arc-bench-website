@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import uuid
 import zipfile
+import sqlite3
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -770,10 +771,60 @@ class SubmissionService:
         runner_events_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
     def _rebuild_traceability_store(self, submission: Submission) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+
+        artifacts_dir = workspace_path / "artifacts"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        target_traceability_db_path = artifacts_dir / "traceability.db"
+        template_traceability_db_path = (workspace_path / "template" / "traceability.db")
+
+        if template_traceability_db_path.is_file():
+            shutil.copy2(template_traceability_db_path, target_traceability_db_path)
+            self._normalize_traceability_database(target_traceability_db_path)
+            return
+
         payload = self.read_submission_task_documents(submission)
         requirements_yaml = payload.get("requirements_yaml", "").strip()
         if requirements_yaml:
             self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
+
+    @staticmethod
+    def _normalize_traceability_database(traceability_db_path: Path) -> None:
+        connection = sqlite3.connect(traceability_db_path)
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS interfaces (
+                    interface_id TEXT PRIMARY KEY,
+                    req_ids TEXT,
+                    type TEXT,
+                    content TEXT,
+                    file_path TEXT,
+                    first_line TEXT,
+                    implemented INTEGER,
+                    callers TEXT,
+                    callees TEXT
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tests (
+                    test_id TEXT PRIMARY KEY,
+                    req_id TEXT NOT NULL,
+                    scenario_id TEXT,
+                    type TEXT,
+                    file_path TEXT,
+                    first_line TEXT
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     @staticmethod
     def _build_checkpoint_completed_entries(commits: list[dict]) -> list[dict[str, int | str | None]]:
