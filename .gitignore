@@ -1,5 +1,6 @@
 AGENTS.md
 CLAUDE.md
+.trae
 frontend/dist
 frontend/node_modules
 frontend/*.tsbuildinfo
