@@ -487,55 +487,53 @@ export function requirementMarkdownToTree(markdown: string): RequirementNode {
 
 function renderScenarioYaml(scenario: RequirementScenario, indent: number): string[] {
   const pad = " ".repeat(indent);
+  const nestedPad = " ".repeat(indent + 2);
   const lines = [`${pad}- name: ${quoteYaml(scenario.name)}`];
   if (scenario.steps.length === 0) {
-    lines.push(`${pad}  steps: []`);
+    lines.push(`${nestedPad}steps: []`);
     return lines;
   }
-  lines.push(`${pad}  steps:`);
+  lines.push(`${nestedPad}steps:`);
   scenario.steps.forEach((step) => {
-    lines.push(`${pad}    - keyword: ${step.keyword}`);
-    lines.push(`${pad}      content: ${quoteYaml(step.content)}`);
+    lines.push(`${nestedPad}  - keyword: ${step.keyword}`);
+    lines.push(`${nestedPad}    content: ${quoteYaml(step.content)}`);
   });
   return lines;
 }
 
-function renderNodeYaml(node: RequirementNode, indent: number): string[] {
+function renderNodeYaml(node: RequirementNode, indent: number, asListItem = false): string[] {
   const pad = " ".repeat(indent);
+  const fieldIndent = indent + (asListItem ? 2 : 0);
+  const fieldPad = " ".repeat(fieldIndent);
   const lines = [
-    `${pad}id: ${node.id}`,
-    `${pad}name: ${quoteYaml(node.name)}`,
-    `${pad}type: ${node.type}`,
-    `${pad}description: ${quoteYaml(node.description)}`,
-    `${pad}dependencies: ${node.dependencies.length === 0 ? "[]" : ""}`,
+    asListItem ? `${pad}- id: ${node.id}` : `${pad}id: ${node.id}`,
+    `${fieldPad}name: ${quoteYaml(node.name)}`,
+    `${fieldPad}type: ${node.type}`,
+    `${fieldPad}description: ${quoteYaml(node.description)}`,
   ];
 
-  if (node.dependencies.length > 0) {
+  if (node.dependencies.length === 0) {
+    lines.push(`${fieldPad}dependencies: []`);
+  } else {
+    lines.push(`${fieldPad}dependencies:`);
     node.dependencies.forEach((dependency) => {
-      lines.push(`${pad}  - ${dependency}`);
+      lines.push(`${fieldPad}  - ${quoteYaml(dependency)}`);
     });
   }
 
   if (node.children.length > 0) {
-    lines.push(`${pad}children:`);
+    lines.push(`${fieldPad}children:`);
     node.children.forEach((child) => {
-      const childLines = renderNodeYaml(child, indent + 2);
-      childLines.forEach((line, index) => {
-        if (index === 0) {
-          lines.push(`${pad}  - ${line.trimStart()}`);
-        } else {
-          lines.push(`${pad}    ${line.trimStart()}`);
-        }
-      });
+      lines.push(...renderNodeYaml(child, fieldIndent + 2, true));
     });
   } else if (node.type === "FOLDER") {
-    lines.push(`${pad}children: []`);
+    lines.push(`${fieldPad}children: []`);
   }
 
   if (node.scenarios.length > 0) {
-    lines.push(`${pad}scenarios:`);
+    lines.push(`${fieldPad}scenarios:`);
     node.scenarios.forEach((scenario) => {
-      lines.push(...renderScenarioYaml(scenario, indent + 2));
+      lines.push(...renderScenarioYaml(scenario, fieldIndent + 2));
     });
   }
 
