@@ -61,6 +61,7 @@ class SubmissionEditableTaskPayload(BaseModel):
     requirements_md: str
     requirements_yaml: str
     prerequisites_md: str
+    edited_node_id: str | None = None
 
 
 class SubmissionRewindPayload(BaseModel):

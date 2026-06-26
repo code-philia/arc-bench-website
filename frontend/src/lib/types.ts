@@ -174,6 +174,7 @@ export type SubmissionEditableTaskPayload = {
   requirements_md: string;
   requirements_yaml: string;
   prerequisites_md: string;
+  edited_node_id?: string | null;
 };
 
 export type SubmissionTaskAssets = {

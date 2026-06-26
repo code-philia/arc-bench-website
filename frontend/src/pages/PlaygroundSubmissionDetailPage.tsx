@@ -1451,14 +1451,21 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     const requirementsYaml = taskTreeToYaml(editableTree);
     const requirementsMd = taskTreeToMarkdown(editableTree);
+    const editedNodeId = editableNodeId ?? activeSelectedNodeId ?? "ROOT";
     await api.updateSubmissionEditableTask(submissionId, {
       requirements_md: requirementsMd,
       requirements_yaml: requirementsYaml,
       prerequisites_md: editableTask.prerequisites_md,
+      edited_node_id: editedNodeId,
     });
     editableTreeDirtyRef.current = false;
-    setEditableTask((current) => current ? { ...current, requirements_md: requirementsMd, requirements_yaml: requirementsYaml } : current);
-    return { requirementsYaml, requirementsMd };
+    setEditableTask((current) => current ? {
+      ...current,
+      requirements_md: requirementsMd,
+      requirements_yaml: requirementsYaml,
+      edited_node_id: editedNodeId,
+    } : current);
+    return { requirementsYaml, requirementsMd, editedNodeId };
   };
 
   const handleResume = async () => {
@@ -1927,7 +1934,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     setSelectedTraceabilityId(id);
                     setSidebarTab("traceability");
                   }}
-                  renderDetailContent={submission?.status === "PAUSED" && pausedCanvasSelectedNode ? (node) => (
+                  renderDetailContent={submission?.status === "PAUSED" ? (node) => (
                     <RequirementNodeDetailContent
                       node={node}
                       mode="editable"

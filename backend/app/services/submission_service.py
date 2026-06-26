@@ -196,6 +196,111 @@ class SubmissionService:
     def write_submission_traceability_store(self, submission: Submission, requirements_yaml: str) -> None:
         self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
 
+    def reset_progress_for_edited_node(self, submission: Submission, node_id: str) -> None:
+        normalized_node_id = node_id.strip()
+        if not normalized_node_id:
+            return
+        project_root = self.get_template_repo_path(submission)
+        if project_root is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        git_dir = project_root / ".git"
+        if not git_dir.exists():
+            raise FileNotFoundError("Git history is not available for this submission")
+
+        history_payload = self.artifact_service.read_commit_history(submission)
+        if history_payload.get("availability") != "available":
+            raise FileNotFoundError("Git history is not available for this submission")
+
+        commits = history_payload.get("commits", [])
+        if not isinstance(commits, list):
+            raise ValueError("Commit history is not available")
+
+        target_design_index = next(
+            (
+                index
+                for index, commit in enumerate(commits, start=1)
+                if str(commit.get("node_id") or "").strip() == normalized_node_id
+                and str(commit.get("phase") or "").strip() == "design"
+            ),
+            0,
+        )
+        if target_design_index <= 0:
+            raise ValueError(f"Design commit not found for node {normalized_node_id}")
+
+        restart_index = target_design_index - 1
+        if restart_index > 0:
+            prior_commit = commits[restart_index - 1]
+            prior_commit_oid = str(prior_commit.get("oid") or "").strip()
+            if not prior_commit_oid:
+                raise RuntimeError("Failed to resolve prior commit for edited node restart")
+            self._run_git(project_root, ["reset", "--hard", prior_commit_oid])
+        else:
+            self._run_git(project_root, ["reset", "--hard"])
+        self._run_git(project_root, ["clean", "-fd"])
+
+        rewound_history_payload = self.artifact_service.read_commit_history(submission)
+        rewound_commits = rewound_history_payload.get("commits", [])
+        if not isinstance(rewound_commits, list):
+            rewound_commits = []
+
+        checkpoint = self.read_checkpoint(submission)
+        checkpoint["last_completed_index"] = restart_index
+        checkpoint["completed"] = self._build_checkpoint_completed_entries(rewound_commits)
+        checkpoint["paused"] = False
+        checkpoint["resume_requires_restart"] = True
+        checkpoint["edited_node_restart"] = {
+            "node_id": normalized_node_id,
+            "restart_from_index": restart_index,
+        }
+        self.write_checkpoint(submission, checkpoint)
+
+        historic_visual_events = self.read_visual_events(submission)
+        self._stop_runner_container(submission.id)
+        self._stop_preview_container(submission.id)
+        self._clear_execution_artifacts(submission)
+        self._rebuild_runner_events_from_commit_history(
+            submission,
+            rewound_commits,
+            historic_visual_events=historic_visual_events,
+            target_node_id=normalized_node_id,
+            target_phase="design",
+        )
+        self._rebuild_traceability_store(submission)
+        self._rebuild_demo_test_statuses(
+            submission,
+            historic_visual_events=historic_visual_events,
+            target_node_id=normalized_node_id,
+            target_phase="design",
+        )
+
+        submission.status = SubmissionStatus.PAUSED.value
+        submission.started_at = None
+        submission.finished_at = None
+        submission.score = None
+        submission.passed_count = 0
+        submission.failed_count = 0
+        submission.stdout_path = None
+        submission.stderr_path = None
+        submission.result_path = None
+        submission.failure_reason = None
+        self.db.add(submission)
+        self.db.commit()
+        self.db.refresh(submission)
+        self.update_steps(
+            submission,
+            self.build_step_states(
+                active_key="start_agent",
+                completed={"deploy_agent"},
+                description=f"Paused at edited checkpoint {normalized_node_id} (design)",
+            ),
+        )
+        self.append_step_event(
+            submission.id,
+            step_key="start_agent",
+            message=f"Edited node {normalized_node_id}; next resume will restart from its design phase",
+            status="info",
+        )
+
     def write_submission_task_runtime_artifacts(self, submission: Submission, requirements_yaml: str) -> None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
@@ -334,6 +439,12 @@ class SubmissionService:
             target_phase=phase,
         )
         self._rebuild_traceability_store(submission)
+        self._rebuild_demo_test_statuses(
+            submission,
+            historic_visual_events=historic_visual_events,
+            target_node_id=node_id,
+            target_phase=phase,
+        )
         self._mark_rewound_paused(submission, node_id=node_id, phase=phase, commit_oid=normalized_commit_oid)
 
         return {
@@ -792,6 +903,52 @@ class SubmissionService:
         requirements_yaml = payload.get("requirements_yaml", "").strip()
         if requirements_yaml:
             self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
+
+    def _rebuild_demo_test_statuses(
+        self,
+        submission: Submission,
+        *,
+        historic_visual_events: list[SubmissionVisualEvent] | None = None,
+        target_node_id: str | None = None,
+        target_phase: str | None = None,
+    ) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+
+        artifacts_dir = workspace_path / "artifacts"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        demo_status_path = artifacts_dir / "demo-test-statuses.json"
+
+        payload = {
+            "tests": {},
+            "requirements": {},
+        }
+
+        test_status_by_requirement: dict[str, str] = {}
+        for event in historic_visual_events or []:
+            if event.phase != "test" or event.status not in {"passed", "failed"}:
+                continue
+            if target_node_id == event.node_id and target_phase == "design":
+                continue
+            test_status_by_requirement[event.node_id] = event.status
+
+        traceability = self.artifact_service.read_traceability(submission, node_id="__all__")
+        tests = traceability.get("tests", [])
+        for test in tests:
+            req_id = str(test.get("req_id") or "").strip()
+            test_id = str(test.get("test_id") or "").strip()
+            if not req_id or not test_id:
+                continue
+            status = test_status_by_requirement.get(req_id)
+            if status not in {"passed", "failed"}:
+                continue
+            payload["tests"][test_id] = status
+
+        for req_id, status in test_status_by_requirement.items():
+            payload["requirements"][req_id] = status
+
+        self._write_text_atomic(demo_status_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
     @staticmethod
     def _normalize_traceability_database(traceability_db_path: Path) -> None:

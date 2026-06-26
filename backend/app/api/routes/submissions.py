@@ -253,6 +253,8 @@ def update_submission_editable_task(
             prerequisites_md=payload.prerequisites_md,
         )
         service.write_submission_traceability_store(submission, payload.requirements_yaml)
+        if payload.edited_node_id and payload.edited_node_id.strip():
+            service.reset_progress_for_edited_node(submission, payload.edited_node_id)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"detail": "Submission workspace updated"}

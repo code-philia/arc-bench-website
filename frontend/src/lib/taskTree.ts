@@ -30,7 +30,11 @@ function isRecord(value: unknown): value is UnknownRecord {
 }
 
 function quoteYaml(value: string): string {
-  const escaped = value.replaceAll("\\", "\\\\").replaceAll("'", "''");
+  const escaped = value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\n", "\\n")
+    .replaceAll("'", "''");
   return `'${escaped}'`;
 }
 
@@ -55,7 +59,11 @@ function parseScalar(raw: string): unknown {
     return Number(value);
   }
   if (value.startsWith("'") && value.endsWith("'")) {
-    return value.slice(1, -1).replaceAll("''", "'").replaceAll("\\\\", "\\");
+    return value
+      .slice(1, -1)
+      .replaceAll("''", "'")
+      .replaceAll("\\n", "\n")
+      .replaceAll("\\\\", "\\");
   }
   if (value.startsWith('"') && value.endsWith('"')) {
     return value.slice(1, -1);
