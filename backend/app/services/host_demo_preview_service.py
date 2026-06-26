@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from shutil import which
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -19,10 +20,11 @@ class HostDemoPreviewService:
     BACKEND_DIR = PREVIEW_ROOT / "backend"
     HEALTH_URL = "http://127.0.0.1:3000/api/health"
     PREVIEW_URL = "http://1.95.169.80:3001"
+    LOG_DIR = ROOT_DIR / "runtime" / "host-preview"
+    BACKEND_LOG_PATH = LOG_DIR / "preview-backend.log"
 
     _lock = threading.Lock()
     _backend_process: subprocess.Popen[str] | None = None
-    _bootstrap_thread: threading.Thread | None = None
     _bootstrap_error: str | None = None
     _current_submission_id: str | None = None
     _current_workspace_head_oid: str | None = None
@@ -86,8 +88,7 @@ class HostDemoPreviewService:
     def mark_stale(cls, submission_id: str) -> None:
         with cls._lock:
             if cls._current_submission_id == submission_id:
-                cls._current_workspace_head_oid = None
-        cls.stop_backend()
+                cls._bootstrap_error = None
 
     @classmethod
     def preview_url(cls) -> str:
@@ -102,6 +103,7 @@ class HostDemoPreviewService:
     def _sync_template(cls, source_template_dir: Path) -> None:
         if not source_template_dir.is_dir():
             raise RuntimeError(f"Preview template directory not found: {source_template_dir}")
+        cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
         if cls.PREVIEW_ROOT.exists():
             shutil.rmtree(cls.PREVIEW_ROOT)
         shutil.copytree(
@@ -140,18 +142,24 @@ class HostDemoPreviewService:
             "HOST": "127.0.0.1",
             "PORT": "3000",
         }
+        cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_handle = cls.BACKEND_LOG_PATH.open("w", encoding="utf-8")
         cls._backend_process = subprocess.Popen(
             [cls._npm_executable(), "run", "start"],
             cwd=str(cls.BACKEND_DIR),
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
             text=True,
         )
 
     @staticmethod
     def _npm_executable() -> str:
-        return "npm.cmd" if os.name == "nt" else "npm"
+        candidates = ["npm.cmd", "npm.exe", "npm"] if os.name == "nt" else ["npm", "npm.cmd"]
+        for candidate in candidates:
+            if which(candidate):
+                return candidate
+        raise RuntimeError("npm executable was not found in PATH")
 
     @classmethod
     def _wait_until_ready(cls, timeout_seconds: int) -> bool:
@@ -162,12 +170,25 @@ class HostDemoPreviewService:
             process = cls._backend_process
             if process is not None and process.poll() is not None:
                 with cls._lock:
-                    cls._bootstrap_error = f"Preview backend exited with code {process.returncode}"
+                    cls._bootstrap_error = cls._format_backend_exit_error(process.returncode)
                 return False
             time.sleep(1)
         with cls._lock:
             cls._bootstrap_error = "Preview backend did not become ready before timeout"
         return False
+
+    @classmethod
+    def _format_backend_exit_error(cls, return_code: int | None) -> str:
+        message = f"Preview backend exited with code {return_code}"
+        if cls.BACKEND_LOG_PATH.exists():
+            try:
+                lines = cls.BACKEND_LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                return message
+            tail = " | ".join(line.strip() for line in lines[-10:] if line.strip())
+            if tail:
+                return f"{message}: {tail}"
+        return message
 
     @classmethod
     def _check_health(cls) -> bool:

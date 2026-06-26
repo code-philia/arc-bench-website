@@ -887,7 +887,9 @@ export default function PlaygroundSubmissionDetailPage() {
       const status = await api.getSubmissionPreviewStatus(submissionId);
       setPreviewStatus(status);
     } catch (error) {
-      setPreviewStatus(toPreviewErrorStatus(error as Error));
+      if (!silent) {
+        setPreviewStatus(toPreviewErrorStatus(error as Error));
+      }
     } finally {
       if (!silent) {
         setPreviewLoading(false);
