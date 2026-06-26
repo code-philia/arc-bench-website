@@ -3,13 +3,6 @@ import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type { RequirementNode } from "../../lib/taskTree";
 import type { SubmissionTaskAssets } from "../../lib/types";
 
-const IMAGE_MARKDOWN_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
-
-type ParsedDescription = {
-  text: string;
-  images: Array<{ alt: string; src: string }>;
-};
-
 type RequirementNodeDetailContentProps = {
   node: RequirementNode;
   mode?: "editable" | "readonly";
@@ -17,6 +10,8 @@ type RequirementNodeDetailContentProps = {
   onNodeIdChange?: (nextId: string) => void;
   taskAssets?: SubmissionTaskAssets | null;
 };
+
+const IMAGE_MARKDOWN_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
 function joinResourceUrl(baseUrl: string, relativePath: string) {
   if (!baseUrl) {
@@ -45,16 +40,47 @@ function resolveDescriptionImageSrc(rawPath: string, taskAssets?: SubmissionTask
   return trimmedPath;
 }
 
-function parseDescription(description: string, taskAssets?: SubmissionTaskAssets | null): ParsedDescription {
+function collectDescriptionImages(description: string, taskAssets?: SubmissionTaskAssets | null) {
   const images: Array<{ alt: string; src: string }> = [];
-  const text = description.replace(IMAGE_MARKDOWN_PATTERN, (_match, alt: string, src: string) => {
-    const resolvedSrc = resolveDescriptionImageSrc(src, taskAssets);
-    if (resolvedSrc) {
-      images.push({ alt: alt.trim(), src: resolvedSrc });
+  const seen = new Set<string>();
+
+  for (const match of description.matchAll(IMAGE_MARKDOWN_PATTERN)) {
+    const alt = (match[1] || "").trim();
+    const src = resolveDescriptionImageSrc(match[2] || "", taskAssets);
+    if (!src || seen.has(src)) {
+      continue;
     }
-    return "";
-  }).trim();
-  return { text, images };
+    seen.add(src);
+    images.push({ alt, src });
+  }
+
+  const lines = description
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (IMAGE_MARKDOWN_PATTERN.test(line)) {
+      IMAGE_MARKDOWN_PATTERN.lastIndex = 0;
+      continue;
+    }
+    IMAGE_MARKDOWN_PATTERN.lastIndex = 0;
+    const rawPath = resolveDescriptionImageSrc(line, taskAssets);
+    if (!rawPath) {
+      continue;
+    }
+    const looksLikeImagePath =
+      /\.(png|jpe?g|gif|webp|svg)$/i.test(line) ||
+      /^(https?:|data:)/i.test(line) ||
+      /^(?:\.\/)?(?:reference|assets)\//i.test(line);
+    if (!looksLikeImagePath || seen.has(rawPath)) {
+      continue;
+    }
+    seen.add(rawPath);
+    images.push({ alt: "", src: rawPath });
+  }
+
+  return images;
 }
 
 export default function RequirementNodeDetailContent({
@@ -65,8 +91,8 @@ export default function RequirementNodeDetailContent({
   taskAssets = null,
 }: RequirementNodeDetailContentProps) {
   const editable = mode === "editable";
-  const parsedDescription = parseDescription(node.description || "", taskAssets);
-  const descriptionValue = parsedDescription.text || "No description available.";
+  const descriptionValue = node.description || "No description available.";
+  const descriptionImages = collectDescriptionImages(node.description || "", taskAssets);
 
   const updateNode = (updater: (node: RequirementNode) => RequirementNode) => {
     if (!editable || !onNodeChange) {
@@ -114,11 +140,11 @@ export default function RequirementNodeDetailContent({
           />
         </label>
 
-        {parsedDescription.images.length > 0 ? (
+        {descriptionImages.length > 0 ? (
           <div className="requirement-detail-image-section">
             <div className="requirement-detail-image-title">Reference Images</div>
             <div className="requirement-detail-image-grid">
-              {parsedDescription.images.map((image, index) => (
+              {descriptionImages.map((image, index) => (
                 <figure key={`${node.id}-readonly-image-${index}`} className="requirement-detail-image-card">
                   <img src={image.src} alt={image.alt || `Reference ${index + 1}`} loading="lazy" />
                   {image.alt ? <figcaption>{image.alt}</figcaption> : null}
@@ -249,11 +275,11 @@ export default function RequirementNodeDetailContent({
         />
       </label>
 
-      {parsedDescription.images.length > 0 ? (
+      {descriptionImages.length > 0 ? (
         <div className="requirement-detail-image-section">
           <div className="requirement-detail-image-title">Reference Images</div>
           <div className="requirement-detail-image-grid">
-            {parsedDescription.images.map((image, index) => (
+            {descriptionImages.map((image, index) => (
               <figure key={`${node.id}-editable-image-${index}`} className="requirement-detail-image-card">
                 <img src={image.src} alt={image.alt || `Reference ${index + 1}`} loading="lazy" />
                 {image.alt ? <figcaption>{image.alt}</figcaption> : null}

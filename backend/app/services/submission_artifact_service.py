@@ -65,6 +65,7 @@ class SubmissionArtifactService:
         traceability_db_path = self._get_traceability_db_path(submission)
         if traceability_db_path is None:
             return {"interfaces": [], "tests": []}
+        test_status_by_id = self._read_demo_test_statuses(submission)
 
         interfaces: list[dict] = []
         tests: list[dict] = []
@@ -73,6 +74,7 @@ class SubmissionArtifactService:
         connection.row_factory = sqlite3.Row
         try:
             cursor = connection.cursor()
+            self._ensure_traceability_schema(cursor)
             for row in cursor.execute("SELECT * FROM interfaces ORDER BY interface_id"):
                 req_ids = self._parse_json_list(row["req_ids"])
                 if node_id and node_id != "__all__" and node_id not in req_ids:
@@ -107,6 +109,7 @@ class SubmissionArtifactService:
                         "type": str(row["type"] or ""),
                         "file_path": str(row["file_path"] or ""),
                         "first_line": self._parse_positive_int(row["first_line"]),
+                        "status": self._normalize_demo_test_status(test_status_by_id.get(str(row["test_id"]))),
                     }
                 )
         finally:
@@ -208,6 +211,30 @@ class SubmissionArtifactService:
             return None
         template_root = workspace_path / "template"
         return template_root if template_root.is_dir() else None
+
+    def _read_demo_test_statuses(self, submission: Submission) -> dict[str, str]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return {}
+        status_path = workspace_path / "artifacts" / "demo-test-statuses.json"
+        if not status_path.is_file():
+            return {}
+        try:
+            payload = json.loads(status_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        tests = payload.get("tests")
+        if not isinstance(tests, dict):
+            return {}
+        normalized: dict[str, str] = {}
+        for test_id, raw_status in tests.items():
+            key = str(test_id).strip()
+            status = self._normalize_demo_test_status(raw_status)
+            if key and status:
+                normalized[key] = status
+        return normalized
 
     def _read_diff_source(self, submission: Submission, *, file_path: str, commit_oid: str | None) -> dict[str, str | int]:
         if not commit_oid or not commit_oid.strip():
@@ -397,3 +424,40 @@ class SubmissionArtifactService:
         except (TypeError, ValueError):
             return None
         return parsed if parsed > 0 else None
+
+    @staticmethod
+    def _normalize_demo_test_status(raw_value: object) -> str | None:
+        normalized = str(raw_value or "").strip().lower()
+        if normalized in {"passed", "failed"}:
+            return normalized
+        return None
+
+    @staticmethod
+    def _ensure_traceability_schema(cursor: sqlite3.Cursor) -> None:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS interfaces (
+                interface_id TEXT PRIMARY KEY,
+                req_ids TEXT,
+                type TEXT,
+                content TEXT,
+                file_path TEXT,
+                first_line TEXT,
+                implemented INTEGER,
+                callers TEXT,
+                callees TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tests (
+                test_id TEXT PRIMARY KEY,
+                req_id TEXT NOT NULL,
+                scenario_id TEXT,
+                type TEXT,
+                file_path TEXT,
+                first_line TEXT
+            )
+            """
+        )

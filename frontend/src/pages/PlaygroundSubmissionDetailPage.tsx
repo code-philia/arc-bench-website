@@ -394,7 +394,14 @@ function TraceabilityPanel({
                   <div className="traceability-card-id">{item.test_id}</div>
                   <div className="traceability-card-path">{item.file_path}:{formatLineNumber(item.first_line)}</div>
                 </div>
-                <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
+                <div className="traceability-chip-row">
+                  <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
+                  {item.status ? (
+                    <span className={`traceability-chip ${item.status === "passed" ? "implemented" : "failed-status"}`}>
+                      {item.status === "passed" ? "Passed" : "Failed"}
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <div className="traceability-meta-grid">
                 <div>
@@ -1255,7 +1262,6 @@ export default function PlaygroundSubmissionDetailPage() {
       setFocusNodeId(newest.node_id);
       setPulseNodeId(newest.node_id);
     } else {
-      setActiveTab("canvas");
       setSelectedNodeId(newest.node_id);
       setDetailExpanded(true);
       setFocusNodeId(newest.node_id);
@@ -1445,9 +1451,33 @@ export default function PlaygroundSubmissionDetailPage() {
     setSubmission(await api.pauseSubmission(submissionId));
   };
 
+  const persistEditableTask = async () => {
+    if (!submissionId || !editableTree || !editableTask) {
+      return null;
+    }
+    const requirementsYaml = taskTreeToYaml(editableTree);
+    const requirementsMd = taskTreeToMarkdown(editableTree);
+    await api.updateSubmissionEditableTask(submissionId, {
+      requirements_md: requirementsMd,
+      requirements_yaml: requirementsYaml,
+      prerequisites_md: editableTask.prerequisites_md,
+    });
+    editableTreeDirtyRef.current = false;
+    setEditableTask((current) => current ? { ...current, requirements_md: requirementsMd, requirements_yaml: requirementsYaml } : current);
+    return { requirementsYaml, requirementsMd };
+  };
+
   const handleResume = async () => {
     if (!submissionId) {
       return;
+    }
+    if (submission?.status === "PAUSED" && editableTreeDirtyRef.current) {
+      setSavingEditableTask(true);
+      try {
+        await persistEditableTask();
+      } finally {
+        setSavingEditableTask(false);
+      }
     }
     const nextSubmission = await api.resumeSubmission(submissionId);
     setSubmission(nextSubmission);
@@ -1503,19 +1533,11 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     setSavingEditableTask(true);
     try {
-      const requirementsYaml = taskTreeToYaml(editableTree);
-      const requirementsMd = taskTreeToMarkdown(editableTree);
-      await api.updateSubmissionEditableTask(submissionId, {
-        requirements_md: requirementsMd,
-        requirements_yaml: requirementsYaml,
-        prerequisites_md: editableTask.prerequisites_md,
-      });
+      await persistEditableTask();
       const [nextTraceability, nextAllTraceability] = await Promise.all([
         activeSelectedNodeId ? api.getSubmissionTraceability(submissionId, activeSelectedNodeId).catch(() => null) : Promise.resolve(null),
         api.getSubmissionAllTraceability(submissionId).catch(() => null),
       ]);
-      editableTreeDirtyRef.current = false;
-      setEditableTask((current) => current ? { ...current, requirements_md: requirementsMd, requirements_yaml: requirementsYaml } : current);
       if (nextTraceability) {
         setTraceability(nextTraceability);
         setTraceabilityError(null);

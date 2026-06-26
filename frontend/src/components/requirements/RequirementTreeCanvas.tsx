@@ -66,6 +66,7 @@ type FlowNodeData = {
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
   type?: RequirementNode["type"];
   itemType?: string;
+  testStatus?: "passed" | "failed" | null;
   dimmed?: boolean;
   selected: boolean;
   visualState: RequirementVisualState;
@@ -198,7 +199,7 @@ function formatInterfaceMeta(item: SubmissionTraceabilityInterface): string {
 }
 
 function formatTestMeta(item: SubmissionTraceabilityTest): string {
-  return item.type;
+  return item.status ? `${item.type} · ${item.status === "passed" ? "Passed" : "Failed"}` : item.type;
 }
 
 function estimateWrappedLineCount(text: string, approxCharsPerLine: number): number {
@@ -388,6 +389,7 @@ function buildFlowFromTree(
       }
       return null;
     })();
+    const hasExplicitRequirementSelection = Boolean(selectedNodeId);
     const focusedRequirementId = selectedNodeId ?? selectedTraceabilityRequirementId ?? null;
     const focusedRequirementInterfaces = focusedRequirementId
       ? layoutData.interfaces.filter((item) => resolveInterfaceEntryReqId(item, requirementNodeMap) === focusedRequirementId)
@@ -489,7 +491,9 @@ function buildFlowFromTree(
                 filePath: item.file_path,
                 firstLine: item.first_line,
                 itemType: item.type,
-                dimmed: Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "interface" && selectedTraceabilityId !== item.interface_id),
+                dimmed: hasExplicitRequirementSelection
+                  ? Boolean(focusedRequirementId) && !isFocusedRequirement
+                  : Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "interface" && selectedTraceabilityId !== item.interface_id),
                 onMeasuredHeightChange,
                 selected: selectedTraceabilityKind === "interface" && selectedTraceabilityId === item.interface_id,
                 visualState: "default",
@@ -561,7 +565,10 @@ function buildFlowFromTree(
                 filePath: item.file_path,
                 firstLine: item.first_line,
                 itemType: item.type,
-                dimmed: Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "test" && selectedTraceabilityId !== item.test_id),
+                testStatus: item.status,
+                dimmed: hasExplicitRequirementSelection
+                  ? Boolean(focusedRequirementId) && !isFocusedRequirement
+                  : Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "test" && selectedTraceabilityId !== item.test_id),
                 onMeasuredHeightChange,
                 selected: selectedTraceabilityKind === "test" && selectedTraceabilityId === item.test_id,
                 visualState: "default",
@@ -777,10 +784,11 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
   const itemTypeKey = (data.itemType || "").toLowerCase();
   const typeColor = TRACEABILITY_TYPE_COLORS[itemTypeKey];
   const typeClassName = typeColor ? `task-flow-traceability-node--type-${itemTypeKey}` : "";
+  const testStatusClassName = data.kind === "test" && data.testStatus ? `task-flow-traceability-node--status-${data.testStatus}` : "";
   return (
     <div
       ref={sideNodeRef}
-      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind} ${typeClassName} ${data.selected ? "selected" : ""}`}
+      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind} ${typeClassName} ${testStatusClassName} ${data.selected ? "selected" : ""}`}
       style={{
         borderLeftColor: typeColor,
         borderLeftWidth: typeColor ? "4px" : undefined,

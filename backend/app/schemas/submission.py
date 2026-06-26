@@ -106,6 +106,7 @@ class SubmissionTraceabilityTest(BaseModel):
     type: str
     file_path: str
     first_line: int | None = None
+    status: str | None = None
 
 
 class SubmissionTraceabilityPayload(BaseModel):

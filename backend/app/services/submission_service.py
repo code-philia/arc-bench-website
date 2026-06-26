@@ -23,6 +23,7 @@ from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
+from app.services.workspace_assembler import WorkspaceAssembler
 
 
 DEFAULT_STEPS = [
@@ -201,11 +202,13 @@ class SubmissionService:
             raise FileNotFoundError("Submission workspace is not available")
         traceability_db_path = workspace_path / "artifacts" / "traceability.db"
         traceability_seed_path = workspace_path / "artifacts" / "traceability-seed.json"
+        demo_test_status_path = workspace_path / "artifacts" / "demo-test-statuses.json"
         from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
         seed_builder = TraceabilitySeedBuilder()
         seed_builder.write_sqlite_database_from_yaml_text(traceability_db_path, requirements_yaml)
         seed_builder.write_seed_file_from_yaml_text(traceability_seed_path, requirements_yaml)
+        WorkspaceAssembler()._write_demo_test_status_seed(demo_test_status_path)  # noqa: SLF001
 
     def get_submission_task_asset_path(self, submission: Submission, asset_kind: str, asset_path: str) -> Path:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)

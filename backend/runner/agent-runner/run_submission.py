@@ -73,7 +73,23 @@ def append_runner_state(state: str, message: str) -> None:
         output.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
 
+def reset_traceability_storage() -> None:
+    for path in (
+        TRACEABILITY_DB_PATH,
+        TRACEABILITY_DB_PATH.with_suffix(".db-wal"),
+        TRACEABILITY_DB_PATH.with_suffix(".db-shm"),
+        ARTIFACTS_DIR / "traceability.db-wal",
+        ARTIFACTS_DIR / "traceability.db-shm",
+    ):
+        try:
+            path.unlink()
+            append_debug_log(f"Removed stale traceability artifact: {path}")
+        except FileNotFoundError:
+            continue
+
+
 def initialize_traceability_db() -> None:
+    reset_traceability_storage()
     append_debug_log(f"Initializing traceability database at {TRACEABILITY_DB_PATH}")
     connection = sqlite3.connect(TRACEABILITY_DB_PATH)
     try:

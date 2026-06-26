@@ -92,6 +92,37 @@ class TraceabilitySeedBuilder:
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS interfaces (
+                    interface_id TEXT PRIMARY KEY,
+                    req_ids TEXT,
+                    type TEXT,
+                    content TEXT,
+                    file_path TEXT,
+                    first_line TEXT,
+                    implemented INTEGER,
+                    callers TEXT,
+                    callees TEXT
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tests (
+                    test_id TEXT PRIMARY KEY,
+                    req_id TEXT NOT NULL,
+                    scenario_id TEXT,
+                    type TEXT,
+                    file_path TEXT,
+                    first_line TEXT,
+                    FOREIGN KEY(req_id) REFERENCES requirements(req_id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY(scenario_id) REFERENCES scenarios(scenario_id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
             cursor.execute("DELETE FROM scenarios")
             cursor.execute("DELETE FROM requirements")
             cursor.executemany(

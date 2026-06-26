@@ -114,6 +114,7 @@ export type SubmissionTraceabilityTest = {
   type: string;
   file_path: string;
   first_line: number | null;
+  status: "passed" | "failed" | null;
 };
 
 export type SubmissionTraceabilityPayload = {
