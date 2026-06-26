@@ -60,6 +60,7 @@ type FlowNodeData = {
   title: string;
   subtitle?: string;
   requirementNodeId?: string;
+  traceabilityId?: string;
   filePath?: string;
   firstLine?: number | null;
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
@@ -108,6 +109,8 @@ type RequirementTreeCanvasProps = {
   showInterfaces?: boolean;
   showTests?: boolean;
   allTraceability?: SubmissionTraceabilityPayload | null;
+  selectedTraceabilityId?: string | null;
+  selectedTraceabilityKind?: "interface" | "test" | null;
   onTraceabilityNodeClick?: (payload: {
     kind: "interface" | "test";
     id: string;
@@ -143,6 +146,9 @@ const DEPENDENCY_EDGE_DASHARRAY = "6 5";
 const INTERFACE_RELATION_EDGE_COLOR = "#8b5cf6";
 const INTERFACE_RELATION_EDGE_STROKE_WIDTH = 1.5;
 const INTERFACE_RELATION_EDGE_DASHARRAY = "6 5";
+const TRACEABILITY_EDGE_COLOR = "#7c8ca2";
+const TRACEABILITY_EDGE_STROKE_WIDTH = 1.35;
+const TRACEABILITY_EDGE_DASHARRAY = "7 5";
 const DEPENDENCY_EDGE_CONTROL_OFFSET = 56;
 const DEPENDENCY_ARROW_SIZE = 7;
 
@@ -226,9 +232,41 @@ function measureTraceabilityNodeHeight(element: HTMLDivElement): number | null {
   return null;
 }
 
+function normalizeInterfaceType(value: string): "UI" | "API" | "FUNC" | "DB" {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "UI" || normalized === "API" || normalized === "FUNC" || normalized === "DB") {
+    return normalized;
+  }
+  return "FUNC";
+}
+
+function normalizeTestType(value: string): "Unit" | "Integration" | "E2E" {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "unit") return "Unit";
+  if (normalized === "integration") return "Integration";
+  if (normalized === "e2e") return "E2E";
+  return "Unit";
+}
+
+function resolveInterfaceEntryReqId(
+  item: SubmissionTraceabilityInterface,
+  requirementNodeMap: Map<string, unknown>,
+): string | null {
+  const firstMatchingReqId = item.req_ids.find((reqId) => requirementNodeMap.has(reqId));
+  return firstMatchingReqId ?? null;
+}
+
+function pickTopLevelInterfaceType(interfaces: SubmissionTraceabilityInterface[]): "UI" | "API" | "FUNC" | "DB" | null {
+  const priority: Array<"UI" | "API" | "FUNC" | "DB"> = ["UI", "API", "FUNC", "DB"];
+  const availableTypes = new Set(interfaces.map((item) => normalizeInterfaceType(item.type)));
+  return priority.find((type) => availableTypes.has(type)) ?? null;
+}
+
 function buildFlowFromTree(
   tree: RequirementNode,
   selectedNodeId: string | null,
+  selectedTraceabilityId: string | null,
+  selectedTraceabilityKind: "interface" | "test" | null,
   nodeStates: Record<string, RequirementVisualState>,
   pulseNodeId: string | null,
   editable: boolean,
@@ -294,6 +332,7 @@ function buildFlowFromTree(
   });
   const nodes: Node<FlowNodeData>[] = positionedNodes.map((positioned) => {
     const node = positioned.data;
+    const requirementSelected = selectedNodeId === node.id;
     return {
       id: node.id,
       type: "requirementNode",
@@ -308,7 +347,7 @@ function buildFlowFromTree(
         label: node.id,
         title: node.name,
         type: node.type,
-        selected: selectedNodeId === node.id,
+        selected: requirementSelected,
         visualState: nodeStates[node.id] ?? "default",
         pulse: pulseNodeId === node.id,
         dependencySourcesVisible: editable && dependencySourcesVisible,
@@ -337,13 +376,30 @@ function buildFlowFromTree(
     const interfacesByReqId = new Map<string, typeof layoutData.interfaces>();
     const testsByReqId = new Map<string, typeof layoutData.tests>();
     const interfaceNodeIdByInterfaceId = new Map<string, string>();
+    const interfaceById = new Map<string, SubmissionTraceabilityInterface>();
+    const selectedTraceabilityRequirementId = (() => {
+      if (selectedTraceabilityKind === "interface" && selectedTraceabilityId) {
+        const item = layoutData.interfaces.find((entry) => entry.interface_id === selectedTraceabilityId);
+        return item ? resolveInterfaceEntryReqId(item, requirementNodeMap) : null;
+      }
+      if (selectedTraceabilityKind === "test" && selectedTraceabilityId) {
+        const item = layoutData.tests.find((entry) => entry.test_id === selectedTraceabilityId);
+        return item?.req_id ?? null;
+      }
+      return null;
+    })();
+    const focusedRequirementId = selectedNodeId ?? selectedTraceabilityRequirementId ?? null;
+    const focusedRequirementInterfaces = focusedRequirementId
+      ? layoutData.interfaces.filter((item) => resolveInterfaceEntryReqId(item, requirementNodeMap) === focusedRequirementId)
+      : [];
+    const topLevelInterfaceType = focusedRequirementId ? pickTopLevelInterfaceType(focusedRequirementInterfaces) : null;
     layoutData.interfaces.forEach((item) => {
-      item.req_ids.forEach((reqId) => {
-        if (!requirementNodeMap.has(reqId)) return;
-        const list = interfacesByReqId.get(reqId) ?? [];
-        list.push(item);
-        interfacesByReqId.set(reqId, list);
-      });
+      const reqId = resolveInterfaceEntryReqId(item, requirementNodeMap);
+      if (!reqId) return;
+      interfaceById.set(item.interface_id, item);
+      const list = interfacesByReqId.get(reqId) ?? [];
+      list.push(item);
+      interfacesByReqId.set(reqId, list);
     });
     layoutData.tests.forEach((item) => {
       if (!requirementNodeMap.has(item.req_id)) return;
@@ -385,15 +441,16 @@ function buildFlowFromTree(
       if (!anchorPn) continue;
       const anchorY = FLOW_MARGIN_Y + (anchorPn.x - minX) - NODE_HEIGHT / 2;
       const anchorCenterY = anchorY + NODE_HEIGHT / 2;
-      const isDimmed = traceabilityEnabled && selectedNodeId !== null && anchorNodeId !== selectedNodeId;
-      const shouldRender = traceabilityEnabled || anchorNodeId === selectedNodeId;
+      const shouldRender = traceabilityEnabled || anchorNodeId === focusedRequirementId;
+      const isFocusedRequirement = anchorNodeId === focusedRequirementId;
+      const isDimmed = Boolean(focusedRequirementId) && !isFocusedRequirement;
       const directInterfaces = interfacesByReqId.get(anchorNodeId) ?? [];
       const nodeInterfaces = showInterfaces || !traceabilityEnabled ? directInterfaces : [];
       const nodeTests = showTests || !traceabilityEnabled ? (testsByReqId.get(anchorNodeId) ?? []) : [];
       const interfacesByType: Record<string, typeof nodeInterfaces> = {};
       INTERFACE_TYPES.forEach((t) => { interfacesByType[t] = []; });
       nodeInterfaces.forEach((item) => {
-        const t = INTERFACE_TYPES.includes(item.type) ? item.type : "FUNC";
+        const t = normalizeInterfaceType(item.type);
         interfacesByType[t].push(item);
       });
       for (const ifaceType of INTERFACE_TYPES) {
@@ -428,12 +485,13 @@ function buildFlowFromTree(
                 title: fileBasename(item.file_path),
                 subtitle,
                 requirementNodeId: anchorNodeId,
+                traceabilityId: item.interface_id,
                 filePath: item.file_path,
                 firstLine: item.first_line,
                 itemType: item.type,
-                dimmed: isDimmed,
+                dimmed: Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "interface" && selectedTraceabilityId !== item.interface_id),
                 onMeasuredHeightChange,
-                selected: false,
+                selected: selectedTraceabilityKind === "interface" && selectedTraceabilityId === item.interface_id,
                 visualState: "default",
                 pulse: false,
                 dependencySourcesVisible: false,
@@ -443,7 +501,7 @@ function buildFlowFromTree(
               selectable: false,
               zIndex: 4,
             });
-            if (ifaceType === "UI") {
+            if (isFocusedRequirement && topLevelInterfaceType === ifaceType) {
               structureEdges.push({
                 id: `traceability-link:${anchorNodeId}:${nodeId}`,
                 source: anchorNodeId,
@@ -452,7 +510,11 @@ function buildFlowFromTree(
                 targetHandle: "traceability-target",
                 type: "traceabilityEdge",
                 animated: false,
-                zIndex: 1,
+                zIndex: 3,
+                style: {
+                  stroke: TRACEABILITY_EDGE_COLOR,
+                  strokeWidth: 1.55,
+                },
               });
             }
           });
@@ -461,7 +523,7 @@ function buildFlowFromTree(
       const testsByType: Record<string, typeof nodeTests> = {};
       TEST_TYPES.forEach((t) => { testsByType[t] = []; });
       nodeTests.forEach((item) => {
-        const t = TEST_TYPES.includes(item.type) ? item.type : "Unit";
+        const t = normalizeTestType(item.type);
         testsByType[t].push(item);
       });
       for (const testType of TEST_TYPES) {
@@ -495,12 +557,13 @@ function buildFlowFromTree(
                 title: fileBasename(item.file_path),
                 subtitle,
                 requirementNodeId: anchorNodeId,
+                traceabilityId: item.test_id,
                 filePath: item.file_path,
                 firstLine: item.first_line,
                 itemType: item.type,
-                dimmed: isDimmed,
+                dimmed: Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "test" && selectedTraceabilityId !== item.test_id),
                 onMeasuredHeightChange,
-                selected: false,
+                selected: selectedTraceabilityKind === "test" && selectedTraceabilityId === item.test_id,
                 visualState: "default",
                 pulse: false,
                 dependencySourcesVisible: false,
@@ -510,39 +573,51 @@ function buildFlowFromTree(
               selectable: false,
               zIndex: 4,
             });
-            structureEdges.push({
-              id: `traceability-link:${anchorNodeId}:${nodeId}`,
-              source: anchorNodeId,
-              target: nodeId,
-              sourceHandle: "traceability-source",
-              targetHandle: "traceability-target",
-              type: "traceabilityEdge",
-              animated: false,
-              zIndex: 1,
-            });
+            if (isFocusedRequirement) {
+              structureEdges.push({
+                id: `traceability-link:${anchorNodeId}:${nodeId}`,
+                source: anchorNodeId,
+                target: nodeId,
+                sourceHandle: "traceability-source",
+                targetHandle: "traceability-target",
+                type: "traceabilityEdge",
+                animated: false,
+                zIndex: 3,
+                style: {
+                  stroke: TRACEABILITY_EDGE_COLOR,
+                  strokeWidth: TRACEABILITY_EDGE_STROKE_WIDTH,
+                  strokeDasharray: TRACEABILITY_EDGE_DASHARRAY,
+                },
+              });
+            }
           });
         }
       }
     }
     const relationEdgeIds = new Set<string>();
-    layoutData.interfaces.forEach((item) => {
+    focusedRequirementInterfaces.forEach((item) => {
       const sourceNodeId = interfaceNodeIdByInterfaceId.get(item.interface_id);
       if (!sourceNodeId) return;
-      item.callees.forEach((calleeId) => {
-        const targetNodeId = interfaceNodeIdByInterfaceId.get(calleeId);
-        if (!targetNodeId || targetNodeId === sourceNodeId) return;
-        const edgeId = `traceability-interface-relation:${item.interface_id}->${calleeId}`;
+      item.callers.forEach((callerId) => {
+        const callerItem = interfaceById.get(callerId);
+        if (!callerItem || resolveInterfaceEntryReqId(callerItem, requirementNodeMap) !== focusedRequirementId) {
+          return;
+        }
+        const targetNodeId = sourceNodeId;
+        const sourceRelationNodeId = interfaceNodeIdByInterfaceId.get(callerId);
+        if (!sourceRelationNodeId || !targetNodeId || targetNodeId === sourceRelationNodeId) return;
+        const edgeId = `traceability-interface-relation:${callerId}->${item.interface_id}`;
         if (relationEdgeIds.has(edgeId)) return;
         relationEdgeIds.add(edgeId);
         structureEdges.push({
           id: edgeId,
-          source: sourceNodeId,
+          source: sourceRelationNodeId,
           target: targetNodeId,
           sourceHandle: "interface-relation-source",
           targetHandle: "interface-relation-target",
           type: "interfaceRelationEdge",
           animated: false,
-          zIndex: 2,
+          zIndex: 4,
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: INTERFACE_RELATION_EDGE_COLOR },
           style: { stroke: INTERFACE_RELATION_EDGE_COLOR, strokeWidth: INTERFACE_RELATION_EDGE_STROKE_WIDTH, strokeDasharray: INTERFACE_RELATION_EDGE_DASHARRAY },
         });
@@ -705,7 +780,7 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
   return (
     <div
       ref={sideNodeRef}
-      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind} ${typeClassName}`}
+      className={`task-flow-card task-flow-traceability-node task-flow-traceability-node--${data.kind} ${typeClassName} ${data.selected ? "selected" : ""}`}
       style={{
         borderLeftColor: typeColor,
         borderLeftWidth: typeColor ? "4px" : undefined,
@@ -763,7 +838,7 @@ function TraceabilityFlowNode({ id, data }: NodeProps<Node<FlowNodeData>>) {
 function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
   return (
     <div
-      className={`task-flow-card task-flow-requirement-node ${data.selected ? "active" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
+      className={`task-flow-card task-flow-requirement-node ${data.selected ? "active" : ""} ${data.dimmed ? "dimmed" : ""} ${data.type === "ATOMIC" ? "atomic" : ""} visual-${data.visualState} ${data.pulse ? "pulse" : ""}`}
     >
       {data.dependencyTargetsVisible ? <span className="task-flow-handle-visual dependency-target" aria-hidden="true" /> : null}
       <Handle
@@ -823,6 +898,8 @@ function RequirementStateLegend() {
 function TreeCanvasInner({
   tree,
   selectedNodeId,
+  selectedTraceabilityId = null,
+  selectedTraceabilityKind = null,
   onSelectNode,
   detailExpanded,
   onDetailExpandedChange,
@@ -895,6 +972,8 @@ function TreeCanvasInner({
     () => buildFlowFromTree(
       tree,
       selectedNodeId,
+      selectedTraceabilityId,
+      selectedTraceabilityKind,
       nodeStates,
       pulseNodeId,
       mode === "editable",
@@ -915,6 +994,8 @@ function TreeCanvasInner({
       mode,
       nodeStates,
       pulseNodeId,
+      selectedTraceabilityId,
+      selectedTraceabilityKind,
       selectedNodeId,
       showDependencies,
       traceabilityNodes,
@@ -976,6 +1057,7 @@ function TreeCanvasInner({
             currentData?.title === incomingData?.title &&
             currentData?.type === incomingData?.type &&
             currentData?.selected === incomingData?.selected &&
+            currentData?.traceabilityId === incomingData?.traceabilityId &&
             currentData?.visualState === incomingData?.visualState &&
             currentData?.pulse === incomingData?.pulse &&
             currentData?.dimmed === incomingData?.dimmed &&

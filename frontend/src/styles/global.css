@@ -4026,23 +4026,27 @@ button {
 }
 
 .ide-sidebar-toggle {
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-dim);
-  font-size: 0.8rem;
-  font-weight: 800;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition), transform var(--transition);
 }
 
 .ide-sidebar-toggle:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
   color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+
+.ide-sidebar-toggle:active {
+  transform: translateY(1px);
 }
 
 .ide-file-list {
@@ -6125,6 +6129,10 @@ button {
   z-index: 5;
 }
 
+.task-flow-requirement-node.dimmed {
+  opacity: 0.28;
+}
+
 .task-flow-requirement-node.atomic {
   --task-flow-node-accent: rgba(182, 149, 52, 0.34);
 }
@@ -6169,6 +6177,10 @@ button {
 .task-flow-traceability-node:hover {
   transform: none;
   box-shadow: 0 8px 18px rgba(15, 23, 32, 0.08);
+}
+
+.task-flow-traceability-node.selected {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.26), 0 12px 24px rgba(15, 23, 32, 0.12);
 }
 
 .task-flow-traceability-head {

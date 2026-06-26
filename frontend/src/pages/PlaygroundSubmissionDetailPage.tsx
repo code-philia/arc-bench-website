@@ -100,6 +100,24 @@ function formatCommitDateTime(value: string) {
   return new Date(value).toLocaleString();
 }
 
+function PanelChevronIcon({
+  direction,
+  size = 16,
+}: {
+  direction: "left" | "right";
+  size?: number;
+}) {
+  const transform = direction === "right" ? "translate(24 0) scale(-1 1)" : undefined;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <g transform={transform}>
+        <path d="M11 19L3 12L11 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M21 19L13 12L21 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  );
+}
+
 function isSubmissionLive(status: string | null | undefined) {
   return status ? ["PENDING", "RUNNING", "PAUSE_REQUESTED", "PAUSED"].includes(status) : false;
 }
@@ -459,7 +477,7 @@ function SubmissionFilePanel({
                 aria-label="Collapse workspace"
                 title="Collapse workspace"
               >
-                <span aria-hidden="true">&lt;</span>
+                <PanelChevronIcon direction="left" size={14} />
               </button>
             </div>
             <div className="ide-file-list">
@@ -493,10 +511,7 @@ function SubmissionFilePanel({
             aria-label="Expand workspace"
             title="Expand workspace"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <PanelChevronIcon direction="right" size={20} />
           </button>
         )}
 
@@ -556,7 +571,7 @@ function SubmissionFilePanel({
               aria-label="Collapse workspace"
               title="Collapse workspace"
             >
-              <span aria-hidden="true">&lt;</span>
+              <PanelChevronIcon direction="left" size={14} />
             </button>
           </div>
           <div className="ide-file-list">
@@ -574,10 +589,7 @@ function SubmissionFilePanel({
           aria-label="Expand workspace"
           title="Expand workspace"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <PanelChevronIcon direction="right" size={20} />
         </button>
       )}
 
@@ -1675,11 +1687,10 @@ export default function PlaygroundSubmissionDetailPage() {
                       color: "#64748b",
                       flexShrink: 0,
                     }}
+                    aria-label="Collapse left sidebar"
+                    title="Collapse left sidebar"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <path d="M11 19L3 12L11 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M21 19L13 12L21 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <PanelChevronIcon direction="left" size={14} />
                   </button>
                 </div>
               </div>
@@ -1767,11 +1778,10 @@ export default function PlaygroundSubmissionDetailPage() {
                 color: "var(--text-dim)",
                 cursor: "pointer",
               }}
+              aria-label="Expand left sidebar"
+              title="Expand left sidebar"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <PanelChevronIcon direction="right" size={20} />
             </button>
           )}
         </section>
@@ -1880,6 +1890,8 @@ export default function PlaygroundSubmissionDetailPage() {
                   autoFitOnTreeChange={false}
                   traceabilityNodes={visibleTraceability}
                   allTraceability={allTraceability}
+                  selectedTraceabilityId={selectedTraceabilityId}
+                  selectedTraceabilityKind={selectedTraceabilityKind}
                   onTraceabilityNodeClick={({ kind, id, requirementNodeId }) => {
                     const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
                     if (targetNodeId) {
@@ -2060,11 +2072,10 @@ export default function PlaygroundSubmissionDetailPage() {
                     type="button"
                     className="preview-panel-collapse"
                     onClick={() => setPreviewMinimized(true)}
+                    aria-label="Collapse preview panel"
+                    title="Collapse preview panel"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ transform: "scaleX(-1)" }}>
-                      <path d="M11 19L3 12L11 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M21 19L13 12L21 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <PanelChevronIcon direction="right" size={14} />
                   </button>
                 </div>
               </>
@@ -2073,11 +2084,10 @@ export default function PlaygroundSubmissionDetailPage() {
                 type="button"
                 onClick={() => setPreviewMinimized(false)}
                 className="submission-panel-minimized-toggle"
+                aria-label="Expand preview panel"
+                title="Expand preview panel"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ transform: "scaleX(-1)" }}>
-                  <path d="M13 5L21 12L13 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M3 5L11 12L3 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <PanelChevronIcon direction="left" size={20} />
               </button>
             )}
           </div>
