@@ -420,7 +420,7 @@ export function requirementMarkdownToTree(markdown: string): RequirementNode {
   nodeMap.set(root.id, root);
 
   type Section = {
-    level: 2 | 3;
+    level: number;
     id: string;
     name: string;
     body: string[];
@@ -433,13 +433,13 @@ export function requirementMarkdownToTree(markdown: string): RequirementNode {
     if (line.startsWith("# ")) {
       continue;
     }
-    const sectionMatch = /^(##|###)\s+(REQ-[^\s]+)\s+(.+)$/.exec(line.trim());
+    const sectionMatch = /^(#{2,6})\s+(REQ-[^\s]+)\s+(.+)$/.exec(line.trim());
     if (sectionMatch) {
       if (currentSection) {
         sections.push(currentSection);
       }
       currentSection = {
-        level: sectionMatch[1].length as 2 | 3,
+        level: sectionMatch[1].length,
         id: sectionMatch[2].trim(),
         name: sectionMatch[3].trim(),
         body: [],
@@ -551,8 +551,8 @@ type MarkdownSection = {
   body: string[];
 };
 
-function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[]) {
-  const title = `## ${node.id} ${node.name}`;
+function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[], depth: number) {
+  const title = `${"#".repeat(Math.min(depth + 2, 6))} ${node.id} ${node.name}`;
   const body: string[] = [];
 
   if (node.description) {
@@ -578,7 +578,7 @@ function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[
   }
 
   sections.push({ heading: title, body });
-  node.children.forEach((child) => buildMarkdownSections(child, sections));
+  node.children.forEach((child) => buildMarkdownSections(child, sections, depth + 1));
 }
 
 function flattenChapterList(nodes: RequirementNode[], depth: number): string[] {
@@ -590,7 +590,7 @@ function flattenChapterList(nodes: RequirementNode[], depth: number): string[] {
 
 export function taskTreeToMarkdown(root: RequirementNode): string {
   const sections: MarkdownSection[] = [];
-  buildMarkdownSections(root, sections);
+  root.children.forEach((child) => buildMarkdownSections(child, sections, 0));
 
   const intro = [
     `# ${root.name}`,
