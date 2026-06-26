@@ -1,0 +1,92 @@
+id: ROOT
+name: Open Money Tracker
+type: FOLDER
+description: An app for recording categorized income and expense transactions and showing the resulting balance in the total amount view.
+dependencies: []
+children:
+- id: REQ-1
+  name: Add And Categorize Income
+  type: FOLDER
+  description: The app shall allow users to open the income entry flow and save an income transaction with an amount and category.
+  dependencies: []
+  children:
+  - id: REQ-1.1
+    name: Open Income Entry Form
+    type: ATOMIC
+    description: The app shall allow users to open the income transaction form from the main screen.
+    dependencies: []
+    scenarios:
+    - name: Open The Income Entry Screen
+      steps:
+      - keyword: GIVEN
+        content: The Open Money Tracker app is open.
+      - keyword: WHEN
+        content: The user taps the "Add Income" button with resource-id "com.blogspot.e_kanivets.moneytracker:id/btnAddIncome".
+      - keyword: THEN
+        content: The income entry screen opens with the amount field "com.blogspot.e.kanivets.moneytracker:id/etPrice" and the category field "com.blogspot.e_kanivets.moneytracker:id/etCategory" available.
+  - id: REQ-1.2
+    name: Save Income Transaction
+    type: ATOMIC
+    description: The app shall allow users to enter an income amount and category and save the transaction.
+    dependencies:
+    - REQ-1.1
+    scenarios:
+    - name: Save An Income Entry For Salary
+      steps:
+      - keyword: GIVEN
+        content: The income entry screen is open.
+      - keyword: WHEN
+        content: The user enters "123" into "com.blogspot.e.kanivets.moneytracker:id/etPrice", enters "salary" into "com.blogspot.e_kanivets.moneytracker:id/etCategory", and taps the done action "com.blogspot.e_kanivets.moneytracker:id/fabDone".
+      - keyword: THEN
+        content: The transaction is saved and the total amount view "com.blogspot.e_kanivets.moneytracker:id/tvTotal" shows "+ 123 NON".
+- id: REQ-2
+  name: Add And Categorize Expenses
+  type: FOLDER
+  description: The app shall allow users to open the expense entry flow and save an expense transaction with an amount and category.
+  dependencies: []
+  children:
+  - id: REQ-2.1
+    name: Open Expense Entry Form
+    type: ATOMIC
+    description: The app shall allow users to open the expense transaction form from the main screen.
+    dependencies: []
+    scenarios:
+    - name: Open The Expense Entry Screen
+      steps:
+      - keyword: GIVEN
+        content: The Open Money Tracker app is open.
+      - keyword: WHEN
+        content: The user taps the "Add Expense" button with resource-id "com.blogspot.e_kanivets.moneytracker:id/btnAddExpense".
+      - keyword: THEN
+        content: The expense entry screen opens with amount and category inputs available for editing.
+  - id: REQ-2.2
+    name: Save Expense Transaction
+    type: ATOMIC
+    description: The app shall allow users to enter an expense amount and category and save the transaction.
+    dependencies:
+    - REQ-2.1
+    scenarios:
+    - name: Save An Expense Entry For Food
+      steps:
+      - keyword: GIVEN
+        content: An income entry of "123" already exists and the expense entry screen is open.
+      - keyword: WHEN
+        content: The user enters "200" into the price field, enters "food" into the category field, and taps the done action "com.blogspot.e_kanivets.moneytracker:id/fabDone".
+      - keyword: THEN
+        content: The transaction is saved and the total amount view "com.blogspot.e_kanivets.moneytracker:id/tvTotal" shows "- 77 NON".
+- id: REQ-3
+  name: Display And Update Total Amount
+  type: ATOMIC
+  description: The app shall display a total amount that reflects the current net balance after income and expense transactions are recorded.
+  dependencies:
+  - REQ-1.2
+  - REQ-2.2
+  scenarios:
+  - name: Recalculate The Balance After Income And Expense Changes
+    steps:
+    - keyword: GIVEN
+      content: The main screen includes the total amount view "com.blogspot.e_kanivets.moneytracker:id/tvTotal".
+    - keyword: WHEN
+      content: The user saves an income entry of "123" and later saves an expense entry of "200".
+    - keyword: THEN
+      content: The total amount updates to "- 77 NON" to reflect the net balance.
