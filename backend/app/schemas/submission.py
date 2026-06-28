@@ -33,6 +33,7 @@ class SubmissionSummary(BaseModel):
     model_name: str | None
     requirement_id: str
     runtime: str
+    agent_source: str
     original_filename: str
     status: str
     score: float | None

@@ -58,6 +58,7 @@ export type SubmissionSummary = {
   model_name: string | null;
   requirement_id: string;
   runtime: string;
+  agent_source: "upload" | "builtin_arc_agent" | string;
   original_filename: string;
   status: string;
   score: number | null;

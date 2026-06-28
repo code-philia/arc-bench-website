@@ -221,25 +221,29 @@ export const api = {
       method: "POST",
     });
   },
-  async createSubmission(
-    requirementId: string,
-    runtime: string,
-    file: File,
-    displayName?: string,
-    modelName?: string,
-    catalog: "playground" | "competition" = "playground",
-  ) {
+  async createSubmission(payload: {
+    requirementId: string;
+    runtime: string;
+    agentSource?: "upload" | "builtin_arc_agent";
+    file?: File | null;
+    displayName?: string;
+    modelName?: string;
+    catalog?: "playground" | "competition";
+  }) {
     const form = new FormData();
-    form.append("requirement_id", requirementId);
-    form.append("runtime", runtime);
-    form.append("catalog", catalog);
-    if (displayName && displayName.trim()) {
-      form.append("display_name", displayName.trim());
+    form.append("requirement_id", payload.requirementId);
+    form.append("runtime", payload.runtime);
+    form.append("catalog", payload.catalog ?? "playground");
+    form.append("agent_source", payload.agentSource ?? "upload");
+    if (payload.displayName && payload.displayName.trim()) {
+      form.append("display_name", payload.displayName.trim());
     }
-    if (modelName && modelName.trim()) {
-      form.append("model_name", modelName.trim());
+    if (payload.modelName && payload.modelName.trim()) {
+      form.append("model_name", payload.modelName.trim());
     }
-    form.append("file", file);
+    if (payload.file) {
+      form.append("file", payload.file);
+    }
     return request<{ submission: SubmissionSummary }>("/submissions", {
       method: "POST",
       body: form,

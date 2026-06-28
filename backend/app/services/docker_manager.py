@@ -35,7 +35,8 @@ class DockerManager:
             if log_callback is not None:
                 log_callback(f"Building runner image: {self.settings.runner_image}")
             _, build_logs = self.client.images.build(
-                path=str(self.settings.runner_context_dir),
+                path=str(self.settings.runner_context_dir.parents[2]),
+                dockerfile=str(self.settings.runner_context_dir.relative_to(self.settings.runner_context_dir.parents[2]) / "Dockerfile"),
                 tag=self.settings.runner_image,
                 rm=True,
                 pull=False,
@@ -58,10 +59,14 @@ class DockerManager:
             raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
 
     def _is_image_stale(self, image) -> bool:
-        source_path = self.settings.runner_context_dir / "run_submission.py"
-        if not source_path.exists():
+        source_paths = [
+            self.settings.runner_context_dir / "run_submission.py",
+            self.settings.runner_context_dir / "Dockerfile",
+            self.settings.builtin_arc_agent_dist_dir / "arc_agent-0.1.0-py3-none-any.whl",
+        ]
+        if any(not path.exists() for path in source_paths):
             return False
-        source_mtime = source_path.stat().st_mtime
+        source_mtime = max(path.stat().st_mtime for path in source_paths)
         created_at = str(image.attrs.get("Created", ""))
         if not created_at:
             return False
@@ -77,6 +82,10 @@ class DockerManager:
 
     def create_container(self, submission_id: str, workspace_path: str | Path, log_callback=None):
         self.ensure_image(log_callback=log_callback)
+        builtin_openai_base_url = self.settings.builtin_openai_base_url or self.settings.builtin_openai_api_base_url or ""
+        builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
+        builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
+        builtin_visual_base_url = self.settings.builtin_visual_base_url or builtin_openai_base_url
         return self.client.containers.create(
             self.settings.runner_image,
             name=f"arcbench-{submission_id}",
@@ -85,6 +94,13 @@ class DockerManager:
                 "SUBMISSION_ID": submission_id,
                 "RUNNER_TIMEOUT_SECONDS": str(self.settings.runner_timeout_seconds),
                 "AGENT_HEALTH_TIMEOUT_SECONDS": str(self.settings.agent_health_timeout_seconds),
+                "OPENAI_API_KEY": builtin_openai_api_key,
+                "OPENAI_BASE_URL": builtin_openai_base_url,
+                "OPENAI_API_BASE_URL": builtin_openai_base_url,
+                "VISUAL_API_KEY": builtin_visual_api_key,
+                "VISUAL_BASE_URL": builtin_visual_base_url,
+                "VISUAL_MODEL": self.settings.builtin_visual_model or "",
+                "ARC_DEBUG": str(self.settings.builtin_debug_mode),
             },
             volumes={str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
             mem_limit=self.settings.runner_memory_limit,
@@ -131,10 +147,9 @@ class DockerManager:
 
     @staticmethod
     def kill_agent_process(container, *, signal_name: str = "TERM") -> tuple[int, str]:
-        # Target the generation agent (main.py) without touching run_submission.py.
-        # pkill matches the full command line; run_submission.py is invoked as
-        # "python3 /opt/arcbench/run_submission.py" so it is not matched by "main.py".
-        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py"])
+        # Target the user-uploaded main.py process or the built-in arc-agent CLI
+        # without touching run_submission.py itself.
+        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py|arc-agent"])
 
     @staticmethod
     def collect_result(workspace_path: str | Path) -> Path:

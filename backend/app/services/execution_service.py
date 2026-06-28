@@ -69,6 +69,8 @@ class ExecutionService:
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
+        agent_source = str(submission.agent_source or "upload").strip()
+        start_agent_description = "Running built-in arc-agent" if agent_source == "builtin_arc_agent" else "Running uploaded agent"
         stdout_path = workspace_path / "artifacts" / "stdout.log"
         stderr_path = workspace_path / "artifacts" / "stderr.log"
         result_path = workspace_path / "artifacts" / "result.json"
@@ -322,7 +324,7 @@ class ExecutionService:
             elif "start_agent" in event_step_keys:
                 completed_steps = {"deploy_agent"}
                 active_step_key = "start_agent"
-                description = "Running uploaded agent"
+                description = start_agent_description
             else:
                 completed_steps = set()
                 active_step_key = "deploy_agent"
@@ -412,10 +414,10 @@ class ExecutionService:
                 submission_service.build_step_states(
                     active_key="start_agent",
                     completed={"deploy_agent"},
-                    description="Running uploaded agent",
+                    description=start_agent_description,
                 ),
             )
-            emit_event("start_agent", "Running uploaded agent")
+            emit_event("start_agent", start_agent_description)
             debug_log.append("backend", f"Waiting for container to exit with timeout={self.settings.runner_timeout_seconds + 30}s")
             wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
             exit_result = None

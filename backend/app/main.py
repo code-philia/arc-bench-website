@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,11 +31,31 @@ app.include_router(submissions.router, prefix=settings.api_prefix)
 app.include_router(user_tasks.router, prefix=settings.api_prefix)
 
 
+def _ensure_submission_schema() -> None:
+    if not settings.database_url.startswith("sqlite:///"):
+        return
+    db_path = Path(settings.database_url.removeprefix("sqlite:///"))
+    if not db_path.exists():
+        return
+    connection = sqlite3.connect(db_path)
+    try:
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA table_info(submissions)")
+        columns = {str(row[1]) for row in cursor.fetchall() if len(row) > 1}
+        if "agent_source" not in columns:
+            cursor.execute("ALTER TABLE submissions ADD COLUMN agent_source TEXT NOT NULL DEFAULT 'upload'")
+            cursor.execute("CREATE INDEX IF NOT EXISTS ix_submissions_agent_source ON submissions (agent_source)")
+            connection.commit()
+    finally:
+        connection.close()
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     settings.user_submissions_root.mkdir(parents=True, exist_ok=True)
     settings.user_tasks_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    _ensure_submission_schema()
 
 
 @app.on_event("shutdown")

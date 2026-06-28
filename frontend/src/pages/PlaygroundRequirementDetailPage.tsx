@@ -171,23 +171,21 @@ export default function PlaygroundRequirementDetailPage() {
     try {
       setSubmitting(true);
       setUploadError(null);
-      const submissionFile = agentSource === "builtin"
-        ? await api.getDemoAgentFile()
-        : file;
-      if (!submissionFile) {
+      if (agentSource === "upload" && !file) {
         const errorMessage = "Agent package is required.";
         setUploadError(errorMessage);
         message.error(errorMessage);
         return;
       }
-      const created = await api.createSubmission(
-        requirement.id,
+      const created = await api.createSubmission({
+        requirementId: requirement.id,
         runtime,
-        submissionFile,
-        normalizedDisplayName,
-        normalizedModelName,
+        agentSource: agentSource === "builtin" ? "builtin_arc_agent" : "upload",
+        file,
+        displayName: normalizedDisplayName,
+        modelName: normalizedModelName,
         catalog,
-      );
+      });
       setSubmissions((current) => [created.submission, ...current]);
       const started = await api.startSubmission(created.submission.id);
       setActiveSubmission(started);

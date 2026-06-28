@@ -13,7 +13,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.enums import RuntimeType, SubmissionStatus
+from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
@@ -32,13 +32,13 @@ DEFAULT_STEPS = [
         key="deploy_agent",
         title="Deploy Agent",
         status="pending",
-        description="Pull runner container, prepare workspace, and install agent dependencies.",
+        description="Pull runner container, prepare workspace, and initialize the selected agent runtime.",
     ),
     StepState(
         key="start_agent",
         title="Run Agent",
         status="pending",
-        description="Execute the agent until it finishes the task and exits cleanly.",
+        description="Execute the selected agent until it finishes the task and exits cleanly.",
     ),
     StepState(
         key="run_tests",
@@ -66,14 +66,13 @@ class SubmissionService:
         self,
         requirement_id: str,
         runtime: RuntimeType,
-        upload: UploadFile,
         user_id: str,
+        upload: UploadFile | None = None,
+        agent_source: AgentSourceType = AgentSourceType.UPLOAD,
         catalog: str = "playground",
         display_name: str | None = None,
         model_name: str | None = None,
     ) -> Submission:
-        if not upload.filename or not upload.filename.lower().endswith(".zip"):
-            raise ValueError("Only .zip uploads are supported")
         if runtime != RuntimeType.PYTHON:
             raise ValueError("Only Python submissions are supported in v1")
 
@@ -90,13 +89,20 @@ class SubmissionService:
         submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
         submission_dir.mkdir(parents=True, exist_ok=True)
         archive_path = submission_dir / "agent.zip"
+        original_filename = "builtin:arc-agent"
 
-        with archive_path.open("wb") as output:
-            shutil.copyfileobj(upload.file, output)
-
-        self._validate_python_agent_archive(archive_path)
-        self.append_event_log_for_identity(submission_id, user_id, user.username, f"[ok] Uploaded archive saved to {archive_path.name}")
-        self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Archive validation passed")
+        if agent_source == AgentSourceType.UPLOAD:
+            if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
+                raise ValueError("Only .zip uploads are supported")
+            with archive_path.open("wb") as output:
+                shutil.copyfileobj(upload.file, output)
+            self._validate_python_agent_archive(archive_path)
+            original_filename = upload.filename
+            self.append_event_log_for_identity(submission_id, user_id, user.username, f"[ok] Uploaded archive saved to {archive_path.name}")
+            self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Archive validation passed")
+        else:
+            archive_path.write_text("builtin arc-agent\n", encoding="utf-8")
+            self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Built-in arc-agent submission requested")
 
         normalized_display_name = self._normalize_display_name(display_name)
         normalized_model_name = self._normalize_model_name(model_name)
@@ -108,7 +114,8 @@ class SubmissionService:
             model_name=normalized_model_name,
             requirement_id=requirement_id,
             runtime=runtime.value,
-            original_filename=upload.filename,
+            agent_source=agent_source.value,
+            original_filename=original_filename,
             archive_path=str(archive_path),
             status=SubmissionStatus.PENDING.value,
             steps_json=json.dumps([step.model_dump() for step in DEFAULT_STEPS]),
@@ -597,6 +604,7 @@ class SubmissionService:
             model_name=submission.model_name,
             requirement_id=submission.requirement_id,
             runtime=submission.runtime,
+            agent_source=submission.agent_source,
             original_filename=submission.original_filename,
             status=submission.status,
             score=submission.score,

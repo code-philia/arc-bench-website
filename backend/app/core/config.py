@@ -1,10 +1,14 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
+load_dotenv(ROOT_DIR / ".env", override=False)
 
 
 class Settings(BaseSettings):
@@ -25,6 +29,36 @@ class Settings(BaseSettings):
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"
+    builtin_arc_agent_dist_dir: Path = ROOT_DIR / "agentic-requirement-compiler" / "dist" / "arc-agent"
+    builtin_openai_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENAI_API_KEY", "ARCBENCH_BUILTIN_OPENAI_API_KEY"),
+    )
+    builtin_openai_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OPENAI_BASE_URL",
+            "OPENAI_API_BASE_URL",
+            "ARCBENCH_BUILTIN_OPENAI_BASE_URL",
+            "ARCBENCH_BUILTIN_OPENAI_API_BASE_URL",
+        ),
+    )
+    builtin_visual_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VISUAL_API_KEY", "ARCBENCH_BUILTIN_VISUAL_API_KEY"),
+    )
+    builtin_visual_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VISUAL_BASE_URL", "ARCBENCH_BUILTIN_VISUAL_BASE_URL"),
+    )
+    builtin_visual_model: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VISUAL_MODEL", "ARCBENCH_BUILTIN_VISUAL_MODEL"),
+    )
+    builtin_debug_mode: str = Field(
+        default="0",
+        validation_alias=AliasChoices("ARC_DEBUG", "ARCBENCH_BUILTIN_DEBUG_MODE"),
+    )
     session_secret: str = "arcbench-dev-session-secret"
 
     runner_cpu_limit: int = 2
@@ -32,7 +66,7 @@ class Settings(BaseSettings):
     runner_timeout_seconds: int = 1200
     agent_health_timeout_seconds: int = 90
 
-    model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False)
+    model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False, extra="ignore")
 
 
 @lru_cache

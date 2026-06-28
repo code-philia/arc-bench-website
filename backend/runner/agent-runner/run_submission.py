@@ -35,6 +35,8 @@ CHECKPOINT_PATH = ARTIFACTS_DIR / "checkpoint.json"
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
+AGENT_SOURCE_UPLOAD = "upload"
+AGENT_SOURCE_BUILTIN = "builtin_arc_agent"
 
 
 def append_debug_log(message: str) -> None:
@@ -388,6 +390,13 @@ def read_spec() -> dict:
     return json.loads(SPEC_PATH.read_text(encoding="utf-8"))
 
 
+def resolve_agent_source(spec: dict) -> str:
+    value = str(spec.get("agent_source", AGENT_SOURCE_UPLOAD)).strip()
+    if value in {AGENT_SOURCE_UPLOAD, AGENT_SOURCE_BUILTIN}:
+        return value
+    return AGENT_SOURCE_UPLOAD
+
+
 def resolve_python_agent_entrypoint() -> Path:
     entrypoint = SUBMISSION_DIR / "main.py"
     if entrypoint.exists():
@@ -440,14 +449,10 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
     append_runner_event("start_agent", "Agent dependencies installed", status="success")
 
 
-def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
-    entrypoint = resolve_python_agent_entrypoint()
-    prompt = PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() else ""
-    command = ["python3", entrypoint.name]
-    append_runner_event("start_agent", "Launching generation agent")
+def build_agent_environment(*, builtin_env: dict[str, str] | None = None) -> dict[str, str]:
     env = {
         **os.environ,
-        "ARCBENCH_TASK_PROMPT": prompt,
+        "ARCBENCH_TASK_PROMPT": PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() else "",
         "ARCBENCH_PROMPT_PATH": str(PROMPT_PATH),
         "ARCBENCH_TEMPLATE_DIR": str(TEMPLATE_DIR),
         "ARCBENCH_TASK_DIR": str(TASK_DIR),
@@ -463,6 +468,15 @@ def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProces
         "ARCBENCH_RESUME_REQUEST_PATH": str(RESUME_REQUEST_PATH),
         "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
+    if builtin_env:
+        env.update({key: str(value) for key, value in builtin_env.items() if value is not None})
+    return env
+
+
+def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
+    entrypoint = resolve_python_agent_entrypoint()
+    command = ["python3", entrypoint.name]
+    append_runner_event("start_agent", "Launching generation agent")
     return run_command(
         command,
         cwd=SUBMISSION_DIR,
@@ -470,18 +484,95 @@ def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProces
         stderr_file=stderr_file,
         check=False,
         label="generation-agent",
-        env=env,
+        env=build_agent_environment(),
     )
 
 
-def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
+def require_built_in_agent_config(spec: dict) -> tuple[list[str], dict[str, str]]:
+    builtin_agent = spec.get("builtin_agent")
+    if not isinstance(builtin_agent, dict):
+        raise RuntimeError("runner-spec.json is missing builtin_agent configuration")
+
+    command = builtin_agent.get("command")
+    if not isinstance(command, list) or not command:
+        raise RuntimeError("runner-spec.json is missing built-in arc-agent command")
+
+    project_dir = str(spec.get("project_dir", "")).strip()
+    requirement_yaml_path = str(spec.get("requirement_yaml_path", "")).strip()
+    if not project_dir:
+        raise RuntimeError("runner-spec.json is missing project_dir for built-in arc-agent")
+    if not requirement_yaml_path:
+        raise RuntimeError("runner-spec.json is missing requirement_yaml_path for built-in arc-agent")
+    if not Path(project_dir).exists():
+        raise RuntimeError(f"Built-in arc-agent project directory is missing: {project_dir}")
+    if not Path(requirement_yaml_path).exists():
+        raise RuntimeError(f"Built-in arc-agent requirement file is missing: {requirement_yaml_path}")
+
+    raw_submission_env = builtin_agent.get("env")
+    if raw_submission_env is not None and not isinstance(raw_submission_env, dict):
+        raise RuntimeError("runner-spec.json builtin_agent.env must be an object")
+
+    builtin_openai_api_key = os.environ.get("OPENAI_API_KEY", "").strip() or os.environ.get("ARCBENCH_BUILTIN_OPENAI_API_KEY", "").strip()
+    builtin_openai_base_url = (
+        os.environ.get("OPENAI_BASE_URL", "").strip()
+        or os.environ.get("OPENAI_API_BASE_URL", "").strip()
+        or os.environ.get("ARCBENCH_BUILTIN_OPENAI_BASE_URL", "").strip()
+        or os.environ.get("ARCBENCH_BUILTIN_OPENAI_API_BASE_URL", "").strip()
+    )
+    builtin_debug_mode = os.environ.get("ARC_DEBUG", "").strip() or os.environ.get("ARCBENCH_BUILTIN_DEBUG_MODE", "").strip() or "0"
+    if not builtin_openai_api_key:
+        raise RuntimeError("Built-in arc-agent is not configured: missing OPENAI_API_KEY")
+
+    builtin_env = {str(key): str(value) for key, value in (raw_submission_env or {}).items() if value is not None}
+    model_name = builtin_env.get("MODEL", "").strip() or os.environ.get("MODEL", "").strip()
+    if not model_name:
+        raise RuntimeError("Built-in arc-agent is not configured: missing MODEL")
+    visual_api_key = os.environ.get("VISUAL_API_KEY", "").strip() or builtin_openai_api_key
+    visual_base_url = os.environ.get("VISUAL_BASE_URL", "").strip() or builtin_openai_base_url
+    visual_model = os.environ.get("VISUAL_MODEL", "").strip() or model_name
+    builtin_env.update(
+        {
+            "MODEL": model_name,
+            "OPENAI_API_KEY": builtin_openai_api_key,
+            "OPENAI_BASE_URL": builtin_openai_base_url,
+            "OPENAI_API_BASE_URL": builtin_openai_base_url,
+            "VISUAL_API_KEY": visual_api_key,
+            "VISUAL_BASE_URL": visual_base_url,
+            "VISUAL_MODEL": visual_model,
+            "ARC_DEBUG": builtin_debug_mode,
+        }
+    )
+    return [str(part) for part in command], builtin_env
+
+
+def run_builtin_arc_agent(stdout_file, stderr_file, spec: dict) -> subprocess.CompletedProcess:
+    command, builtin_env = require_built_in_agent_config(spec)
+    append_runner_event("start_agent", "Launching built-in arc-agent")
+    return run_command(
+        command,
+        cwd=TEMPLATE_DIR,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=False,
+        label="builtin-arc-agent",
+        env=build_agent_environment(builtin_env=builtin_env),
+    )
+
+
+def run_generation_agent_once(stdout_file, stderr_file, spec: dict) -> subprocess.CompletedProcess:
+    if resolve_agent_source(spec) == AGENT_SOURCE_BUILTIN:
+        return run_builtin_arc_agent(stdout_file, stderr_file, spec)
+    return run_generation_agent(stdout_file, stderr_file)
+
+
+def run_generation_agent_with_resume(stdout_file, stderr_file, spec: dict) -> None:
     checkpoint = read_checkpoint()
     last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
     if last_completed_index > 0:
         append_runner_event("start_agent", f"Resuming from checkpoint at commit {last_completed_index}", status="info")
 
     while True:
-        completed = run_generation_agent(stdout_file, stderr_file)
+        completed = run_generation_agent_once(stdout_file, stderr_file, spec)
         if completed.returncode == 0:
             checkpoint = read_checkpoint()
             if checkpoint.get("paused") or PAUSE_REQUEST_PATH.exists():
@@ -828,6 +919,7 @@ def main() -> int:
     initialize_traceability_db()
     seeded_requirements, seeded_scenarios = seed_traceability_requirements()
     spec = read_spec()
+    agent_source = resolve_agent_source(spec)
     append_debug_log(f"Runner started with spec: {spec}")
     append_runner_event(
         "deploy_agent",
@@ -840,8 +932,11 @@ def main() -> int:
 
     with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file, STDERR_PATH.open("w", encoding="utf-8") as stderr_file:
         try:
-            install_agent_dependencies(stdout_file, stderr_file)
-            run_generation_agent_with_resume(stdout_file, stderr_file)
+            if agent_source == AGENT_SOURCE_UPLOAD:
+                install_agent_dependencies(stdout_file, stderr_file)
+            else:
+                append_runner_event("start_agent", "Built-in arc-agent selected; skipping submission dependency install", status="success")
+            run_generation_agent_with_resume(stdout_file, stderr_file, spec)
             interface_upserts, interface_status_updates, test_upserts = apply_traceability_events()
             append_runner_event(
                 "start_agent",

@@ -6,6 +6,11 @@ class RuntimeType(str, Enum):
     NODEJS = "nodejs"
 
 
+class AgentSourceType(str, Enum):
+    UPLOAD = "upload"
+    BUILTIN_ARC_AGENT = "builtin_arc_agent"
+
+
 class SubmissionStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"

@@ -152,13 +152,14 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
   const ensureRealSubmission = useCallback(async () => {
     const file = prefill.file ?? await loadDemoAgent();
     try {
-      const created = await api.createSubmission(
-        QUICK_START_REQUIREMENT_ID,
-        "python",
+      const created = await api.createSubmission({
+        requirementId: QUICK_START_REQUIREMENT_ID,
+        runtime: "python",
+        agentSource: "upload",
         file,
-        QUICK_START_DISPLAY_NAME,
-        QUICK_START_MODEL_NAME,
-      );
+        displayName: QUICK_START_DISPLAY_NAME,
+        modelName: QUICK_START_MODEL_NAME,
+      });
       const started = await api.startSubmission(created.submission.id);
       setDemoSubmissionId(started.id);
       setCanvasDemo({
