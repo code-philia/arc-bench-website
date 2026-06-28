@@ -1,8 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import asyncio
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
@@ -27,6 +28,7 @@ from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.submission_artifact_service import SubmissionArtifactService
+from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
 from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
@@ -214,6 +216,46 @@ def get_submission_logs(
     return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events, runner_events=runner_events)
 
 
+@router.get("/{submission_id}/events")
+async def stream_submission_events(
+    submission_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> StreamingResponse:
+    service = SubmissionService(db)
+    try:
+        service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    async def event_generator():
+        event_queue = SubmissionEventStream.subscribe(submission_id)
+        try:
+            yield ": connected\n\n"
+            for event in SubmissionEventStream.snapshot(submission_id):
+                yield SubmissionEventStream.encode_sse(event)
+            while True:
+                if await request.is_disconnected():
+                    break
+                event = await asyncio.to_thread(event_queue.get)
+                if event is None:
+                    break
+                yield SubmissionEventStream.encode_sse(event)
+        finally:
+            SubmissionEventStream.unsubscribe(submission_id, event_queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/{submission_id}/editable-task", response_model=SubmissionEditableTaskPayload)
 def get_submission_editable_task(
     submission_id: str,
@@ -255,6 +297,10 @@ def update_submission_editable_task(
         service.write_submission_traceability_store(submission, payload.requirements_yaml)
         if payload.edited_node_id and payload.edited_node_id.strip():
             service.reset_progress_for_edited_node(submission, payload.edited_node_id)
+        SubmissionEventStream.publish(submission.id, "requirement_state", reason="task_updated")
+        SubmissionEventStream.publish(submission.id, "traceability_db", reason="task_updated")
+        SubmissionEventStream.publish(submission.id, "commit_history", reason="task_updated")
+        HostDemoPreviewService.mark_stale(submission.id)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"detail": "Submission workspace updated"}

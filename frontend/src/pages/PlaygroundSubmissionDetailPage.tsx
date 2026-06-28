@@ -26,6 +26,7 @@ import type {
   SubmissionDetail,
   SubmissionLogs,
   SubmissionPreviewStatus,
+  SubmissionSseEvent,
   SubmissionSourcePayload,
   SubmissionTraceabilityPayload,
   SubmissionVisualEvent,
@@ -834,8 +835,8 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     return Math.round(window.innerWidth * 0.333);
   });
-  const pollRef = useRef<number | null>(null);
-  const commitHistoryPollRef = useRef<number | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const sseReconnectRef = useRef<number | null>(null);
   const visualEventCountRef = useRef(0);
   const isSidebarDragging = useRef(false);
   const sidebarDragStartX = useRef(0);
@@ -843,7 +844,6 @@ export default function PlaygroundSubmissionDetailPage() {
   const isPreviewDragging = useRef(false);
   const previewDragStartX = useRef(0);
   const previewDragStartWidth = useRef(0);
-  const previewPollRef = useRef<number | null>(null);
   const suppressNodeToCommitSyncRef = useRef(false);
   const editableTreeDirtyRef = useRef(false);
   const [previewStatus, setPreviewStatus] = useState<SubmissionPreviewStatus | null>(null);
@@ -869,6 +869,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [editableTask, setEditableTask] = useState<SubmissionEditableTaskPayload | null>(null);
   const [editableTree, setEditableTree] = useState<RequirementNode | null>(null);
   const [submissionTaskAssets, setSubmissionTaskAssets] = useState<SubmissionTaskAssets | null>(null);
+  const [traceabilityOverlayVisible, setTraceabilityOverlayVisible] = useState(false);
   const [editableNodeId, setEditableNodeId] = useState<string | null>("ROOT");
   const [editableDetailExpanded, setEditableDetailExpanded] = useState(true);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
@@ -903,8 +904,6 @@ export default function PlaygroundSubmissionDetailPage() {
     : "Select an interface or test to inspect source.";
   const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
   const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;
-  const submissionStatus = submission?.status ?? null;
-  const shouldPollSubmission = isSubmissionLive(submissionStatus);
 
   const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
     available: false,
@@ -930,6 +929,74 @@ export default function PlaygroundSubmissionDetailPage() {
         setPreviewLoading(false);
       }
     }
+  };
+
+  const refreshSubmissionDetail = async () => {
+    const latest = await api.getSubmission(submissionId);
+    setSubmission(latest);
+    return latest;
+  };
+
+  const refreshSubmissionLogs = async () => {
+    const latestLogs = await api.getSubmissionLogs(submissionId);
+    setLogs(latestLogs);
+    return latestLogs;
+  };
+
+  const refreshCommitHistory = async (silent = false) => {
+    if (!silent) {
+      setCommitHistoryLoading(true);
+    }
+    setCommitHistoryError(null);
+    try {
+      const payload = await api.getSubmissionCommitHistory(submissionId);
+      setCommitHistory(payload);
+      return payload;
+    } catch (error) {
+      if (!silent) {
+        setCommitHistory(null);
+        setCommitHistoryError((error as Error).message);
+      }
+      throw error;
+    } finally {
+      if (!silent) {
+        setCommitHistoryLoading(false);
+      }
+    }
+  };
+
+  const refreshSelectedTraceability = async (nodeId: string, showLoading: boolean) => {
+    if (showLoading) {
+      setTraceability(null);
+      setTraceabilityLoading(true);
+    }
+    setTraceabilityError(null);
+    setTraceabilityNodeId(nodeId);
+    try {
+      const payload = await api.getSubmissionTraceability(submissionId, nodeId);
+      setTraceability(payload);
+      return payload;
+    } catch (error) {
+      setTraceability(null);
+      setTraceabilityError((error as Error).message);
+      throw error;
+    } finally {
+      if (showLoading) {
+        setTraceabilityLoading(false);
+      }
+    }
+  };
+
+  const refreshAllTraceability = async () => {
+    const payload = await api.getSubmissionAllTraceability(submissionId);
+    setAllTraceability(payload);
+    return payload;
+  };
+
+  const refreshEditableTask = async () => {
+    const payload = await api.getSubmissionEditableTask(submissionId);
+    setEditableTask(payload);
+    return payload;
   };
 
   const refreshPreview = async () => {
@@ -962,6 +1029,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setSelectedTraceabilityId(null);
     setSelectedTraceabilityKind(null);
     setAllTraceability(null);
+    setTraceabilityOverlayVisible(false);
     setSource(null);
     setSourceError(null);
     setFileViewMode(null);
@@ -971,13 +1039,13 @@ export default function PlaygroundSubmissionDetailPage() {
     setSelectedDiffFilePath(null);
     setSubmissionTaskAssets(submissionId ? api.getSubmissionTaskAssets(submissionId) : null);
     visualEventCountRef.current = 0;
-    if (commitHistoryPollRef.current) {
-      window.clearInterval(commitHistoryPollRef.current);
-      commitHistoryPollRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
-    if (previewPollRef.current) {
-      window.clearInterval(previewPollRef.current);
-      previewPollRef.current = null;
+    if (sseReconnectRef.current) {
+      window.clearTimeout(sseReconnectRef.current);
+      sseReconnectRef.current = null;
     }
   }, [submissionId]);
 
@@ -986,8 +1054,8 @@ export default function PlaygroundSubmissionDetailPage() {
     setLoadError(null);
     setLoadErrorStatus(null);
     Promise.all([
-      api.getSubmission(submissionId),
-      api.getSubmissionLogs(submissionId),
+      refreshSubmissionDetail(),
+      refreshSubmissionLogs(),
       api.getRequirement(requirementId, requirementCatalog),
     ])
       .then(([detail, latestLogs, requirementDetail]) => {
@@ -1005,111 +1073,16 @@ export default function PlaygroundSubmissionDetailPage() {
       .finally(() => setLoading(false));
 
     return () => {
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
-      if (commitHistoryPollRef.current) {
-        window.clearInterval(commitHistoryPollRef.current);
-        commitHistoryPollRef.current = null;
-      }
-      if (previewPollRef.current) {
-        window.clearInterval(previewPollRef.current);
-        previewPollRef.current = null;
+      if (sseReconnectRef.current) {
+        window.clearTimeout(sseReconnectRef.current);
+        sseReconnectRef.current = null;
       }
     };
   }, [requirementCatalog, requirementId, submissionId]);
-
-  useEffect(() => {
-    if (!submissionId || !submission) {
-      return;
-    }
-    if (!shouldPollSubmission) {
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      return;
-    }
-    const refreshRuntimeState = () => {
-      api.getSubmission(submissionId).then((latest) => {
-        setSubmission(latest);
-        if (!isSubmissionLive(latest.status) && pollRef.current) {
-          window.clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      }).catch(() => undefined);
-      api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
-    };
-    refreshRuntimeState();
-    if (!pollRef.current) {
-      pollRef.current = window.setInterval(refreshRuntimeState, 2000);
-    }
-    return () => {
-      if (pollRef.current && !shouldPollSubmission) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [shouldPollSubmission, submissionId, submissionStatus]);
-
-  useEffect(() => {
-    if (!submissionId || !submission) {
-      setCommitHistory(null);
-      setCommitHistoryError(null);
-      return;
-    }
-
-    let cancelled = false;
-    const isInitial = commitHistory === null;
-    if (isInitial) {
-      setCommitHistoryLoading(true);
-    }
-    setCommitHistoryError(null);
-    api.getSubmissionCommitHistory(submissionId)
-      .then((payload) => {
-        if (!cancelled) {
-          setCommitHistory(payload);
-        }
-      })
-      .catch((error: Error) => {
-        if (!cancelled && isInitial) {
-          setCommitHistory(null);
-          setCommitHistoryError(error.message);
-        }
-      })
-      .finally(() => {
-        if (!cancelled && isInitial) {
-          setCommitHistoryLoading(false);
-        }
-      });
-
-    if (isCommitHistoryStreaming(submission.status) && !commitHistoryPollRef.current) {
-      commitHistoryPollRef.current = window.setInterval(() => {
-        api.getSubmissionCommitHistory(submissionId)
-          .then(setCommitHistory)
-          .catch(() => undefined);
-      }, 2000);
-    }
-    if (!isCommitHistoryStreaming(submission.status) && commitHistoryPollRef.current) {
-      window.clearInterval(commitHistoryPollRef.current);
-      commitHistoryPollRef.current = null;
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [submission, submissionId]);
-
-  useEffect(() => {
-    if (!submission || !pollRef.current) {
-      return;
-    }
-    if (!isSubmissionLive(submission.status)) {
-      window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, [submission]);
 
   useEffect(() => {
     if (!submission) {
@@ -1117,30 +1090,94 @@ export default function PlaygroundSubmissionDetailPage() {
       setPreviewLoading(false);
       return;
     }
-    let cancelled = false;
     void loadPreviewStatus(previewStatus !== null);
+  }, [submissionId, submission?.status]);
 
-    if (isSubmissionLive(submission.status) && !previewPollRef.current) {
-      previewPollRef.current = window.setInterval(() => {
-        if (cancelled) {
-          return;
-        }
+  useEffect(() => {
+    if (!previewStatus?.available) {
+      return;
+    }
+    setPreviewFrameVersion((current) => current + 1);
+  }, [previewStatus?.available, previewStatus?.preview_head_oid, previewStatus?.workspace_head_oid]);
+
+  useEffect(() => {
+    if (!submissionId || !submission) {
+      setCommitHistory(null);
+      setCommitHistoryError(null);
+      return;
+    }
+    void refreshCommitHistory(commitHistory !== null).catch(() => undefined);
+  }, [submissionId, submission?.status]);
+
+  useEffect(() => {
+    if (!submissionId || !submission) {
+      setAllTraceability(null);
+      return;
+    }
+    if (!traceabilityOverlayVisible) {
+      setAllTraceability(null);
+      return;
+    }
+    void refreshAllTraceability().catch(() => undefined);
+  }, [submissionId, submission?.status, traceabilityOverlayVisible]);
+
+  useEffect(() => {
+    if (!submissionId || !user) {
+      return;
+    }
+
+    const handleSseEvent = (event: SubmissionSseEvent) => {
+      if (event.channel === "requirement_state") {
+        void refreshSubmissionDetail().catch(() => undefined);
+        void refreshSubmissionLogs().catch(() => undefined);
+        return;
+      }
+      if (event.channel === "commit_history") {
+        void refreshCommitHistory(true).catch(() => undefined);
+        return;
+      }
+      if (event.channel === "preview") {
         void loadPreviewStatus(true);
-      }, 5000);
-    }
-    if (!isSubmissionLive(submission.status) && previewPollRef.current) {
-      window.clearInterval(previewPollRef.current);
-      previewPollRef.current = null;
-    }
-
-    return () => {
-      cancelled = true;
-      if (previewPollRef.current && !isSubmissionLive(submission.status)) {
-        window.clearInterval(previewPollRef.current);
-        previewPollRef.current = null;
+        return;
+      }
+      if (event.channel === "traceability_db") {
+        if (traceabilityOverlayVisible) {
+          void refreshAllTraceability().catch(() => undefined);
+        }
+        if (activeSelectedNodeId) {
+          void refreshSelectedTraceability(activeSelectedNodeId, false).catch(() => undefined);
+        }
+        return;
       }
     };
-  }, [submissionId, submission?.status]);
+
+    const connect = () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = api.connectSubmissionEvents(submissionId, {
+        onEvent: handleSseEvent,
+        onError: () => {
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
+          if (sseReconnectRef.current) {
+            window.clearTimeout(sseReconnectRef.current);
+          }
+          sseReconnectRef.current = window.setTimeout(() => {
+            connect();
+          }, 2000);
+        },
+      });
+    };
+
+    connect();
+    return () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      if (sseReconnectRef.current) {
+        window.clearTimeout(sseReconnectRef.current);
+        sseReconnectRef.current = null;
+      }
+    };
+  }, [activeSelectedNodeId, submissionId, traceabilityOverlayVisible, user]);
 
   const catalogTree = useMemo(() => resolveRequirementCatalogTree(requirement), [requirement]);
 
@@ -1185,12 +1222,11 @@ export default function PlaygroundSubmissionDetailPage() {
     }
 
     let cancelled = false;
-    api.getSubmissionEditableTask(submissionId)
+    refreshEditableTask()
       .then((payload) => {
         if (cancelled) {
           return;
         }
-        setEditableTask(payload);
         if (submission.status !== "PAUSED" || editableTreeDirtyRef.current) {
           return;
         }
@@ -1209,15 +1245,11 @@ export default function PlaygroundSubmissionDetailPage() {
       cancelled = true;
     };
   }, [
-    activeSelectedNodeId,
     catalogTree,
-    detailExpanded,
     editableReloadToken,
-    quickStart.canvasDemo.detailExpanded,
     submission,
     submission?.status,
     submissionId,
-    useQuickStartSubmission,
   ]);
 
   const editableModeActive = executionPaused;
@@ -1289,13 +1321,7 @@ export default function PlaygroundSubmissionDetailPage() {
 
     let cancelled = false;
     const isNodeChange = traceabilityNodeId !== activeSelectedNodeId;
-    if (isNodeChange) {
-      setTraceability(null);
-      setTraceabilityLoading(true);
-    }
-    setTraceabilityError(null);
-    setTraceabilityNodeId(activeSelectedNodeId);
-    api.getSubmissionTraceability(submissionId, activeSelectedNodeId)
+    refreshSelectedTraceability(activeSelectedNodeId, isNodeChange)
       .then((payload) => {
         if (!cancelled) {
           setTraceability(payload);
@@ -1318,38 +1344,6 @@ export default function PlaygroundSubmissionDetailPage() {
     };
   }, [activeSelectedNodeId, submission, submissionId]);
 
-  useEffect(() => {
-    if (!submissionId || !submission) {
-      setAllTraceability(null);
-      return;
-    }
-    let cancelled = false;
-    api.getSubmissionAllTraceability(submissionId)
-      .then((payload) => {
-        if (!cancelled) {
-          setAllTraceability(payload);
-        }
-      })
-      .catch(() => undefined);
-    if (isCommitHistoryStreaming(submission.status)) {
-      const interval = window.setInterval(() => {
-        api.getSubmissionAllTraceability(submissionId)
-          .then((payload) => {
-            if (!cancelled) {
-              setAllTraceability(payload);
-            }
-          })
-          .catch(() => undefined);
-      }, 2000);
-      return () => {
-        cancelled = true;
-        window.clearInterval(interval);
-      };
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [submission, submissionId]);
   const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: number | null }) => {
     if (!submissionId) {
       return;
@@ -1913,6 +1907,12 @@ export default function PlaygroundSubmissionDetailPage() {
                   autoFitOnTreeChange={false}
                   traceabilityNodes={visibleTraceability}
                   allTraceability={allTraceability}
+                  onRequestAllTraceability={() => {
+                    void refreshAllTraceability().catch(() => undefined);
+                  }}
+                  onTraceabilityOverlayChange={({ showInterfaces, showTests }) => {
+                    setTraceabilityOverlayVisible(showInterfaces || showTests);
+                  }}
                   selectedTraceabilityId={selectedTraceabilityId}
                   selectedTraceabilityKind={selectedTraceabilityKind}
                   onTraceabilityNodeClick={({ kind, id, requirementNodeId }) => {

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import time
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from app.services.docker_manager import DockerManager
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
+from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
 from app.services.workspace_assembler import WorkspaceAssembler
 
@@ -77,6 +79,8 @@ class ExecutionService:
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
         processed_runner_event_count = 0
+        processed_traceability_event_count = 0
+        last_known_workspace_head_oid: str | None = None
         pause_notified = False
         pause_signal_sent = False
         pause_requested_at: float | None = None
@@ -95,12 +99,174 @@ class ExecutionService:
                 failure_reason=reason,
             )
 
+        def resolve_workspace_head_oid() -> str | None:
+            project_root = workspace_path / "template"
+            git_dir = project_root / ".git"
+            if not project_root.is_dir() or not git_dir.exists():
+                return None
+            try:
+                return submission_service._run_git(project_root, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
+            except RuntimeError:
+                return None
+
+        def sync_traceability_events() -> dict[str, int | bool]:
+            nonlocal processed_traceability_event_count
+            traceability_events_path = workspace_path / "artifacts" / "traceability-events.jsonl"
+            traceability_db_path = workspace_path / "artifacts" / "traceability.db"
+            if not traceability_events_path.exists() or not traceability_db_path.exists():
+                return {
+                    "events_seen": 0,
+                    "interfaces_changed": 0,
+                    "tests_changed": 0,
+                    "requirements_changed": 0,
+                    "changed": False,
+                }
+
+            lines = traceability_events_path.read_text(encoding="utf-8").splitlines()
+            new_lines = lines[processed_traceability_event_count:]
+            processed_traceability_event_count = len(lines)
+            if not new_lines:
+                return {
+                    "events_seen": 0,
+                    "interfaces_changed": 0,
+                    "tests_changed": 0,
+                    "requirements_changed": 0,
+                    "changed": False,
+                }
+
+            interfaces_changed = 0
+            tests_changed = 0
+            requirements_changed = 0
+            parsed_event_count = 0
+            connection = sqlite3.connect(traceability_db_path)
+            try:
+                cursor = connection.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS requirements (
+                        req_id TEXT PRIMARY KEY,
+                        description TEXT,
+                        visual_reference TEXT,
+                        status TEXT,
+                        parent_id TEXT,
+                        dependencies TEXT
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS interfaces (
+                        interface_id TEXT PRIMARY KEY,
+                        req_ids TEXT,
+                        type TEXT,
+                        content TEXT,
+                        file_path TEXT,
+                        first_line TEXT,
+                        implemented INTEGER,
+                        callers TEXT,
+                        callees TEXT
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS tests (
+                        test_id TEXT PRIMARY KEY,
+                        req_id TEXT NOT NULL,
+                        scenario_id TEXT,
+                        type TEXT,
+                        file_path TEXT,
+                        first_line TEXT
+                    )
+                    """
+                )
+                for raw_line in new_lines:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        debug_log.append("backend", f"Failed to parse traceability event line: {line}")
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+
+                    event_type = str(payload.get("type", "")).strip()
+                    if not event_type:
+                        continue
+                    parsed_event_count += 1
+
+                    if event_type == "interface_upsert":
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO interfaces (
+                                interface_id, req_ids, type, content, file_path, first_line, implemented, callers, callees
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                str(payload.get("interface_id", "")).strip(),
+                                json.dumps(payload.get("req_ids", []), ensure_ascii=False),
+                                str(payload.get("interface_type", "")).strip(),
+                                str(payload.get("content", "")).strip(),
+                                payload.get("file_path"),
+                                payload.get("first_line"),
+                                1 if payload.get("implemented") else 0,
+                                json.dumps(payload.get("callers", []), ensure_ascii=False),
+                                json.dumps(payload.get("callees", []), ensure_ascii=False),
+                            ),
+                        )
+                        interfaces_changed += 1
+                        continue
+
+                    if event_type == "interface_status":
+                        cursor.execute(
+                            "UPDATE interfaces SET implemented = ? WHERE interface_id = ?",
+                            (
+                                1 if payload.get("implemented") else 0,
+                                str(payload.get("interface_id", "")).strip(),
+                            ),
+                        )
+                        interfaces_changed += max(cursor.rowcount, 0)
+                        continue
+
+                    if event_type == "test_upsert":
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO tests (
+                                test_id, req_id, scenario_id, type, file_path, first_line
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                str(payload.get("test_id", "")).strip(),
+                                str(payload.get("req_id", "")).strip(),
+                                payload.get("scenario_id"),
+                                str(payload.get("test_type", "")).strip(),
+                                payload.get("file_path"),
+                                payload.get("first_line"),
+                            ),
+                        )
+                        tests_changed += 1
+                connection.commit()
+            finally:
+                connection.close()
+
+            return {
+                "events_seen": parsed_event_count,
+                "interfaces_changed": interfaces_changed,
+                "tests_changed": tests_changed,
+                "requirements_changed": requirements_changed,
+                "changed": bool(parsed_event_count),
+            }
+
         def import_runner_events() -> list[dict]:
-            nonlocal processed_runner_event_count
+            nonlocal last_known_workspace_head_oid, processed_runner_event_count
             runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
             if not runner_events_path.exists():
                 return []
             imported_events: list[dict] = []
+            visual_event_count = 0
+            runner_state_event_count = 0
             lines = runner_events_path.read_text(encoding="utf-8").splitlines()
             new_lines = lines[processed_runner_event_count:]
             processed_runner_event_count = len(lines)
@@ -113,12 +279,33 @@ class ExecutionService:
                 except Exception:
                     debug_log.append("backend", f"Failed to parse runner event line: {line}")
                     continue
+                event_type = str(event.get("type", "")).strip()
+                if event_type == "requirement_state":
+                    visual_event_count += 1
+                elif event_type == "runner_state":
+                    runner_state_event_count += 1
                 step_key = str(event.get("step_key", "")).strip()
                 message = str(event.get("message", "")).strip()
                 status = str(event.get("status", "info")).strip() or "info"
                 if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
                     emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
+
+            traceability_sync = sync_traceability_events()
+            traceability_events_seen = int(traceability_sync["events_seen"])
+            head_changed = False
+            latest_head_oid = resolve_workspace_head_oid()
+            if latest_head_oid and latest_head_oid != last_known_workspace_head_oid:
+                head_changed = True
+                last_known_workspace_head_oid = latest_head_oid
+
+            if imported_events or visual_event_count or runner_state_event_count:
+                SubmissionEventStream.publish(submission_id, "requirement_state", reason="runner_events")
+            if traceability_events_seen:
+                SubmissionEventStream.publish(submission_id, "traceability_db", reason="traceability_events")
+            if head_changed:
+                HostDemoPreviewService.mark_stale(submission_id)
+                SubmissionEventStream.publish(submission_id, "commit_history", reason="git_head_changed")
             return imported_events
 
         def refresh_running_steps(latest_events: list[dict]) -> None:
@@ -163,6 +350,10 @@ class ExecutionService:
                 runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
                 if runner_events_path.exists():
                     processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
+                traceability_events_path = workspace_path / "artifacts" / "traceability-events.jsonl"
+                if traceability_events_path.exists():
+                    processed_traceability_event_count = len(traceability_events_path.read_text(encoding="utf-8").splitlines())
+                last_known_workspace_head_oid = resolve_workspace_head_oid()
                 emit_event("deploy_agent", "Reusing rewound workspace")
                 debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")
                 emit_event("deploy_agent", "Existing workspace is ready", status="success")
@@ -172,6 +363,7 @@ class ExecutionService:
                 debug_log = DebugLogService(workspace_path)
                 debug_log.append("backend", f"Workspace assembled at {workspace_path}")
                 emit_event("deploy_agent", "Workspace assembled", status="success")
+                last_known_workspace_head_oid = resolve_workspace_head_oid()
             stdout_path = workspace_path / "artifacts" / "stdout.log"
             stderr_path = workspace_path / "artifacts" / "stderr.log"
             result_path = workspace_path / "artifacts" / "result.json"

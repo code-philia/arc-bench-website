@@ -11,6 +11,7 @@ import type {
   SubmissionCommitHistoryPayload,
   SubmissionLogs,
   SubmissionPreviewStatus,
+  SubmissionSseEvent,
   SubmissionSummary,
   SubmissionTraceabilityPayload,
   UserTaskDraft,
@@ -193,6 +194,27 @@ export const api = {
   },
   getSubmissionPreviewStatus(submissionId: string) {
     return request<SubmissionPreviewStatus>(`/submissions/${submissionId}/preview/status`);
+  },
+  connectSubmissionEvents(
+    submissionId: string,
+    handlers: {
+      onEvent: (event: SubmissionSseEvent) => void;
+      onError?: () => void;
+    },
+  ) {
+    const source = new EventSource(`${API_BASE}/submissions/${submissionId}/events`, { withCredentials: true });
+    source.addEventListener("submission-update", (rawEvent) => {
+      try {
+        const payload = JSON.parse((rawEvent as MessageEvent<string>).data) as SubmissionSseEvent;
+        handlers.onEvent(payload);
+      } catch {
+        // Ignore malformed SSE payloads.
+      }
+    });
+    source.onerror = () => {
+      handlers.onError?.();
+    };
+    return source;
   },
   refreshSubmissionPreview(submissionId: string) {
     return request<SubmissionPreviewStatus>(`/submissions/${submissionId}/preview/refresh`, {

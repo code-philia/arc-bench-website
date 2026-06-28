@@ -8,6 +8,7 @@ from app.api.routes import auth, health, requirements, submissions, user_tasks
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine
+from app.services.submission_event_stream import SubmissionEventStream
 
 
 settings = get_settings()
@@ -34,6 +35,11 @@ def on_startup() -> None:
     settings.user_submissions_root.mkdir(parents=True, exist_ok=True)
     settings.user_tasks_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    SubmissionEventStream.shutdown()
 
 
 def _frontend_index() -> Path:

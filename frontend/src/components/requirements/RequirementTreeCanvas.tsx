@@ -110,6 +110,8 @@ type RequirementTreeCanvasProps = {
   showInterfaces?: boolean;
   showTests?: boolean;
   allTraceability?: SubmissionTraceabilityPayload | null;
+  onRequestAllTraceability?: () => void;
+  onTraceabilityOverlayChange?: (payload: { showInterfaces: boolean; showTests: boolean }) => void;
   selectedTraceabilityId?: string | null;
   selectedTraceabilityKind?: "interface" | "test" | null;
   onTraceabilityNodeClick?: (payload: {
@@ -928,6 +930,8 @@ function TreeCanvasInner({
   autoFitOnTreeChange = true,
   traceabilityNodes = null,
   allTraceability = null,
+  onRequestAllTraceability,
+  onTraceabilityOverlayChange,
   onTraceabilityNodeClick,
 }: RequirementTreeCanvasProps) {
   const reactFlow = useReactFlow();
@@ -976,6 +980,20 @@ function TreeCanvasInner({
       return Object.fromEntries(nextEntries);
     });
   }, [selectedNodeId, traceabilityNodes]);
+
+  useEffect(() => {
+    if (!(showInterfaces || showTests)) {
+      return;
+    }
+    if (allTraceability) {
+      return;
+    }
+    onRequestAllTraceability?.();
+  }, [allTraceability, onRequestAllTraceability, showInterfaces, showTests]);
+
+  useEffect(() => {
+    onTraceabilityOverlayChange?.({ showInterfaces, showTests });
+  }, [onTraceabilityOverlayChange, showInterfaces, showTests]);
   const baseFlow = useMemo(
     () => buildFlowFromTree(
       tree,

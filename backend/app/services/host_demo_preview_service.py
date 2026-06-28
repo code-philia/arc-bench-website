@@ -15,6 +15,7 @@ from urllib.request import urlopen
 
 from app.core.config import ROOT_DIR
 from app.services.debug_log_service import DebugLogService
+from app.services.submission_event_stream import SubmissionEventStream
 
 
 class HostDemoPreviewService:
@@ -147,10 +148,12 @@ class HostDemoPreviewService:
                 cls._current_submission_id = submission_id
                 cls._current_workspace_head_oid = workspace_head_oid
                 cls._bootstrap_error = None
+            SubmissionEventStream.publish(submission_id, "preview", reason="preview_refreshed")
             cls._append_debug(f"Refresh completed successfully; preview url={cls.PREVIEW_URL}")
         except Exception as exc:  # noqa: BLE001
             with cls._lock:
                 cls._bootstrap_error = str(exc)
+            SubmissionEventStream.publish(submission_id, "preview", reason="preview_failed")
             cls._append_debug(f"Refresh failed: {exc}")
             return {
                 "available": False,
@@ -170,6 +173,7 @@ class HostDemoPreviewService:
         with cls._lock:
             if cls._current_submission_id == submission_id:
                 cls._bootstrap_error = None
+        SubmissionEventStream.publish(submission_id, "preview", reason="preview_stale")
         cls._append_debug(f"Marked preview stale for submission={submission_id}")
 
     @classmethod

@@ -23,6 +23,7 @@ from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
+from app.services.submission_event_stream import SubmissionEventStream
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -535,6 +536,7 @@ class SubmissionService:
         }
         with log_path.open("a", encoding="utf-8") as output:
             output.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        SubmissionEventStream.publish(submission_id, "requirement_state", reason=f"step:{step_key}")
         return log_path
 
     def get_event_log_path(self, submission: Submission) -> Path:
@@ -742,6 +744,7 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
+        SubmissionEventStream.publish(submission.id, "requirement_state", reason="steps_updated")
 
     def mark_running(self, submission: Submission, workspace_path: Path) -> None:
         submission.status = SubmissionStatus.RUNNING.value
@@ -751,6 +754,9 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
+        SubmissionEventStream.publish(submission.id, "requirement_state", reason="running")
+        SubmissionEventStream.publish(submission.id, "preview", reason="workspace_ready")
+        SubmissionEventStream.publish(submission.id, "traceability_db", reason="workspace_ready")
 
     def finalize(
         self,
@@ -775,6 +781,11 @@ class SubmissionService:
         submission.failure_reason = failure_reason
         self.db.add(submission)
         self.db.commit()
+        self.db.refresh(submission)
+        SubmissionEventStream.publish(submission.id, "requirement_state", reason=f"finalized:{status.value.lower()}")
+        SubmissionEventStream.publish(submission.id, "commit_history", reason="finalized")
+        SubmissionEventStream.publish(submission.id, "traceability_db", reason="finalized")
+        SubmissionEventStream.publish(submission.id, "preview", reason="finalized")
 
     def update_status(self, submission: Submission, status: SubmissionStatus, failure_reason: str | None = None) -> None:
         submission.status = status.value
@@ -782,6 +793,7 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
+        SubmissionEventStream.publish(submission.id, "requirement_state", reason=f"status:{status.value.lower()}")
 
     @staticmethod
     def can_pause(submission: Submission) -> bool:

@@ -190,6 +190,20 @@ export type SubmissionPreviewStatus = {
   error: string | null;
 };
 
+export type SubmissionEventChannel =
+  | "commit_history"
+  | "traceability_db"
+  | "requirement_state"
+  | "preview";
+
+export type SubmissionSseEvent = {
+  submission_id: string;
+  channel: SubmissionEventChannel;
+  timestamp: number;
+  version: number;
+  reason: string | null;
+};
+
 export type UserTaskSummary = {
   id: string;
   title: string;
