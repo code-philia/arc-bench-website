@@ -2647,6 +2647,48 @@ button {
   cursor: not-allowed;
 }
 
+.agent-source-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.agent-source-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition), transform var(--transition);
+}
+
+.agent-source-card:hover {
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+}
+
+.agent-source-card.active {
+  border-color: var(--accent-dim);
+  background: var(--accent-glow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.agent-source-title {
+  color: var(--text);
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+
+.agent-source-copy {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
 .upload-zone {
   display: block;
   padding: 28px 20px;
@@ -2660,6 +2702,16 @@ button {
 .upload-zone:hover {
   border-color: var(--accent-dim);
   background: var(--accent-glow);
+}
+
+.builtin-agent-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--bg-surface)) 0%, var(--bg-surface) 100%);
 }
 
 .upload-icon {

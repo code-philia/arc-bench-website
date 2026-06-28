@@ -10,6 +10,8 @@ import { api } from "../lib/api";
 import type { RequirementDetail, SubmissionDetail, SubmissionSummary } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
+type AgentSourceType = "upload" | "builtin";
+
 function submissionBadgeClass(status: string) {
   if (status === "PASSED") return "pass";
   if (status === "FAILED") return "fail";
@@ -49,6 +51,7 @@ export default function PlaygroundRequirementDetailPage() {
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState("readme");
   const [runtime, setRuntime] = useState("python");
+  const [agentSource, setAgentSource] = useState<AgentSourceType>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState("");
@@ -56,6 +59,7 @@ export default function PlaygroundRequirementDetailPage() {
   const [activeSubmission, setActiveSubmission] = useState<SubmissionDetail | null>(null);
   const [submissionTab, setSubmissionTab] = useState<"submit" | "history">("submit");
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const pollRef = useRef<number | null>(null);
   const quickStart = useQuickStart();
   const { active, prefill } = quickStart;
@@ -112,6 +116,7 @@ export default function PlaygroundRequirementDetailPage() {
       return;
     }
     setRuntime(prefill.runtime);
+    setAgentSource("upload");
     setDisplayName(prefill.displayName);
     setModelName(prefill.modelName);
     if (prefill.file) {
@@ -142,7 +147,7 @@ export default function PlaygroundRequirementDetailPage() {
   };
 
   const handleUpload = async () => {
-    if (!requirement || !file) {
+    if (!requirement) {
       return;
     }
     if (!user) {
@@ -164,8 +169,25 @@ export default function PlaygroundRequirementDetailPage() {
       return;
     }
     try {
+      setSubmitting(true);
       setUploadError(null);
-      const created = await api.createSubmission(requirement.id, runtime, file, normalizedDisplayName, normalizedModelName, catalog);
+      const submissionFile = agentSource === "builtin"
+        ? await api.getDemoAgentFile()
+        : file;
+      if (!submissionFile) {
+        const errorMessage = "Agent package is required.";
+        setUploadError(errorMessage);
+        message.error(errorMessage);
+        return;
+      }
+      const created = await api.createSubmission(
+        requirement.id,
+        runtime,
+        submissionFile,
+        normalizedDisplayName,
+        normalizedModelName,
+        catalog,
+      );
       setSubmissions((current) => [created.submission, ...current]);
       const started = await api.startSubmission(created.submission.id);
       setActiveSubmission(started);
@@ -173,11 +195,16 @@ export default function PlaygroundRequirementDetailPage() {
       beginPolling(created.submission.id);
       setDisplayName("");
       setModelName("");
+      if (agentSource === "upload" && !active) {
+        setFile(null);
+      }
       message.success("Submission created and queued.");
     } catch (error) {
       const errorMessage = (error as Error).message;
       setUploadError(errorMessage);
       message.error(errorMessage);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -301,22 +328,56 @@ export default function PlaygroundRequirementDetailPage() {
                       </button>
                     ))}
                   </div>
-                  <label className="upload-zone">
-                    <input
-                      className="visually-hidden"
-                      type="file"
-                      accept=".zip"
-                      onChange={(event) => {
-                        setFile(event.target.files?.[0] ?? null);
+                  <div className="agent-source-selector">
+                    <button
+                      className={`agent-source-card${agentSource === "upload" ? " active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setAgentSource("upload");
                         setUploadError(null);
                       }}
-                    />
-                    <div className="upload-icon">
-                      <UploadOutlined />
+                    >
+                      <div className="agent-source-title">Upload .zip</div>
+                      <div className="agent-source-copy">Use your own agent package with `main.py` and `requirements.txt`.</div>
+                    </button>
+                    <button
+                      className={`agent-source-card${agentSource === "builtin" ? " active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setAgentSource("builtin");
+                        setUploadError(null);
+                      }}
+                    >
+                      <div className="agent-source-title">Built-in arc-agent</div>
+                      <div className="agent-source-copy">Temporarily reuses the current quick start demo agent submission flow.</div>
+                    </button>
+                  </div>
+                  {agentSource === "upload" ? (
+                    <label className="upload-zone">
+                      <input
+                        className="visually-hidden"
+                        type="file"
+                        accept=".zip"
+                        onChange={(event) => {
+                          setFile(event.target.files?.[0] ?? null);
+                          setUploadError(null);
+                        }}
+                      />
+                      <div className="upload-icon">
+                        <UploadOutlined />
+                      </div>
+                      <div className="upload-text">Drop your agent code here</div>
+                      <div className="upload-hint">Python only | root main.py + requirements.txt | entrypoint: python main.py -r &lt;requirements.md&gt;</div>
+                    </label>
+                  ) : (
+                    <div className="builtin-agent-panel">
+                      <div className="file-icon">ARC</div>
+                      <div className="file-info">
+                        <div className="file-name">arc-agent</div>
+                        <div className="file-size">Current behavior: submit the built-in demo agent bundle used by Quick Start.</div>
+                      </div>
                     </div>
-                    <div className="upload-text">Drop your agent code here</div>
-                    <div className="upload-hint">Python only | root main.py + requirements.txt | entrypoint: python main.py -r &lt;requirements.md&gt;</div>
-                  </label>
+                  )}
                   {!user ? (
                     <div className="inline-alert">Login is required before uploading an agent or viewing your submission history.</div>
                   ) : null}
@@ -348,7 +409,7 @@ export default function PlaygroundRequirementDetailPage() {
                       onChange={(event) => setModelName(event.target.value)}
                     />
                   </div>
-                  {file ? (
+                  {agentSource === "upload" && file ? (
                     <div className="uploaded-file">
                       <div className="file-icon">.zip</div>
                       <div className="file-info">
@@ -364,11 +425,11 @@ export default function PlaygroundRequirementDetailPage() {
                   <button
                     className="btn-primary"
                     type="button"
-                    disabled={!file || !user}
+                    disabled={(agentSource === "upload" && !file) || !user || submitting}
                     data-quickstart-id="quickstart-submit"
                     onClick={handleUpload}
                   >
-                    Submit
+                    {submitting ? (agentSource === "builtin" ? "Preparing arc-agent..." : "Submitting...") : "Submit"}
                   </button>
                 </div>
                 <div className="submission-subsection">
