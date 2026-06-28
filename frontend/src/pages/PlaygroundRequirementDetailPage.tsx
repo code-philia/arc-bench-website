@@ -349,7 +349,7 @@ export default function PlaygroundRequirementDetailPage() {
                       }}
                     >
                       <div className="agent-source-title">Built-in arc-agent</div>
-                      <div className="agent-source-copy">Temporarily reuses the current quick start demo agent submission flow.</div>
+                      <div className="agent-source-copy">Use our built-in agent, Arc Agent, to process the requirements tree, generating traceability records and commit history.</div>
                     </button>
                   </div>
                   {agentSource === "upload" ? (
@@ -374,7 +374,6 @@ export default function PlaygroundRequirementDetailPage() {
                       <div className="file-icon">ARC</div>
                       <div className="file-info">
                         <div className="file-name">arc-agent</div>
-                        <div className="file-size">Current behavior: submit the built-in demo agent bundle used by Quick Start.</div>
                       </div>
                     </div>
                   )}
