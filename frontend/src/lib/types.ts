@@ -231,6 +231,8 @@ export type UserSummary = {
   id: string;
   email: string;
   username: string;
+  github_email: string | null;
+  github_username: string | null;
   created_at: string;
 };
 

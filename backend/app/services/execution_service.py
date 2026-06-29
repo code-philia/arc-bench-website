@@ -396,6 +396,9 @@ class ExecutionService:
             container = manager.create_container(
                 submission.id,
                 workspace_path,
+                agent_source=agent_source,
+                github_email=user.github_email,
+                github_username=user.github_username,
                 log_callback=lambda line: debug_log.append("docker-build", line),
             )
             debug_log.append("backend", f"Container created: name={container.name}, id={container.id}")

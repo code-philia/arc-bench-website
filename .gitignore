@@ -17,3 +17,6 @@ requirement/
 
 .env
 *.whl
+__demo__
+
+rebuild-arc-agent-runner.ps1

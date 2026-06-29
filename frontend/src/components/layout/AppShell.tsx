@@ -1,5 +1,5 @@
 import { message } from "antd";
-import { ApiOutlined, HomeOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
+import { ApiOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
@@ -107,9 +107,9 @@ export default function AppShell() {
             </button>
             {isLoading ? null : user ? (
               <div className="nav-auth-group">
-                <div className="nav-avatar" title={user.username}>
-                  {initials}
-                </div>
+                <button className="nav-avatar" type="button" title={user.username} onClick={() => navigate("/profile")}>
+                  {initials || <UserOutlined />}
+                </button>
                 <button className="nav-auth-link" type="button" onClick={handleLogout}>
                   Logout
                 </button>

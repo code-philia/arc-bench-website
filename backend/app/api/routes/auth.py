@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserSummary
+from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UpdateProfileRequest, UserSummary
 from app.services.auth_service import AuthService
 
 
@@ -44,6 +44,24 @@ def me(current_user: User | None = Depends(get_current_user)) -> AuthResponse:
     if current_user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return AuthResponse(user=UserSummary.model_validate(current_user, from_attributes=True))
+
+
+@router.put("/profile", response_model=AuthResponse)
+def update_profile(
+    payload: UpdateProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> AuthResponse:
+    service = AuthService(db)
+    try:
+        user = service.update_profile(
+            current_user,
+            github_email=payload.github_email,
+            github_username=payload.github_username,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AuthResponse(user=UserSummary.model_validate(user, from_attributes=True))
 
 
 def _set_session_cookie(response: Response, service: AuthService, user: User) -> None:

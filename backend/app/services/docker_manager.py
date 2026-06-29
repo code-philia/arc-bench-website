@@ -80,28 +80,43 @@ class DockerManager:
         except Exception:  # noqa: BLE001
             return False
 
-    def create_container(self, submission_id: str, workspace_path: str | Path, log_callback=None):
+    def create_container(
+        self,
+        submission_id: str,
+        workspace_path: str | Path,
+        *,
+        agent_source: str = "upload",
+        github_email: str | None = None,
+        github_username: str | None = None,
+        log_callback=None,
+    ):
         self.ensure_image(log_callback=log_callback)
         builtin_openai_base_url = self.settings.builtin_openai_base_url or self.settings.builtin_openai_api_base_url or ""
         builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
         builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
         builtin_visual_base_url = self.settings.builtin_visual_base_url or builtin_openai_base_url
+        environment = {
+            "SUBMISSION_ID": submission_id,
+            "RUNNER_TIMEOUT_SECONDS": str(self.settings.runner_timeout_seconds),
+            "AGENT_HEALTH_TIMEOUT_SECONDS": str(self.settings.agent_health_timeout_seconds),
+            "OPENAI_API_KEY": builtin_openai_api_key,
+            "OPENAI_BASE_URL": builtin_openai_base_url,
+            "OPENAI_API_BASE_URL": builtin_openai_base_url,
+            "VISUAL_API_KEY": builtin_visual_api_key,
+            "VISUAL_BASE_URL": builtin_visual_base_url,
+            "VISUAL_MODEL": self.settings.builtin_visual_model or "",
+            "ARC_DEBUG": str(self.settings.builtin_debug_mode),
+        }
+        if agent_source == "builtin_arc_agent":
+            if github_email and github_email.strip():
+                environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
+            if github_username and github_username.strip():
+                environment["ARC_GIT_USER_NAME"] = github_username.strip()
         return self.client.containers.create(
             self.settings.runner_image,
             name=f"arcbench-{submission_id}",
             detach=True,
-            environment={
-                "SUBMISSION_ID": submission_id,
-                "RUNNER_TIMEOUT_SECONDS": str(self.settings.runner_timeout_seconds),
-                "AGENT_HEALTH_TIMEOUT_SECONDS": str(self.settings.agent_health_timeout_seconds),
-                "OPENAI_API_KEY": builtin_openai_api_key,
-                "OPENAI_BASE_URL": builtin_openai_base_url,
-                "OPENAI_API_BASE_URL": builtin_openai_base_url,
-                "VISUAL_API_KEY": builtin_visual_api_key,
-                "VISUAL_BASE_URL": builtin_visual_base_url,
-                "VISUAL_MODEL": self.settings.builtin_visual_model or "",
-                "ARC_DEBUG": str(self.settings.builtin_debug_mode),
-            },
+            environment=environment,
             volumes={str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
             mem_limit=self.settings.runner_memory_limit,
             nano_cpus=self.settings.runner_cpu_limit * 1_000_000_000,

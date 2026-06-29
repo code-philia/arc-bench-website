@@ -12,6 +12,7 @@ import PlaygroundPage from "../pages/PlaygroundPage";
 import PlaygroundRequirementDetailPage from "../pages/PlaygroundRequirementDetailPage";
 import PlaygroundSubmissionDetailPage from "../pages/PlaygroundSubmissionDetailPage";
 import PlaygroundTaskListPage from "../pages/PlaygroundTaskListPage";
+import ProfilePage from "../pages/ProfilePage";
 import ResearchPage from "../pages/ResearchPage";
 import RegisterPage from "../pages/RegisterPage";
 import RequirementsPage from "../pages/RequirementsPage";
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
+      { path: "profile", element: <ProfilePage /> },
       { path: "requirements", element: <RequirementsPage /> },
       { path: "api-doc", element: <ApiDocPage /> },
       { path: "competitions/:taskType", element: <CompetitionDetailPage /> },

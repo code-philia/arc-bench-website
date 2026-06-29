@@ -79,6 +79,12 @@ export const api = {
   getCurrentUser() {
     return request<AuthResponse>("/auth/me");
   },
+  updateProfile(payload: { github_email?: string | null; github_username?: string | null }) {
+    return request<AuthResponse>("/auth/profile", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
   register(payload: { email: string; username: string; password: string }) {
     return request<AuthResponse>("/auth/register", {
       method: "POST",
