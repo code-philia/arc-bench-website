@@ -24,6 +24,7 @@ from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
+from app.services.traceability_db_schema import ensure_traceability_schema
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -974,35 +975,7 @@ class SubmissionService:
     def _normalize_traceability_database(traceability_db_path: Path) -> None:
         connection = sqlite3.connect(traceability_db_path)
         try:
-            cursor = connection.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS interfaces (
-                    interface_id TEXT PRIMARY KEY,
-                    req_ids TEXT,
-                    type TEXT,
-                    content TEXT,
-                    file_path TEXT,
-                    first_line TEXT,
-                    implemented INTEGER,
-                    callers TEXT,
-                    callees TEXT
-                )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tests (
-                    test_id TEXT PRIMARY KEY,
-                    req_id TEXT NOT NULL,
-                    scenario_id TEXT,
-                    type TEXT,
-                    file_path TEXT,
-                    first_line TEXT
-                )
-                """
-            )
-            connection.commit()
+            ensure_traceability_schema(connection)
         finally:
             connection.close()
 

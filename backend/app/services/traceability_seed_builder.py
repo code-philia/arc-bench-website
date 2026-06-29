@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 
 from app.models.requirement import Requirement
+from app.services.traceability_db_schema import ensure_traceability_schema
 
 
 class TraceabilitySeedBuilder:
@@ -22,11 +23,13 @@ class TraceabilitySeedBuilder:
                 "requirements": [
                     {
                         "req_id": "ROOT",
+                        "name": "ROOT",
                         "description": fallback_description,
-                        "visual_reference": None,
-                        "status": "pending",
+                        "visual_reference": [],
                         "parent_id": None,
                         "dependencies": [],
+                        "children_ids": [],
+                        "scenarios": [],
                     }
                 ],
                 "scenarios": [],
@@ -68,93 +71,31 @@ class TraceabilitySeedBuilder:
         connection = sqlite3.connect(output_path)
         try:
             cursor = connection.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS requirements (
-                    req_id TEXT PRIMARY KEY,
-                    description TEXT,
-                    visual_reference TEXT,
-                    status TEXT,
-                    parent_id TEXT,
-                    dependencies TEXT
-                )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS scenarios (
-                    scenario_id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    req_id TEXT NOT NULL,
-                    steps TEXT NOT NULL,
-                    FOREIGN KEY(req_id) REFERENCES requirements(req_id)
-                        ON DELETE CASCADE
-                )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS interfaces (
-                    interface_id TEXT PRIMARY KEY,
-                    req_ids TEXT,
-                    type TEXT,
-                    content TEXT,
-                    file_path TEXT,
-                    first_line TEXT,
-                    implemented INTEGER,
-                    callers TEXT,
-                    callees TEXT
-                )
-                """
-            )
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tests (
-                    test_id TEXT PRIMARY KEY,
-                    req_id TEXT NOT NULL,
-                    scenario_id TEXT,
-                    type TEXT,
-                    file_path TEXT,
-                    first_line TEXT,
-                    FOREIGN KEY(req_id) REFERENCES requirements(req_id)
-                        ON DELETE CASCADE,
-                    FOREIGN KEY(scenario_id) REFERENCES scenarios(scenario_id)
-                        ON DELETE CASCADE
-                )
-                """
-            )
-            cursor.execute("DELETE FROM scenarios")
+            ensure_traceability_schema(connection)
             cursor.execute("DELETE FROM requirements")
+            cursor.execute("DELETE FROM tests")
+            cursor.execute("DELETE FROM interfaces")
+            cursor.execute("DELETE FROM call_edges")
+            cursor.execute("DELETE FROM node_states")
             cursor.executemany(
                 """
-                INSERT OR REPLACE INTO requirements (req_id, description, visual_reference, status, parent_id, dependencies)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO requirements (
+                    req_id, name, description, visual_reference, scenarios, parent_id, children_ids, dependencies
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
                         str(item.get("req_id", "")).strip(),
+                        str(item.get("name", "")).strip(),
                         str(item.get("description", "")).strip(),
-                        item.get("visual_reference"),
-                        str(item.get("status", "pending")).strip() or "pending",
+                        json.dumps(item.get("visual_reference", []), ensure_ascii=False),
+                        json.dumps(item.get("scenarios", []), ensure_ascii=False),
                         item.get("parent_id"),
+                        json.dumps(item.get("children_ids", []), ensure_ascii=False),
                         json.dumps(item.get("dependencies", []), ensure_ascii=False),
                     )
                     for item in seed["requirements"]
-                ],
-            )
-            cursor.executemany(
-                """
-                INSERT OR REPLACE INTO scenarios (scenario_id, name, req_id, steps)
-                VALUES (?, ?, ?, ?)
-                """,
-                [
-                    (
-                        str(item.get("scenario_id", "")).strip(),
-                        str(item.get("name", "")).strip() or "Scenario",
-                        str(item.get("req_id", "")).strip(),
-                        json.dumps(item.get("steps", []), ensure_ascii=False),
-                    )
-                    for item in seed["scenarios"]
                 ],
             )
             connection.commit()
@@ -166,11 +107,13 @@ class TraceabilitySeedBuilder:
             "requirements": [
                 {
                     "req_id": "ROOT",
+                    "name": requirement.title or "ROOT",
                     "description": requirement.summary or requirement.title,
-                    "visual_reference": None,
-                    "status": "pending",
+                    "visual_reference": [],
                     "parent_id": None,
                     "dependencies": [],
+                    "children_ids": [],
+                    "scenarios": [],
                 }
             ],
             "scenarios": [],
@@ -187,18 +130,8 @@ class TraceabilitySeedBuilder:
         if not req_id:
             raise ValueError("Each requirement node in requirements.yaml must define a non-empty id")
 
-        requirements.append(
-            {
-                "req_id": req_id,
-                "description": self._as_text(node.get("description")),
-                "visual_reference": self._as_optional_text(node.get("visual_reference")),
-                "status": "pending",
-                "parent_id": parent_id,
-                "dependencies": self._as_string_list(node.get("dependencies")),
-            }
-        )
-
         raw_scenarios = node.get("scenarios")
+        normalized_scenarios: list[dict[str, Any]] = []
         if isinstance(raw_scenarios, list):
             for index, scenario in enumerate(raw_scenarios, start=1):
                 if not isinstance(scenario, dict):
@@ -206,14 +139,35 @@ class TraceabilitySeedBuilder:
                 scenario_id = str(scenario.get("id") or f"{req_id}-SCN-{index}").strip()
                 if not scenario_id:
                     scenario_id = f"{req_id}-SCN-{index}"
-                scenarios.append(
+                normalized_scenarios.append(
                     {
-                        "scenario_id": scenario_id,
+                        "id": scenario_id,
                         "name": self._as_text(scenario.get("name")) or f"Scenario {index}",
-                        "req_id": req_id,
                         "steps": self._normalize_steps(scenario.get("steps")),
                     }
                 )
+
+        requirements.append(
+            {
+                "req_id": req_id,
+                "name": self._as_text(node.get("name")) or req_id,
+                "description": self._as_text(node.get("description")),
+                "visual_reference": self._as_string_list(node.get("visual_reference")),
+                "scenarios": normalized_scenarios,
+                "parent_id": parent_id,
+                "children_ids": self._collect_child_ids(node.get("children")),
+                "dependencies": self._as_string_list(node.get("dependencies")),
+            }
+        )
+        for scenario in normalized_scenarios:
+            scenarios.append(
+                {
+                    "scenario_id": str(scenario["id"]),
+                    "name": str(scenario["name"]),
+                    "req_id": req_id,
+                    "steps": scenario["steps"],
+                }
+            )
 
         raw_children = node.get("children")
         if isinstance(raw_children, list):
@@ -255,3 +209,16 @@ class TraceabilitySeedBuilder:
                 }
             )
         return steps
+
+    @staticmethod
+    def _collect_child_ids(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        child_ids: list[str] = []
+        for child in value:
+            if not isinstance(child, dict):
+                continue
+            child_id = str(child.get("id") or "").strip()
+            if child_id:
+                child_ids.append(child_id)
+        return child_ids

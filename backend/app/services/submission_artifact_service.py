@@ -9,6 +9,7 @@ import re
 
 from app.models.submission import Submission
 from app.services.runtime_path_service import RuntimePathService
+from app.services.traceability_db_schema import ensure_traceability_schema
 
 
 LANGUAGE_BY_SUFFIX = {
@@ -105,7 +106,7 @@ class SubmissionArtifactService:
                     {
                         "test_id": str(row["test_id"]),
                         "req_id": str(row["req_id"]),
-                        "scenario_id": str(row["scenario_id"]) if row["scenario_id"] else None,
+                        "scenario_id": None,
                         "type": str(row["type"] or ""),
                         "file_path": str(row["file_path"] or ""),
                         "first_line": self._parse_positive_int(row["first_line"]),
@@ -434,30 +435,4 @@ class SubmissionArtifactService:
 
     @staticmethod
     def _ensure_traceability_schema(cursor: sqlite3.Cursor) -> None:
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS interfaces (
-                interface_id TEXT PRIMARY KEY,
-                req_ids TEXT,
-                type TEXT,
-                content TEXT,
-                file_path TEXT,
-                first_line TEXT,
-                implemented INTEGER,
-                callers TEXT,
-                callees TEXT
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tests (
-                test_id TEXT PRIMARY KEY,
-                req_id TEXT NOT NULL,
-                scenario_id TEXT,
-                type TEXT,
-                file_path TEXT,
-                first_line TEXT
-            )
-            """
-        )
+        ensure_traceability_schema(cursor.connection)

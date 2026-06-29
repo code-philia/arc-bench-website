@@ -100,23 +100,13 @@ def initialize_traceability_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS requirements (
                 req_id TEXT PRIMARY KEY,
+                name TEXT,
                 description TEXT,
                 visual_reference TEXT,
-                status TEXT,
+                scenarios TEXT,
                 parent_id TEXT,
+                children_ids TEXT,
                 dependencies TEXT
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS scenarios (
-                scenario_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                req_id TEXT NOT NULL,
-                steps TEXT NOT NULL,
-                FOREIGN KEY(req_id) REFERENCES requirements(req_id)
-                    ON DELETE CASCADE
             )
             """
         )
@@ -139,15 +129,34 @@ def initialize_traceability_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS tests (
                 test_id TEXT PRIMARY KEY,
-                req_id TEXT NOT NULL,
-                scenario_id TEXT,
+                req_id TEXT,
+                interface_ids TEXT,
                 type TEXT,
                 file_path TEXT,
-                first_line TEXT,
-                FOREIGN KEY(req_id) REFERENCES requirements(req_id)
-                    ON DELETE CASCADE,
-                FOREIGN KEY(scenario_id) REFERENCES scenarios(scenario_id)
-                    ON DELETE CASCADE
+                passed INTEGER,
+                first_line TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS call_edges (
+                source_req_id TEXT,
+                target_req_id TEXT,
+                from_interface_id TEXT,
+                to_interface_id TEXT,
+                edge_type TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (source_req_id, target_req_id, from_interface_id, to_interface_id)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS node_states (
+                req_id TEXT PRIMARY KEY,
+                state TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -172,36 +181,24 @@ def seed_traceability_requirements() -> tuple[int, int]:
         cursor = connection.cursor()
         cursor.executemany(
             """
-            INSERT OR REPLACE INTO requirements (req_id, description, visual_reference, status, parent_id, dependencies)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO requirements (
+                req_id, name, description, visual_reference, scenarios, parent_id, children_ids, dependencies
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
                     str(item.get("req_id", "")).strip(),
+                    str(item.get("name", "")).strip(),
                     str(item.get("description", "")).strip(),
-                    item.get("visual_reference"),
-                    str(item.get("status", "pending")).strip() or "pending",
+                    json.dumps(item.get("visual_reference", []), ensure_ascii=False),
+                    json.dumps(item.get("scenarios", []), ensure_ascii=False),
                     item.get("parent_id"),
+                    json.dumps(item.get("children_ids", []), ensure_ascii=False),
                     json.dumps(item.get("dependencies", []), ensure_ascii=False),
                 )
                 for item in requirements
                 if str(item.get("req_id", "")).strip()
-            ],
-        )
-        cursor.executemany(
-            """
-            INSERT OR REPLACE INTO scenarios (scenario_id, name, req_id, steps)
-            VALUES (?, ?, ?, ?)
-            """,
-            [
-                (
-                    str(item.get("scenario_id", "")).strip(),
-                    str(item.get("name", "")).strip() or "Scenario",
-                    str(item.get("req_id", "")).strip(),
-                    json.dumps(item.get("steps", []), ensure_ascii=False),
-                )
-                for item in scenarios
-                if str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
             ],
         )
         connection.commit()
@@ -212,48 +209,7 @@ def seed_traceability_requirements() -> tuple[int, int]:
 
 
 def sync_requirement_statuses_from_visual_events() -> None:
-    if not RUNNER_EVENTS_PATH.exists():
-        return
-
-    status_by_requirement: dict[str, str] = {}
-    for raw_line in RUNNER_EVENTS_PATH.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if payload.get("type") != "requirement_state":
-            continue
-        node_id = str(payload.get("node_id", "")).strip()
-        phase = str(payload.get("phase", "")).strip()
-        status = str(payload.get("status", "")).strip()
-        if not node_id:
-            continue
-        if phase == "design" and status == "completed":
-            status_by_requirement[node_id] = "design"
-        elif phase == "implement" and status == "completed":
-            status_by_requirement[node_id] = "implement"
-        elif phase == "test" and status == "passed":
-            status_by_requirement[node_id] = "test-passed"
-        elif phase == "test" and status == "failed":
-            status_by_requirement[node_id] = "test-failed"
-
-    if not status_by_requirement:
-        return
-
-    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
-    try:
-        cursor = connection.cursor()
-        for req_id, req_status in status_by_requirement.items():
-            cursor.execute(
-                "UPDATE requirements SET status = ? WHERE req_id = ?",
-                (req_status, req_id),
-            )
-        connection.commit()
-    finally:
-        connection.close()
+    return
 
 
 def apply_traceability_events() -> tuple[int, int, int]:
@@ -311,15 +267,16 @@ def apply_traceability_events() -> tuple[int, int, int]:
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO tests (
-                        test_id, req_id, scenario_id, type, file_path, first_line
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        test_id, req_id, interface_ids, type, file_path, passed, first_line
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         str(payload.get("test_id", "")).strip(),
                         str(payload.get("req_id", "")).strip(),
-                        payload.get("scenario_id"),
+                        json.dumps(payload.get("interface_ids", []), ensure_ascii=False),
                         str(payload.get("test_type", "")).strip(),
                         payload.get("file_path"),
+                        None,
                         payload.get("first_line"),
                     ),
                 )

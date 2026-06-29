@@ -18,6 +18,7 @@ from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
+from app.services.traceability_db_schema import ensure_traceability_schema
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -143,45 +144,7 @@ class ExecutionService:
             connection = sqlite3.connect(traceability_db_path)
             try:
                 cursor = connection.cursor()
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS requirements (
-                        req_id TEXT PRIMARY KEY,
-                        description TEXT,
-                        visual_reference TEXT,
-                        status TEXT,
-                        parent_id TEXT,
-                        dependencies TEXT
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS interfaces (
-                        interface_id TEXT PRIMARY KEY,
-                        req_ids TEXT,
-                        type TEXT,
-                        content TEXT,
-                        file_path TEXT,
-                        first_line TEXT,
-                        implemented INTEGER,
-                        callers TEXT,
-                        callees TEXT
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS tests (
-                        test_id TEXT PRIMARY KEY,
-                        req_id TEXT NOT NULL,
-                        scenario_id TEXT,
-                        type TEXT,
-                        file_path TEXT,
-                        first_line TEXT
-                    )
-                    """
-                )
+                ensure_traceability_schema(connection)
                 for raw_line in new_lines:
                     line = raw_line.strip()
                     if not line:
@@ -236,15 +199,16 @@ class ExecutionService:
                         cursor.execute(
                             """
                             INSERT OR REPLACE INTO tests (
-                                test_id, req_id, scenario_id, type, file_path, first_line
-                            ) VALUES (?, ?, ?, ?, ?, ?)
+                                test_id, req_id, interface_ids, type, file_path, passed, first_line
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
                             """,
                             (
                                 str(payload.get("test_id", "")).strip(),
                                 str(payload.get("req_id", "")).strip(),
-                                payload.get("scenario_id"),
+                                json.dumps(payload.get("interface_ids", []), ensure_ascii=False),
                                 str(payload.get("test_type", "")).strip(),
                                 payload.get("file_path"),
+                                None,
                                 payload.get("first_line"),
                             ),
                         )
