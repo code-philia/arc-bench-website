@@ -1,8 +1,8 @@
-FROM mcr.microsoft.com/playwright/python:v1.54.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.54.0-noble
 
 WORKDIR /opt/arcbench
 
-COPY agentic-requirement-compiler/dist/arc-agent/arc_agent-0.1.0-py3-none-any.whl /tmp/arc_agent-0.1.0-py3-none-any.whl
+COPY arc_agent-0.1.0-py3-none-any.whl /tmp/arc_agent-0.1.0-py3-none-any.whl
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl ca-certificates xz-utils \

@@ -6,7 +6,7 @@ frontend/node_modules
 frontend/*.tsbuildinfo
 frontend/.vite
 backend/.venv
-backend/__pycache__
+__pycache__
 backend/**/*.pyc
 backend/.pytest_cache
 backend/.mypy_cache
@@ -14,3 +14,6 @@ backend/.ruff_cache
 backend/uvicorn.log
 runtime/
 requirement/
+
+.env
+*.whl
