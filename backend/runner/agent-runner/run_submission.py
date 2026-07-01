@@ -455,15 +455,27 @@ def require_built_in_agent_config(spec: dict) -> tuple[list[str], dict[str, str]
         raise RuntimeError("runner-spec.json is missing built-in arc-agent command")
 
     project_dir = str(spec.get("project_dir", "")).strip()
-    requirement_yaml_path = str(spec.get("requirement_yaml_path", "")).strip()
+    requirement_dir = str(spec.get("requirement_dir", "")).strip()
+    output_dir = str(spec.get("output_dir", "")).strip()
     if not project_dir:
         raise RuntimeError("runner-spec.json is missing project_dir for built-in arc-agent")
-    if not requirement_yaml_path:
-        raise RuntimeError("runner-spec.json is missing requirement_yaml_path for built-in arc-agent")
+    if not requirement_dir:
+        raise RuntimeError("runner-spec.json is missing requirement_dir for built-in arc-agent")
+    if not output_dir:
+        raise RuntimeError("runner-spec.json is missing output_dir for built-in arc-agent")
     if not Path(project_dir).exists():
         raise RuntimeError(f"Built-in arc-agent project directory is missing: {project_dir}")
-    if not Path(requirement_yaml_path).exists():
-        raise RuntimeError(f"Built-in arc-agent requirement file is missing: {requirement_yaml_path}")
+    if not Path(requirement_dir).exists():
+        raise RuntimeError(f"Built-in arc-agent requirement directory is missing: {requirement_dir}")
+    if not Path(requirement_dir, "requirements.yaml").exists():
+        raise RuntimeError(
+            f"Built-in arc-agent requirement directory does not contain requirements.yaml: {requirement_dir}"
+        )
+    if Path(output_dir) != Path(project_dir):
+        raise RuntimeError(
+            "runner-spec.json output_dir must match project_dir for built-in arc-agent "
+            "so downstream runtime paths stay consistent"
+        )
 
     raw_submission_env = builtin_agent.get("env")
     if raw_submission_env is not None and not isinstance(raw_submission_env, dict):
@@ -507,7 +519,7 @@ def run_builtin_arc_agent(stdout_file, stderr_file, spec: dict) -> subprocess.Co
     append_runner_event("start_agent", "Launching built-in arc-agent")
     return run_command(
         command,
-        cwd=TEMPLATE_DIR,
+        cwd=WORKSPACE_ROOT,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
         check=False,

@@ -79,7 +79,8 @@ class WorkspaceAssembler:
                     "tests_dir": "/workspace/tests",
                     "artifacts_dir": "/workspace/artifacts",
                     "project_dir": "/workspace/template",
-                    "requirement_yaml_path": "/workspace/task/requirements.yaml",
+                    "requirement_dir": "/workspace/task",
+                    "output_dir": "/workspace/template",
                     "runner_events_path": "/workspace/artifacts/runner-events.jsonl",
                     "traceability_db_path": "/workspace/artifacts/traceability.db",
                     "traceability_events_path": "/workspace/artifacts/traceability-events.jsonl",
@@ -87,9 +88,9 @@ class WorkspaceAssembler:
                     "builtin_agent": {
                         "command": [
                             "arc-agent",
+                            "/workspace/task",
+                            "--output-dir",
                             "/workspace/template",
-                            "--requirement-path",
-                            "/workspace/task/requirements.yaml",
                             "--app-type",
                             "web",
                         ],
