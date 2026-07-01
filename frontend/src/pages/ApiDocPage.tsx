@@ -266,8 +266,8 @@ function OverviewPage() {
             <p>Writes requirement progress events into <code>/workspace/artifacts/runner-events.jsonl</code>.</p>
           </article>
           <article className="api-doc-callout-card">
-            <strong>Traceability stream</strong>
-            <p>Writes interface and test asset events into <code>/workspace/artifacts/traceability-events.jsonl</code>.</p>
+            <strong>Unified event stream</strong>
+            <p>Writes interface, test, and requirement update events into <code>/workspace/artifacts/runner-events.jsonl</code>.</p>
           </article>
           <article className="api-doc-callout-card">
             <strong>Execution database</strong>
@@ -490,8 +490,8 @@ function RuntimePage() {
               <td>Requirement visualization event stream.</td>
             </tr>
             <tr>
-              <td><code>/workspace/artifacts/traceability-events.jsonl</code></td>
-              <td>Raw interface/test asset event stream written by the SDK.</td>
+              <td><code>/workspace/artifacts/runner-events.jsonl</code></td>
+              <td>Unified event stream for requirement, interface, test, and runner update signals.</td>
             </tr>
             <tr>
               <td><code>/workspace/artifacts/traceability.db</code></td>

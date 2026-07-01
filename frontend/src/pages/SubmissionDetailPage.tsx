@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
-import type { SubmissionDetail, SubmissionLogs, SubmissionPreviewStatus } from "../lib/types";
+import type { SubmissionDetail, SubmissionLogs, SubmissionPreviewStatus, SubmissionSseEvent } from "../lib/types";
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -40,8 +40,8 @@ export default function SubmissionDetailPage() {
   const [previewStatus, setPreviewStatus] = useState<SubmissionPreviewStatus | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
-  const pollRef = useRef<number | null>(null);
-  const previewPollRef = useRef<number | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const sseReconnectRef = useRef<number | null>(null);
   const previewUrl = api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
   const previewAvailable = previewStatus?.available ?? false;
@@ -91,9 +91,13 @@ export default function SubmissionDetailPage() {
     setPreviewStatus(null);
     setPreviewLoading(true);
     setPreviewFrameVersion(0);
-    if (previewPollRef.current) {
-      window.clearInterval(previewPollRef.current);
-      previewPollRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    if (sseReconnectRef.current) {
+      window.clearTimeout(sseReconnectRef.current);
+      sseReconnectRef.current = null;
     }
   }, [submissionId]);
 
@@ -104,12 +108,6 @@ export default function SubmissionDetailPage() {
       .then(([detail, latestLogs]) => {
         setSubmission(detail);
         setLogs(latestLogs);
-        if (["PENDING", "RUNNING", "PAUSED"].includes(detail.status)) {
-          pollRef.current = window.setInterval(() => {
-            api.getSubmission(submissionId).then(setSubmission).catch(() => undefined);
-            api.getSubmissionLogs(submissionId).then(setLogs).catch(() => undefined);
-          }, 2000);
-        }
       })
       .catch((error: Error) => {
         setSubmission(null);
@@ -120,25 +118,74 @@ export default function SubmissionDetailPage() {
       .finally(() => setLoading(false));
 
     return () => {
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
-      if (previewPollRef.current) {
-        window.clearInterval(previewPollRef.current);
-        previewPollRef.current = null;
+      if (sseReconnectRef.current) {
+        window.clearTimeout(sseReconnectRef.current);
+        sseReconnectRef.current = null;
       }
     };
   }, [submissionId]);
 
   useEffect(() => {
-    if (!submission || !pollRef.current) {
+    if (!submissionId || !user) {
       return;
     }
-    if (!["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
-      window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, [submission]);
+
+    const refreshSubmissionDetail = async () => {
+      const latest = await api.getSubmission(submissionId);
+      setSubmission(latest);
+      return latest;
+    };
+
+    const refreshSubmissionLogs = async () => {
+      const latestLogs = await api.getSubmissionLogs(submissionId);
+      setLogs(latestLogs);
+      return latestLogs;
+    };
+
+    const handleSseEvent = (event: SubmissionSseEvent) => {
+      if (event.refresh.submission) {
+        void refreshSubmissionDetail().catch(() => undefined);
+      }
+      if (event.refresh.logs) {
+        void refreshSubmissionLogs().catch(() => undefined);
+      }
+      if (event.refresh.preview) {
+        void loadPreviewStatus(true);
+      }
+    };
+
+    const connect = () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = api.connectSubmissionEvents(submissionId, {
+        onEvent: handleSseEvent,
+        onError: () => {
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
+          if (sseReconnectRef.current) {
+            window.clearTimeout(sseReconnectRef.current);
+          }
+          sseReconnectRef.current = window.setTimeout(() => {
+            connect();
+          }, 2000);
+        },
+      });
+    };
+
+    connect();
+
+    return () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      if (sseReconnectRef.current) {
+        window.clearTimeout(sseReconnectRef.current);
+        sseReconnectRef.current = null;
+      }
+    };
+  }, [submissionId, user]);
 
   useEffect(() => {
     if (!submission) {
@@ -146,29 +193,7 @@ export default function SubmissionDetailPage() {
       setPreviewLoading(false);
       return;
     }
-    let cancelled = false;
     void loadPreviewStatus(previewStatus !== null);
-
-    if (["PENDING", "RUNNING", "PAUSED"].includes(submission.status) && !previewPollRef.current) {
-      previewPollRef.current = window.setInterval(() => {
-        if (cancelled) {
-          return;
-        }
-        void loadPreviewStatus(true);
-      }, 5000);
-    }
-    if (!["PENDING", "RUNNING", "PAUSED"].includes(submission.status) && previewPollRef.current) {
-      window.clearInterval(previewPollRef.current);
-      previewPollRef.current = null;
-    }
-
-    return () => {
-      cancelled = true;
-      if (previewPollRef.current && !["PENDING", "RUNNING", "PAUSED"].includes(submission.status)) {
-        window.clearInterval(previewPollRef.current);
-        previewPollRef.current = null;
-      }
-    };
   }, [submissionId, submission?.status]);
 
   if (loading) {

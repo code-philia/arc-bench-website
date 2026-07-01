@@ -299,9 +299,14 @@ def update_submission_editable_task(
         service.write_submission_traceability_store(submission, payload.requirements_yaml)
         if payload.edited_node_id and payload.edited_node_id.strip():
             service.reset_progress_for_edited_node(submission, payload.edited_node_id)
-        SubmissionEventStream.publish(submission.id, "requirement_state", reason="task_updated")
-        SubmissionEventStream.publish(submission.id, "traceability_db", reason="task_updated")
-        SubmissionEventStream.publish(submission.id, "commit_history", reason="task_updated")
+        SubmissionEventStream.publish(
+            submission.id,
+            reason="task_updated",
+            submission=True,
+            commit_history=True,
+            traceability_selected=True,
+            traceability_all=True,
+        )
         HostDemoPreviewService.mark_stale(submission.id)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc

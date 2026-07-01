@@ -27,7 +27,6 @@ STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
 TRACEABILITY_DB_PATH = ARTIFACTS_DIR / "traceability.db"
-TRACEABILITY_EVENTS_PATH = ARTIFACTS_DIR / "traceability-events.jsonl"
 TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
 PAUSE_REQUEST_PATH = ARTIFACTS_DIR / "pause.request.json"
 RESUME_REQUEST_PATH = ARTIFACTS_DIR / "resume.request.json"
@@ -213,7 +212,7 @@ def sync_requirement_statuses_from_visual_events() -> None:
 
 
 def apply_traceability_events() -> tuple[int, int, int]:
-    if not TRACEABILITY_EVENTS_PATH.exists():
+    if not RUNNER_EVENTS_PATH.exists():
         append_debug_log("No traceability events found, skipping interface/test import")
         return 0, 0, 0
 
@@ -223,7 +222,7 @@ def apply_traceability_events() -> tuple[int, int, int]:
     connection = sqlite3.connect(TRACEABILITY_DB_PATH)
     try:
         cursor = connection.cursor()
-        for raw_line in TRACEABILITY_EVENTS_PATH.read_text(encoding="utf-8").splitlines():
+        for raw_line in RUNNER_EVENTS_PATH.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line:
                 continue
@@ -418,7 +417,7 @@ def build_agent_environment(*, builtin_env: dict[str, str] | None = None) -> dic
         "ARCBENCH_ARTIFACTS_DIR": str(ARTIFACTS_DIR),
         "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
         "ARCBENCH_TRACEABILITY_DB_PATH": str(TRACEABILITY_DB_PATH),
-        "ARCBENCH_TRACEABILITY_EVENTS_PATH": str(TRACEABILITY_EVENTS_PATH),
+        "ARCBENCH_TRACEABILITY_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
         "ARCBENCH_CHECKPOINT_PATH": str(CHECKPOINT_PATH),
         "ARCBENCH_PAUSE_REQUEST_PATH": str(PAUSE_REQUEST_PATH),
@@ -884,7 +883,6 @@ def main() -> int:
     resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
     if not resume_from_checkpoint:
         RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
-        TRACEABILITY_EVENTS_PATH.write_text("", encoding="utf-8")
     initialize_traceability_db()
     seeded_requirements, seeded_scenarios = seed_traceability_requirements()
     spec = read_spec()

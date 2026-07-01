@@ -62,6 +62,26 @@ class SubmissionArtifactService:
     def __init__(self) -> None:
         self.runtime_paths = RuntimePathService()
 
+    def read_node_visual_states(self, submission: Submission) -> dict[str, str]:
+        traceability_db_path = self._get_traceability_db_path(submission)
+        if traceability_db_path is None:
+            return {}
+
+        connection = sqlite3.connect(traceability_db_path)
+        connection.row_factory = sqlite3.Row
+        try:
+            cursor = connection.cursor()
+            self._ensure_traceability_schema(cursor)
+            visual_states: dict[str, str] = {}
+            for row in cursor.execute("SELECT req_id, state FROM node_states ORDER BY req_id"):
+                req_id = str(row["req_id"] or "").strip()
+                visual_state = self._normalize_node_visual_state(row["state"])
+                if req_id and visual_state:
+                    visual_states[req_id] = visual_state
+            return visual_states
+        finally:
+            connection.close()
+
     def read_traceability(self, submission: Submission, node_id: str) -> dict[str, list[dict]]:
         traceability_db_path = self._get_traceability_db_path(submission)
         if traceability_db_path is None:
@@ -432,6 +452,19 @@ class SubmissionArtifactService:
         if normalized in {"passed", "failed"}:
             return normalized
         return None
+
+    @staticmethod
+    def _normalize_node_visual_state(raw_value: object) -> str | None:
+        normalized = str(raw_value or "").strip().upper()
+        if not normalized or normalized == "UNSEEN":
+            return "default"
+        if normalized == "DESIGNED":
+            return "design"
+        if normalized in {"PASSED", "CONVERGED", "CONVERGED_WITH_FAILED_CHILDREN"}:
+            return "test-passed"
+        if normalized == "FAILED":
+            return "test-failed"
+        return "default"
 
     @staticmethod
     def _ensure_traceability_schema(cursor: sqlite3.Cursor) -> None:

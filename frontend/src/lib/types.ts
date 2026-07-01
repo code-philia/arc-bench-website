@@ -83,6 +83,7 @@ export type SubmissionDetail = SubmissionSummary & {
     duration_ms: number;
     error: string | null;
   }>;
+  node_states: Record<string, RequirementVisualState>;
   can_pause: boolean;
   can_resume: boolean;
   pause_available: boolean;
@@ -191,17 +192,20 @@ export type SubmissionPreviewStatus = {
   error: string | null;
 };
 
-export type SubmissionEventChannel =
-  | "commit_history"
-  | "traceability_db"
-  | "requirement_state"
-  | "preview";
+export type SubmissionSseRefresh = {
+  submission: boolean;
+  logs: boolean;
+  commit_history: boolean;
+  traceability_selected: boolean;
+  traceability_all: boolean;
+  preview: boolean;
+};
 
 export type SubmissionSseEvent = {
   submission_id: string;
-  channel: SubmissionEventChannel;
   timestamp: number;
   version: number;
+  refresh: SubmissionSseRefresh;
   reason: string | null;
 };
 

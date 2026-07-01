@@ -544,7 +544,11 @@ class SubmissionService:
         }
         with log_path.open("a", encoding="utf-8") as output:
             output.write(json.dumps(payload, ensure_ascii=True) + "\n")
-        SubmissionEventStream.publish(submission_id, "requirement_state", reason=f"step:{step_key}")
+        SubmissionEventStream.publish(
+            submission_id,
+            reason=f"step:{step_key}",
+            logs=True,
+        )
         return log_path
 
     def get_event_log_path(self, submission: Submission) -> Path:
@@ -599,6 +603,7 @@ class SubmissionService:
         tests = []
         if submission.result_path and Path(submission.result_path).exists():
             tests = json.loads(Path(submission.result_path).read_text(encoding="utf-8")).get("tests", [])
+        node_states = self.artifact_service.read_node_visual_states(submission)
         return SubmissionDetail(
             id=submission.id,
             display_name=submission.display_name,
@@ -622,6 +627,7 @@ class SubmissionService:
             workspace_path=submission.workspace_path,
             logs_available=bool(submission.stdout_path or submission.stderr_path),
             tests=tests,
+            node_states=node_states,
             can_pause=self.can_pause(submission),
             can_resume=self.can_resume(submission),
             pause_available=bool(self.get_pause_request_path(submission)),
@@ -753,7 +759,7 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
-        SubmissionEventStream.publish(submission.id, "requirement_state", reason="steps_updated")
+        SubmissionEventStream.publish(submission.id, reason="steps_updated", submission=True)
 
     def mark_running(self, submission: Submission, workspace_path: Path) -> None:
         submission.status = SubmissionStatus.RUNNING.value
@@ -763,9 +769,13 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
-        SubmissionEventStream.publish(submission.id, "requirement_state", reason="running")
-        SubmissionEventStream.publish(submission.id, "preview", reason="workspace_ready")
-        SubmissionEventStream.publish(submission.id, "traceability_db", reason="workspace_ready")
+        SubmissionEventStream.publish(
+            submission.id,
+            reason="running",
+            submission=True,
+            traceability_selected=True,
+            traceability_all=True,
+        )
 
     def finalize(
         self,
@@ -791,10 +801,15 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
-        SubmissionEventStream.publish(submission.id, "requirement_state", reason=f"finalized:{status.value.lower()}")
-        SubmissionEventStream.publish(submission.id, "commit_history", reason="finalized")
-        SubmissionEventStream.publish(submission.id, "traceability_db", reason="finalized")
-        SubmissionEventStream.publish(submission.id, "preview", reason="finalized")
+        SubmissionEventStream.publish(
+            submission.id,
+            reason=f"finalized:{status.value.lower()}",
+            submission=True,
+            commit_history=True,
+            traceability_selected=True,
+            traceability_all=True,
+            preview=True,
+        )
 
     def update_status(self, submission: Submission, status: SubmissionStatus, failure_reason: str | None = None) -> None:
         submission.status = status.value
@@ -802,7 +817,7 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
-        SubmissionEventStream.publish(submission.id, "requirement_state", reason=f"status:{status.value.lower()}")
+        SubmissionEventStream.publish(submission.id, reason=f"status:{status.value.lower()}", submission=True)
 
     @staticmethod
     def can_pause(submission: Submission) -> bool:
@@ -836,7 +851,6 @@ class SubmissionService:
             "stderr.log",
             "result.json",
             "runner-events.jsonl",
-            "traceability-events.jsonl",
             "pause.request.json",
             "resume.request.json",
         ]:

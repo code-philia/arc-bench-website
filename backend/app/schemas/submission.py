@@ -53,6 +53,7 @@ class SubmissionDetail(SubmissionSummary):
     workspace_path: str | None
     logs_available: bool
     tests: list[dict]
+    node_states: dict[str, str] = Field(default_factory=dict)
     can_pause: bool = False
     can_resume: bool = False
     pause_available: bool = False

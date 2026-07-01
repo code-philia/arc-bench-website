@@ -4,59 +4,81 @@ import json
 import queue
 import threading
 import time
-from collections import defaultdict
 from dataclasses import dataclass
-from typing import Literal
+from collections import defaultdict
 
 
-SubmissionEventChannel = Literal[
-    "submission",
-    "commit_history",
-    "traceability_db",
-    "requirement_state",
-    "preview",
-]
+@dataclass(frozen=True)
+class SubmissionEventRefresh:
+    submission: bool = False
+    logs: bool = False
+    commit_history: bool = False
+    traceability_selected: bool = False
+    traceability_all: bool = False
+    preview: bool = False
+
+    def to_payload(self) -> dict[str, bool]:
+        return {
+            "submission": self.submission,
+            "logs": self.logs,
+            "commit_history": self.commit_history,
+            "traceability_selected": self.traceability_selected,
+            "traceability_all": self.traceability_all,
+            "preview": self.preview,
+        }
 
 
 @dataclass(frozen=True)
 class SubmissionEvent:
     submission_id: str
-    channel: SubmissionEventChannel
     timestamp: float
     version: int
+    refresh: SubmissionEventRefresh
     reason: str | None = None
 
     def to_payload(self) -> dict[str, object]:
         return {
             "submission_id": self.submission_id,
-            "channel": self.channel,
             "timestamp": self.timestamp,
             "version": self.version,
+            "refresh": self.refresh.to_payload(),
             "reason": self.reason,
         }
 
 
 class SubmissionEventStream:
     _lock = threading.Lock()
-    _versions: dict[str, dict[SubmissionEventChannel, int]] = defaultdict(dict)
+    _versions: dict[str, int] = defaultdict(int)
     _subscribers: dict[str, set[queue.Queue[SubmissionEvent | None]]] = defaultdict(set)
 
     @classmethod
     def publish(
         cls,
         submission_id: str,
-        channel: SubmissionEventChannel,
         *,
         reason: str | None = None,
+        submission: bool = False,
+        logs: bool = False,
+        commit_history: bool = False,
+        traceability_selected: bool = False,
+        traceability_all: bool = False,
+        preview: bool = False,
     ) -> SubmissionEvent:
         with cls._lock:
-            current_version = cls._versions[submission_id].get(channel, 0) + 1
-            cls._versions[submission_id][channel] = current_version
+            current_version = cls._versions[submission_id] + 1
+            cls._versions[submission_id] = current_version
             event = SubmissionEvent(
                 submission_id=submission_id,
-                channel=channel,
                 timestamp=time.time(),
                 version=current_version,
+                refresh=SubmissionEventRefresh(
+                    submission=submission,
+                    logs=logs,
+                    commit_history=commit_history,
+                    traceability_selected=traceability_selected,
+                    traceability_all=traceability_all,
+                    preview=preview,
+                ),
                 reason=reason,
             )
             subscribers = list(cls._subscribers.get(submission_id, set()))
@@ -69,19 +91,7 @@ class SubmissionEventStream:
 
     @classmethod
     def snapshot(cls, submission_id: str) -> list[SubmissionEvent]:
-        with cls._lock:
-            versions = dict(cls._versions.get(submission_id, {}))
-        timestamp = time.time()
-        return [
-            SubmissionEvent(
-                submission_id=submission_id,
-                channel=channel,
-                timestamp=timestamp,
-                version=version,
-                reason="snapshot",
-            )
-            for channel, version in sorted(versions.items())
-        ]
+        return []
 
     @classmethod
     def subscribe(cls, submission_id: str) -> queue.Queue[SubmissionEvent | None]:

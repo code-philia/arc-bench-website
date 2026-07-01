@@ -29,7 +29,6 @@ import type {
   SubmissionSseEvent,
   SubmissionSourcePayload,
   SubmissionTraceabilityPayload,
-  SubmissionVisualEvent,
   SubmissionEditableTaskPayload,
   SubmissionTaskAssets,
 } from "../lib/types";
@@ -61,32 +60,6 @@ function normalizeTaskType(value: string) {
     return value;
   }
   return "web";
-}
-
-function toVisualState(event: SubmissionVisualEvent): RequirementVisualState {
-  if (event.phase === "design") {
-    return "design";
-  }
-  if (event.phase === "implement") {
-    return "implement";
-  }
-  if (event.phase === "test" && event.status === "passed") {
-    return "test-passed";
-  }
-  if (event.phase === "test" && event.status === "failed") {
-    return "test-failed";
-  }
-  return "default";
-}
-
-function commitPhaseToVisualState(phase: SubmissionCommitHistoryEntry["phase"]): RequirementVisualState {
-  if (phase === "design") {
-    return "design";
-  }
-  if (phase === "implement") {
-    return "implement";
-  }
-  return "default";
 }
 
 function formatLineNumber(value: number | null) {
@@ -999,6 +972,16 @@ export default function PlaygroundSubmissionDetailPage() {
     return payload;
   };
 
+  const refreshTraceabilityForCurrentView = () => {
+    if (traceabilityOverlayVisible) {
+      void refreshAllTraceability().catch(() => undefined);
+      return;
+    }
+    if (activeSelectedNodeId) {
+      void refreshSelectedTraceability(activeSelectedNodeId, false).catch(() => undefined);
+    }
+  };
+
   const refreshPreview = async () => {
     setPreviewLoading(true);
     try {
@@ -1127,27 +1110,20 @@ export default function PlaygroundSubmissionDetailPage() {
     }
 
     const handleSseEvent = (event: SubmissionSseEvent) => {
-      if (event.channel === "requirement_state") {
+      if (event.refresh.submission) {
         void refreshSubmissionDetail().catch(() => undefined);
+      }
+      if (event.refresh.logs) {
         void refreshSubmissionLogs().catch(() => undefined);
-        return;
       }
-      if (event.channel === "commit_history") {
+      if (event.refresh.commit_history) {
         void refreshCommitHistory(true).catch(() => undefined);
-        return;
       }
-      if (event.channel === "preview") {
+      if (event.refresh.preview) {
         void loadPreviewStatus(true);
-        return;
       }
-      if (event.channel === "traceability_db") {
-        if (traceabilityOverlayVisible) {
-          void refreshAllTraceability().catch(() => undefined);
-        }
-        if (activeSelectedNodeId) {
-          void refreshSelectedTraceability(activeSelectedNodeId, false).catch(() => undefined);
-        }
-        return;
+      if (event.refresh.traceability_all || event.refresh.traceability_selected) {
+        refreshTraceabilityForCurrentView();
       }
     };
 
@@ -1189,18 +1165,8 @@ export default function PlaygroundSubmissionDetailPage() {
   }, [catalogTree, editableTask]);
 
   const nodeStates = useMemo(() => {
-    const nextState: Record<string, RequirementVisualState> = {};
-    for (const commit of commitHistory?.commits ?? []) {
-      if (!commit.node_id || !commit.phase) {
-        continue;
-      }
-      nextState[commit.node_id] = commitPhaseToVisualState(commit.phase);
-    }
-    for (const event of logs?.visual_events ?? []) {
-      nextState[event.node_id] = toVisualState(event);
-    }
-    return nextState;
-  }, [commitHistory, logs]);
+    return submission?.node_states ?? {};
+  }, [submission?.node_states]);
 
   const selectedNode = useMemo(() => {
     if (!tree || !activeSelectedNodeId) {

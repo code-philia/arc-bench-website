@@ -148,12 +148,12 @@ class HostDemoPreviewService:
                 cls._current_submission_id = submission_id
                 cls._current_workspace_head_oid = workspace_head_oid
                 cls._bootstrap_error = None
-            SubmissionEventStream.publish(submission_id, "preview", reason="preview_refreshed")
+            SubmissionEventStream.publish(submission_id, reason="preview_refreshed", preview=True)
             cls._append_debug(f"Refresh completed successfully; preview url={cls.PREVIEW_URL}")
         except Exception as exc:  # noqa: BLE001
             with cls._lock:
                 cls._bootstrap_error = str(exc)
-            SubmissionEventStream.publish(submission_id, "preview", reason="preview_failed")
+            SubmissionEventStream.publish(submission_id, reason="preview_failed", preview=True)
             cls._append_debug(f"Refresh failed: {exc}")
             return {
                 "available": False,
@@ -173,7 +173,7 @@ class HostDemoPreviewService:
         with cls._lock:
             if cls._current_submission_id == submission_id:
                 cls._bootstrap_error = None
-        SubmissionEventStream.publish(submission_id, "preview", reason="preview_stale")
+        SubmissionEventStream.publish(submission_id, reason="preview_stale", preview=True)
         cls._append_debug(f"Marked preview stale for submission={submission_id}")
 
     @classmethod
