@@ -203,6 +203,9 @@ class SubmissionService:
         self._write_text_atomic(task_dir / "prerequisites.md", prerequisites_md)
 
     def write_submission_traceability_store(self, submission: Submission, requirements_yaml: str) -> None:
+        if self._uses_builtin_arc_agent(submission):
+            self._clear_traceability_runtime_artifacts(submission, clear_demo_test_status=True)
+            return
         self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
 
     def reset_progress_for_edited_node(self, submission: Submission, node_id: str) -> None:
@@ -857,6 +860,8 @@ class SubmissionService:
             target = artifacts_dir / filename
             if target.exists():
                 target.unlink()
+        if self._uses_builtin_arc_agent(submission):
+            self._clear_traceability_runtime_artifacts(submission, clear_demo_test_status=False)
         event_log_path = self.get_event_log_path(submission)
         if event_log_path.exists():
             event_log_path.unlink()
@@ -920,6 +925,8 @@ class SubmissionService:
         runner_events_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
     def _rebuild_traceability_store(self, submission: Submission) -> None:
+        if self._uses_builtin_arc_agent(submission):
+            return
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
@@ -992,6 +999,28 @@ class SubmissionService:
             ensure_traceability_schema(connection)
         finally:
             connection.close()
+
+    @staticmethod
+    def _uses_builtin_arc_agent(submission: Submission) -> bool:
+        return str(submission.agent_source or "").strip() == AgentSourceType.BUILTIN_ARC_AGENT.value
+
+    def _clear_traceability_runtime_artifacts(self, submission: Submission, *, clear_demo_test_status: bool) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        artifacts_dir = workspace_path / "artifacts"
+        for path in [
+            artifacts_dir / "traceability.db",
+            artifacts_dir / "traceability.db-journal",
+            artifacts_dir / "traceability.db-wal",
+            artifacts_dir / "traceability.db-shm",
+        ]:
+            if path.exists():
+                path.unlink()
+        if clear_demo_test_status:
+            demo_status_path = artifacts_dir / "demo-test-statuses.json"
+            if demo_status_path.exists():
+                demo_status_path.unlink()
 
     @staticmethod
     def _build_checkpoint_completed_entries(commits: list[dict]) -> list[dict[str, int | str | None]]:

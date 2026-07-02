@@ -9,7 +9,6 @@ import re
 
 from app.models.submission import Submission
 from app.services.runtime_path_service import RuntimePathService
-from app.services.traceability_db_schema import ensure_traceability_schema
 
 
 LANGUAGE_BY_SUFFIX = {
@@ -67,11 +66,11 @@ class SubmissionArtifactService:
         if traceability_db_path is None:
             return {}
 
-        connection = sqlite3.connect(traceability_db_path)
-        connection.row_factory = sqlite3.Row
+        connection = self._connect_traceability_db(traceability_db_path)
         try:
             cursor = connection.cursor()
-            self._ensure_traceability_schema(cursor)
+            if not self._table_exists(cursor, "node_states"):
+                return {}
             visual_states: dict[str, str] = {}
             for row in cursor.execute("SELECT req_id, state FROM node_states ORDER BY req_id"):
                 req_id = str(row["req_id"] or "").strip()
@@ -91,48 +90,54 @@ class SubmissionArtifactService:
         interfaces: list[dict] = []
         tests: list[dict] = []
 
-        connection = sqlite3.connect(traceability_db_path)
-        connection.row_factory = sqlite3.Row
+        connection = self._connect_traceability_db(traceability_db_path)
         try:
             cursor = connection.cursor()
-            self._ensure_traceability_schema(cursor)
-            for row in cursor.execute("SELECT * FROM interfaces ORDER BY interface_id"):
-                req_ids = self._parse_json_list(row["req_ids"])
-                if node_id and node_id != "__all__" and node_id not in req_ids:
-                    continue
-                interfaces.append(
-                    {
-                        "interface_id": str(row["interface_id"]),
-                        "req_ids": req_ids,
-                        "type": str(row["type"] or ""),
-                        "content": str(row["content"] or ""),
-                        "file_path": str(row["file_path"] or ""),
-                        "first_line": self._parse_positive_int(row["first_line"]),
-                        "implemented": bool(row["implemented"]),
-                        "callers": self._parse_json_list(row["callers"]),
-                        "callees": self._parse_json_list(row["callees"]),
-                    }
-                )
+            if self._table_exists(cursor, "interfaces"):
+                for row in cursor.execute("SELECT * FROM interfaces ORDER BY interface_id"):
+                    row_data = dict(row)
+                    req_ids = self._parse_json_list(row_data.get("req_ids"))
+                    if node_id and node_id != "__all__" and node_id not in req_ids:
+                        continue
+                    interfaces.append(
+                        {
+                            "interface_id": str(row_data.get("interface_id") or ""),
+                            "req_ids": req_ids,
+                            "type": str(row_data.get("type") or ""),
+                            "content": str(row_data.get("content") or ""),
+                            "file_path": str(row_data.get("file_path") or ""),
+                            "first_line": self._parse_positive_int(row_data.get("first_line")),
+                            "implemented": bool(row_data.get("implemented")),
+                            "callers": self._parse_json_list(row_data.get("callers")),
+                            "callees": self._parse_json_list(row_data.get("callees")),
+                        }
+                    )
 
-            if node_id and node_id != "__all__":
-                test_cursor = cursor.execute(
-                    "SELECT * FROM tests WHERE req_id = ? ORDER BY test_id",
-                    (node_id,),
-                )
-            else:
-                test_cursor = cursor.execute("SELECT * FROM tests ORDER BY test_id")
-            for row in test_cursor:
-                tests.append(
-                    {
-                        "test_id": str(row["test_id"]),
-                        "req_id": str(row["req_id"]),
-                        "scenario_id": None,
-                        "type": str(row["type"] or ""),
-                        "file_path": str(row["file_path"] or ""),
-                        "first_line": self._parse_positive_int(row["first_line"]),
-                        "status": self._normalize_demo_test_status(test_status_by_id.get(str(row["test_id"]))),
-                    }
-                )
+            if self._table_exists(cursor, "tests"):
+                if node_id and node_id != "__all__":
+                    test_cursor = cursor.execute(
+                        "SELECT * FROM tests WHERE req_id = ? ORDER BY test_id",
+                        (node_id,),
+                    )
+                else:
+                    test_cursor = cursor.execute("SELECT * FROM tests ORDER BY test_id")
+                for row in test_cursor:
+                    row_data = dict(row)
+                    test_id = str(row_data.get("test_id") or "")
+                    tests.append(
+                        {
+                            "test_id": test_id,
+                            "req_id": str(row_data.get("req_id") or ""),
+                            "scenario_id": None,
+                            "type": str(row_data.get("type") or ""),
+                            "file_path": str(row_data.get("file_path") or ""),
+                            "first_line": self._parse_positive_int(row_data.get("first_line")),
+                            "status": self._resolve_test_status(
+                                test_status_by_id.get(test_id),
+                                row_data.get("passed"),
+                            ),
+                        }
+                    )
         finally:
             connection.close()
 
@@ -256,6 +261,13 @@ class SubmissionArtifactService:
             if key and status:
                 normalized[key] = status
         return normalized
+
+    @staticmethod
+    def _connect_traceability_db(traceability_db_path: Path) -> sqlite3.Connection:
+        connection = sqlite3.connect(traceability_db_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only = ON")
+        return connection
 
     def _read_diff_source(self, submission: Submission, *, file_path: str, commit_oid: str | None) -> dict[str, str | int]:
         if not commit_oid or not commit_oid.strip():
@@ -453,6 +465,20 @@ class SubmissionArtifactService:
             return normalized
         return None
 
+    @classmethod
+    def _resolve_test_status(cls, demo_status: object, db_passed: object) -> str | None:
+        normalized_demo_status = cls._normalize_demo_test_status(demo_status)
+        if normalized_demo_status:
+            return normalized_demo_status
+        if db_passed is None:
+            return None
+        normalized_db_passed = str(db_passed).strip().lower()
+        if normalized_db_passed in {"1", "true"}:
+            return "passed"
+        if normalized_db_passed in {"0", "false"}:
+            return "failed"
+        return None
+
     @staticmethod
     def _normalize_node_visual_state(raw_value: object) -> str | None:
         normalized = str(raw_value or "").strip().upper()
@@ -467,5 +493,9 @@ class SubmissionArtifactService:
         return "default"
 
     @staticmethod
-    def _ensure_traceability_schema(cursor: sqlite3.Cursor) -> None:
-        ensure_traceability_schema(cursor.connection)
+    def _table_exists(cursor: sqlite3.Cursor, table_name: str) -> bool:
+        row = cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+            (table_name,),
+        ).fetchone()
+        return row is not None

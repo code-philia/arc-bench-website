@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import time
 from pathlib import Path
 
@@ -18,7 +17,6 @@ from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
-from app.services.traceability_db_schema import ensure_traceability_schema
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -82,7 +80,6 @@ class ExecutionService:
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
         processed_runner_event_count = 0
-        processed_traceability_event_count = 0
         last_known_workspace_head_oid: str | None = None
         pause_notified = False
         pause_signal_sent = False
@@ -92,26 +89,6 @@ class ExecutionService:
 
         def emit_event(step_key: str, message: str, status: str = "info") -> None:
             submission_service.append_step_event(submission_id, step_key=step_key, message=message, status=status)
-
-        def append_runner_signal_event(
-            *,
-            reason: str,
-            refresh: dict[str, bool] | None = None,
-            payload: dict[str, object] | None = None,
-        ) -> None:
-            runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
-            runner_events_path.parent.mkdir(parents=True, exist_ok=True)
-            event_payload: dict[str, object] = {
-                "type": "signal",
-                "reason": reason,
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
-            }
-            if refresh:
-                event_payload["refresh"] = refresh
-            if payload:
-                event_payload.update(payload)
-            with runner_events_path.open("a", encoding="utf-8") as output:
-                output.write(json.dumps(event_payload, ensure_ascii=True) + "\n")
 
         def mark_paused(reason: str) -> None:
             nonlocal paused
@@ -131,119 +108,6 @@ class ExecutionService:
                 return submission_service._run_git(project_root, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
             except RuntimeError:
                 return None
-
-        def sync_traceability_events() -> dict[str, int | bool]:
-            nonlocal processed_traceability_event_count
-            runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
-            traceability_db_path = workspace_path / "artifacts" / "traceability.db"
-            if not runner_events_path.exists() or not traceability_db_path.exists():
-                return {
-                    "events_seen": 0,
-                    "interfaces_changed": 0,
-                    "tests_changed": 0,
-                    "requirements_changed": 0,
-                    "changed": False,
-                }
-
-            lines = runner_events_path.read_text(encoding="utf-8").splitlines()
-            new_lines = lines[processed_traceability_event_count:]
-            processed_traceability_event_count = len(lines)
-            if not new_lines:
-                return {
-                    "events_seen": 0,
-                    "interfaces_changed": 0,
-                    "tests_changed": 0,
-                    "requirements_changed": 0,
-                    "changed": False,
-                }
-
-            interfaces_changed = 0
-            tests_changed = 0
-            requirements_changed = 0
-            parsed_event_count = 0
-            connection = sqlite3.connect(traceability_db_path)
-            try:
-                cursor = connection.cursor()
-                ensure_traceability_schema(connection)
-                for raw_line in new_lines:
-                    line = raw_line.strip()
-                    if not line:
-                        continue
-                    try:
-                        payload = json.loads(line)
-                    except json.JSONDecodeError:
-                        debug_log.append("backend", f"Failed to parse traceability event line: {line}")
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-
-                    event_type = str(payload.get("type", "")).strip()
-                    if event_type not in {"interface_upsert", "interface_status", "test_upsert"}:
-                        continue
-                    parsed_event_count += 1
-
-                    if event_type == "interface_upsert":
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO interfaces (
-                                interface_id, req_ids, type, content, file_path, first_line, implemented, callers, callees
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                str(payload.get("interface_id", "")).strip(),
-                                json.dumps(payload.get("req_ids", []), ensure_ascii=False),
-                                str(payload.get("interface_type", "")).strip(),
-                                str(payload.get("content", "")).strip(),
-                                payload.get("file_path"),
-                                payload.get("first_line"),
-                                1 if payload.get("implemented") else 0,
-                                json.dumps(payload.get("callers", []), ensure_ascii=False),
-                                json.dumps(payload.get("callees", []), ensure_ascii=False),
-                            ),
-                        )
-                        interfaces_changed += 1
-                        continue
-
-                    if event_type == "interface_status":
-                        cursor.execute(
-                            "UPDATE interfaces SET implemented = ? WHERE interface_id = ?",
-                            (
-                                1 if payload.get("implemented") else 0,
-                                str(payload.get("interface_id", "")).strip(),
-                            ),
-                        )
-                        interfaces_changed += max(cursor.rowcount, 0)
-                        continue
-
-                    if event_type == "test_upsert":
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO tests (
-                                test_id, req_id, interface_ids, type, file_path, passed, first_line
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                str(payload.get("test_id", "")).strip(),
-                                str(payload.get("req_id", "")).strip(),
-                                json.dumps(payload.get("interface_ids", []), ensure_ascii=False),
-                                str(payload.get("test_type", "")).strip(),
-                                payload.get("file_path"),
-                                None,
-                                payload.get("first_line"),
-                            ),
-                        )
-                        tests_changed += 1
-                connection.commit()
-            finally:
-                connection.close()
-
-            return {
-                "events_seen": parsed_event_count,
-                "interfaces_changed": interfaces_changed,
-                "tests_changed": tests_changed,
-                "requirements_changed": requirements_changed,
-                "changed": bool(parsed_event_count),
-            }
 
         def import_runner_events() -> list[dict]:
             nonlocal last_known_workspace_head_oid, processed_runner_event_count
@@ -276,6 +140,9 @@ class ExecutionService:
                     refresh_flags["submission"] = True
                 elif event_type == "runner_state":
                     refresh_flags["submission"] = True
+                elif event_type in {"interface_upsert", "interface_status", "test_upsert"}:
+                    refresh_flags["traceability_selected"] = True
+                    refresh_flags["traceability_all"] = True
                 elif event_type == "signal":
                     refresh_payload = event.get("refresh")
                     if isinstance(refresh_payload, dict):
@@ -289,41 +156,13 @@ class ExecutionService:
                     emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
 
-            traceability_sync = sync_traceability_events()
-            traceability_events_seen = int(traceability_sync["events_seen"])
             head_changed = False
             latest_head_oid = resolve_workspace_head_oid()
             if latest_head_oid and latest_head_oid != last_known_workspace_head_oid:
                 head_changed = True
                 last_known_workspace_head_oid = latest_head_oid
 
-            if traceability_events_seen:
-                append_runner_signal_event(
-                    reason="traceability_events",
-                    refresh={
-                        "traceability_selected": True,
-                        "traceability_all": True,
-                    },
-                    payload={
-                        "events_seen": traceability_events_seen,
-                        "interfaces_changed": int(traceability_sync["interfaces_changed"]),
-                        "tests_changed": int(traceability_sync["tests_changed"]),
-                        "requirements_changed": int(traceability_sync["requirements_changed"]),
-                    },
-                )
-                processed_runner_event_count += 1
-                refresh_flags["traceability_selected"] = True
-                refresh_flags["traceability_all"] = True
             if head_changed:
-                append_runner_signal_event(
-                    reason="git_head_changed",
-                    refresh={
-                        "commit_history": True,
-                        "preview": True,
-                    },
-                    payload={"head_oid": latest_head_oid},
-                )
-                processed_runner_event_count += 1
                 refresh_flags["commit_history"] = True
                 refresh_flags["preview"] = True
                 HostDemoPreviewService.mark_stale(submission_id)
@@ -382,8 +221,6 @@ class ExecutionService:
                 runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
                 if runner_events_path.exists():
                     processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
-                if runner_events_path.exists():
-                    processed_traceability_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
                 last_known_workspace_head_oid = resolve_workspace_head_oid()
                 emit_event("deploy_agent", "Reusing rewound workspace")
                 debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")

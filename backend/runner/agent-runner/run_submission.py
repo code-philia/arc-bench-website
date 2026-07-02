@@ -52,6 +52,27 @@ def append_debug_block(section: str, content: str) -> None:
         append_debug_log(f"{section} | {line}")
 
 
+def mask_secret(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if len(text) <= 8:
+        return "*" * len(text)
+    return f"{text[:4]}...{text[-4:]}"
+
+
+def append_environment_snapshot(section: str, env: dict[str, str], keys: list[str]) -> None:
+    lines: list[str] = []
+    for key in keys:
+        raw_value = str(env.get(key, "") or "")
+        if key.endswith("_KEY"):
+            rendered = mask_secret(raw_value)
+        else:
+            rendered = raw_value
+        lines.append(f"{key}={rendered}")
+    append_debug_block(section, "\n".join(lines))
+
+
 def append_runner_event(step_key: str, message: str, status: str = "info") -> None:
     payload = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
@@ -515,6 +536,29 @@ def require_built_in_agent_config(spec: dict) -> tuple[list[str], dict[str, str]
 
 def run_builtin_arc_agent(stdout_file, stderr_file, spec: dict) -> subprocess.CompletedProcess:
     command, builtin_env = require_built_in_agent_config(spec)
+    final_env = build_agent_environment(builtin_env=builtin_env)
+    append_environment_snapshot(
+        "builtin-arc-agent.env",
+        final_env,
+        [
+            "MODEL",
+            "OPENAI_BASE_URL",
+            "OPENAI_API_BASE_URL",
+            "OPENAI_API_KEY",
+            "VISUAL_BASE_URL",
+            "VISUAL_MODEL",
+            "VISUAL_API_KEY",
+            "ARC_DEBUG",
+            "ARCBENCH_PROMPT_PATH",
+            "ARCBENCH_TEMPLATE_DIR",
+            "ARCBENCH_TASK_DIR",
+            "ARCBENCH_OUTPUT_DIR",
+            "ARCBENCH_ARTIFACTS_DIR",
+            "ARCBENCH_RUNNER_EVENTS_PATH",
+            "ARCBENCH_TRACEABILITY_DB_PATH",
+            "PYTHONPATH",
+        ],
+    )
     append_runner_event("start_agent", "Launching built-in arc-agent")
     return run_command(
         command,
@@ -523,7 +567,7 @@ def run_builtin_arc_agent(stdout_file, stderr_file, spec: dict) -> subprocess.Co
         stderr_file=stderr_file,
         check=False,
         label="builtin-arc-agent",
-        env=build_agent_environment(builtin_env=builtin_env),
+        env=final_env,
     )
 
 
@@ -883,16 +927,23 @@ def main() -> int:
     resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
     if not resume_from_checkpoint:
         RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
-    initialize_traceability_db()
-    seeded_requirements, seeded_scenarios = seed_traceability_requirements()
     spec = read_spec()
     agent_source = resolve_agent_source(spec)
     append_debug_log(f"Runner started with spec: {spec}")
-    append_runner_event(
-        "deploy_agent",
-        f"Traceability initialized with {seeded_requirements} requirements and {seeded_scenarios} scenarios",
-        status="success",
-    )
+    if agent_source == AGENT_SOURCE_UPLOAD:
+        initialize_traceability_db()
+        seeded_requirements, seeded_scenarios = seed_traceability_requirements()
+        append_runner_event(
+            "deploy_agent",
+            f"Traceability initialized with {seeded_requirements} requirements and {seeded_scenarios} scenarios",
+            status="success",
+        )
+    else:
+        append_runner_event(
+            "deploy_agent",
+            "Built-in arc-agent will initialize and maintain traceability artifacts",
+            status="success",
+        )
 
     managed_processes: list[tuple[subprocess.Popen | None, str]] = []
     managed_threads: list[threading.Thread | None] = []
@@ -904,17 +955,24 @@ def main() -> int:
             else:
                 append_runner_event("start_agent", "Built-in arc-agent selected; skipping submission dependency install", status="success")
             run_generation_agent_with_resume(stdout_file, stderr_file, spec)
-            interface_upserts, interface_status_updates, test_upserts = apply_traceability_events()
-            append_runner_event(
-                "start_agent",
-                (
-                    "Traceability assets imported: "
-                    f"interfaces={interface_upserts}, "
-                    f"interface_status_updates={interface_status_updates}, "
-                    f"tests={test_upserts}"
-                ),
-                status="success",
-            )
+            if agent_source == AGENT_SOURCE_UPLOAD:
+                interface_upserts, interface_status_updates, test_upserts = apply_traceability_events()
+                append_runner_event(
+                    "start_agent",
+                    (
+                        "Traceability assets imported: "
+                        f"interfaces={interface_upserts}, "
+                        f"interface_status_updates={interface_status_updates}, "
+                        f"tests={test_upserts}"
+                    ),
+                    status="success",
+                )
+            else:
+                append_runner_event(
+                    "start_agent",
+                    "Built-in arc-agent finished updating traceability artifacts",
+                    status="success",
+                )
 
             task = spec.get("task", {})
             category = task.get("category", "web")

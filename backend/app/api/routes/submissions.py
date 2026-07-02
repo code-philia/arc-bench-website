@@ -393,6 +393,13 @@ def get_submission_source(
     return SubmissionSourcePayload(**payload)
 
 
+def _normalize_preview_git_error(message: str) -> str:
+    normalized = str(message or "").strip()
+    if "ambiguous argument 'HEAD'" in normalized or "unknown revision or path not in the working tree" in normalized:
+        return "Git repository is initializing; waiting for the first commit"
+    return normalized
+
+
 @router.get("/{submission_id}/preview/status", response_model=SubmissionPreviewStatus)
 def get_submission_preview_status(
     submission_id: str,
@@ -420,7 +427,7 @@ def get_submission_preview_status(
             try:
                 workspace_head_oid = service._run_git(project_root, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
             except RuntimeError as exc:
-                error = str(exc)
+                error = _normalize_preview_git_error(str(exc))
     payload = HostDemoPreviewService.get_status(
             submission_id=submission.id,
             workspace_head_oid=workspace_head_oid,
@@ -474,13 +481,14 @@ def refresh_submission_preview(
     try:
         workspace_head_oid = service._run_git(template_path, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
     except RuntimeError as exc:
-        debug_log.append("preview", f"Refresh rejected: failed to resolve workspace HEAD: {exc}")
+        error = _normalize_preview_git_error(str(exc))
+        debug_log.append("preview", f"Refresh rejected: failed to resolve workspace HEAD: {error}")
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
             workspace_head_oid=None,
             preview_head_oid=None,
-            error=str(exc),
+            error=error,
         )
     response_payload = HostDemoPreviewService.refresh(
             submission_id=submission.id,
