@@ -2899,6 +2899,18 @@ button {
   letter-spacing: 0.06em;
 }
 
+.submission-starter-actions {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.submission-starter-hint {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
 .submission-summary-card {
   display: grid;
   gap: 14px;

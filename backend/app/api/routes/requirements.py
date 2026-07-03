@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.requirement import CompetitionDetail, CompetitionSummary, RequirementDetail, RequirementSummary
+from app.services.agent_starter_service import AgentStarterService
 from app.services.demo_agent_service import DemoAgentService
 from app.services.requirement_catalog import RequirementCatalogService
 
@@ -85,6 +86,24 @@ def download_demo_agent() -> Response:
     try:
         content, filename = DemoAgentService().build_bundle()
     except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@router.get("/starter-agent")
+def download_starter_agent() -> Response:
+    try:
+        content, filename = AgentStarterService().build_bundle()
+    except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(
         content=content,

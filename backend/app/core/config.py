@@ -55,6 +55,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("VISUAL_MODEL", "ARCBENCH_BUILTIN_VISUAL_MODEL"),
     )
+    agent_runtime_package_root: Path = ROOT_DIR / "packages" / "arcbench-agent-runtime"
     builtin_debug_mode: str = Field(
         default="0",
         validation_alias=AliasChoices("ARC_DEBUG", "ARCBENCH_BUILTIN_DEBUG_MODE"),
