@@ -229,7 +229,61 @@ def seed_traceability_requirements() -> tuple[int, int]:
 
 
 def sync_requirement_statuses_from_visual_events() -> None:
-    return
+    if not RUNNER_EVENTS_PATH.exists():
+        return
+
+    latest_state_by_req_id: dict[str, str] = {}
+    for raw_line in RUNNER_EVENTS_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("type", "")).strip() != "requirement_state":
+            continue
+
+        req_id = str(payload.get("node_id", "")).strip()
+        phase = str(payload.get("phase", "")).strip()
+        status = str(payload.get("status", "")).strip()
+        if not req_id:
+            continue
+
+        normalized_state = None
+        if phase == "design" and status == "completed":
+            normalized_state = "DESIGNED"
+        elif phase == "implement" and status == "completed":
+            normalized_state = "IMPLEMENTED"
+        elif phase == "test" and status == "passed":
+            normalized_state = "PASSED"
+        elif phase == "test" and status == "failed":
+            normalized_state = "FAILED"
+        if normalized_state:
+            latest_state_by_req_id[req_id] = normalized_state
+
+    if not latest_state_by_req_id:
+        return
+
+    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    try:
+        cursor = connection.cursor()
+        for req_id, state in latest_state_by_req_id.items():
+            cursor.execute(
+                """
+                INSERT INTO node_states (req_id, state, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(req_id) DO UPDATE SET
+                    state=excluded.state,
+                    updated_at=CURRENT_TIMESTAMP
+                """,
+                (req_id, state),
+            )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def apply_traceability_events() -> tuple[int, int, int]:

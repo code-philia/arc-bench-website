@@ -114,6 +114,12 @@ class EventClient:
         else:
             payload["tests"].pop(normalized_test_id, None)
         self.write_demo_test_status_payload(payload)
+        self.emit_refresh_signal(
+            reason="demo_test_status_updated",
+            submission=True,
+            traceability_selected=True,
+            traceability_all=True,
+        )
 
     def set_demo_test_statuses(self, status_by_test_id: dict[str, str | None]) -> None:
         if not status_by_test_id:
@@ -129,6 +135,12 @@ class EventClient:
             else:
                 payload["tests"].pop(normalized_test_id, None)
         self.write_demo_test_status_payload(payload)
+        self.emit_refresh_signal(
+            reason="demo_test_statuses_updated",
+            submission=True,
+            traceability_selected=True,
+            traceability_all=True,
+        )
 
     def clear_demo_test_statuses(self, test_ids: list[str]) -> None:
         if not test_ids:
@@ -139,6 +151,12 @@ class EventClient:
             if normalized_test_id:
                 payload["tests"].pop(normalized_test_id, None)
         self.write_demo_test_status_payload(payload)
+        self.emit_refresh_signal(
+            reason="demo_test_statuses_cleared",
+            submission=True,
+            traceability_selected=True,
+            traceability_all=True,
+        )
 
     def set_demo_requirement_status(self, req_id: str, status: str | None) -> None:
         normalized_req_id = str(req_id or "").strip()
@@ -151,3 +169,9 @@ class EventClient:
         else:
             payload["requirements"].pop(normalized_req_id, None)
         self.write_demo_test_status_payload(payload)
+        self.emit_refresh_signal(
+            reason="demo_requirement_status_updated",
+            submission=True,
+            traceability_selected=True,
+            traceability_all=True,
+        )

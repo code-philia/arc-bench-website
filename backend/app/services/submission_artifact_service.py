@@ -62,24 +62,28 @@ class SubmissionArtifactService:
         self.runtime_paths = RuntimePathService()
 
     def read_node_visual_states(self, submission: Submission) -> dict[str, str]:
+        visual_states: dict[str, str] = {}
         traceability_db_path = self._get_traceability_db_path(submission)
-        if traceability_db_path is None:
-            return {}
+        if traceability_db_path is not None:
+            connection = self._connect_traceability_db(traceability_db_path)
+            try:
+                cursor = connection.cursor()
+                if self._table_exists(cursor, "node_states"):
+                    for row in cursor.execute("SELECT req_id, state FROM node_states ORDER BY req_id"):
+                        req_id = str(row["req_id"] or "").strip()
+                        visual_state = self._normalize_node_visual_state(row["state"])
+                        if req_id and visual_state:
+                            visual_states[req_id] = visual_state
+            finally:
+                connection.close()
 
-        connection = self._connect_traceability_db(traceability_db_path)
-        try:
-            cursor = connection.cursor()
-            if not self._table_exists(cursor, "node_states"):
-                return {}
-            visual_states: dict[str, str] = {}
-            for row in cursor.execute("SELECT req_id, state FROM node_states ORDER BY req_id"):
-                req_id = str(row["req_id"] or "").strip()
-                visual_state = self._normalize_node_visual_state(row["state"])
-                if req_id and visual_state:
-                    visual_states[req_id] = visual_state
-            return visual_states
-        finally:
-            connection.close()
+        for event in self._read_requirement_state_events(submission):
+            req_id = str(event.get("node_id") or "").strip()
+            visual_state = self._visual_state_from_requirement_event(event)
+            if req_id and visual_state:
+                visual_states[req_id] = visual_state
+
+        return visual_states
 
     def read_traceability(self, submission: Submission, node_id: str) -> dict[str, list[dict]]:
         traceability_db_path = self._get_traceability_db_path(submission)
@@ -261,6 +265,30 @@ class SubmissionArtifactService:
             if key and status:
                 normalized[key] = status
         return normalized
+
+    def _read_requirement_state_events(self, submission: Submission) -> list[dict[str, object]]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return []
+        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        if not runner_events_path.is_file():
+            return []
+
+        events: list[dict[str, object]] = []
+        for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if str(payload.get("type", "")).strip() != "requirement_state":
+                continue
+            events.append(payload)
+        return events
 
     @staticmethod
     def _connect_traceability_db(traceability_db_path: Path) -> sqlite3.Connection:
@@ -486,11 +514,27 @@ class SubmissionArtifactService:
             return "default"
         if normalized == "DESIGNED":
             return "design"
+        if normalized in {"IMPLEMENTED", "IMPLEMENT", "IMPLEMENTING"}:
+            return "implement"
         if normalized in {"PASSED", "CONVERGED", "CONVERGED_WITH_FAILED_CHILDREN"}:
             return "test-passed"
         if normalized == "FAILED":
             return "test-failed"
         return "default"
+
+    @staticmethod
+    def _visual_state_from_requirement_event(event: dict[str, object]) -> str | None:
+        phase = str(event.get("phase", "")).strip()
+        status = str(event.get("status", "")).strip()
+        if phase == "design" and status == "completed":
+            return "design"
+        if phase == "implement" and status == "completed":
+            return "implement"
+        if phase == "test" and status == "passed":
+            return "test-passed"
+        if phase == "test" and status == "failed":
+            return "test-failed"
+        return None
 
     @staticmethod
     def _table_exists(cursor: sqlite3.Cursor, table_name: str) -> bool:
