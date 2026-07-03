@@ -3640,6 +3640,54 @@ button {
   margin-top: 16px;
 }
 
+.api-doc-flow-diagram {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 18px;
+}
+
+.api-doc-flow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 168px;
+  padding: 18px;
+  border: 1px solid rgba(100, 116, 139, 0.16);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, rgba(248, 250, 252, 0.92) 100%);
+}
+
+.api-doc-flow-card strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.api-doc-flow-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.api-doc-flow-label {
+  color: #2563eb;
+  font-family: "JetBrains Mono", "Cascadia Code", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.api-doc-flow-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
 .api-doc-callout-card {
   padding: 16px;
   border: 1px solid rgba(100, 116, 139, 0.16);
@@ -7009,6 +7057,15 @@ button {
 
   .api-doc-callout-grid {
     grid-template-columns: 1fr;
+  }
+
+  .api-doc-flow-diagram {
+    grid-template-columns: 1fr;
+  }
+
+  .api-doc-flow-arrow {
+    min-height: 20px;
+    transform: rotate(90deg);
   }
 
   .create-task-layout {

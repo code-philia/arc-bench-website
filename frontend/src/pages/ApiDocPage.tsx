@@ -183,6 +183,55 @@ function OverviewPage() {
   return (
     <>
       <section className="api-doc-section-block">
+        <h2>How The UI Reacts</h2>
+        <p>
+          When your agent calls the SDK, it does two things at the same time: it performs the actual runtime action,
+          and it writes fresh signals into <code>runner-events.jsonl</code>. The website watches those event updates,
+          pushes a refresh notification to the browser, and then the frontend requests the latest submission,
+          traceability, commit, or preview data.
+        </p>
+        <div className="api-doc-flow-diagram" aria-label="Agent runtime communication flow">
+          <div className="api-doc-flow-card">
+            <div className="api-doc-flow-label">1. Agent</div>
+            <strong>Call SDK</strong>
+            <p><code>runtime.events</code>, <code>runtime.traceability</code>, <code>runtime.git</code></p>
+          </div>
+          <div className="api-doc-flow-arrow">→</div>
+          <div className="api-doc-flow-card">
+            <div className="api-doc-flow-label">2. Runtime Artifacts</div>
+            <strong>Write Updates</strong>
+            <p><code>runner-events.jsonl</code> and, when needed, <code>traceability.db</code></p>
+          </div>
+          <div className="api-doc-flow-arrow">→</div>
+          <div className="api-doc-flow-card">
+            <div className="api-doc-flow-label">3. Backend</div>
+            <strong>Detect + Notify</strong>
+            <p>Import new events, publish SSE refresh flags, expose fresh API data</p>
+          </div>
+          <div className="api-doc-flow-arrow">→</div>
+          <div className="api-doc-flow-card">
+            <div className="api-doc-flow-label">4. Frontend</div>
+            <strong>Refresh Panels</strong>
+            <p>Canvas, traceability, status, commit history, preview, and test result views update</p>
+          </div>
+        </div>
+        <div className="api-doc-callout-grid">
+          <article className="api-doc-callout-card">
+            <strong>Node state events</strong>
+            <p>Requirement nodes change color and phase on the canvas, and the submission status panel advances.</p>
+          </article>
+          <article className="api-doc-callout-card">
+            <strong>Traceability updates</strong>
+            <p>Interfaces, tests, and pass/fail overlays refresh after the frontend re-queries traceability data.</p>
+          </article>
+          <article className="api-doc-callout-card">
+            <strong>Git operations</strong>
+            <p>Commit history and preview panels refresh after the backend observes repository changes for the run.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="api-doc-section-block">
         <h2>Python SDK</h2>
         <p>
           The Python package <code>arcbench_agent_runtime</code> exposes the Agent Runtime SDK. Create one runtime
