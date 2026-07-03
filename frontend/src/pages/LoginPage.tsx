@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { getLoginErrorMessage } from "../lib/authErrors";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function LoginPage() {
       message.success("Signed in successfully.");
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      message.error((error as Error).message);
+      message.error(getLoginErrorMessage(error));
     } finally {
       setSubmitting(false);
     }

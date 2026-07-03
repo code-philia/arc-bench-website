@@ -20,3 +20,4 @@ requirement/
 __demo__
 
 rebuild-arc-agent-runner.ps1
+rebuild-arc-agent-runner.sh
