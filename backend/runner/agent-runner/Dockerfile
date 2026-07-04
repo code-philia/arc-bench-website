@@ -4,6 +4,8 @@ WORKDIR /opt/arcbench
 
 COPY arc_agent-0.1.0-py3-none-any.whl /tmp/arc_agent-0.1.0-py3-none-any.whl
 
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl ca-certificates xz-utils \
     && curl -fsSL https://nodejs.org/dist/v20.19.3/node-v20.19.3-linux-x64.tar.xz -o /tmp/node.tar.xz \
