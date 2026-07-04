@@ -6,7 +6,7 @@ import zipfile
 import sqlite3
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Literal, Optional, List
 
 from fastapi import UploadFile
 from sqlalchemy import desc, select
@@ -17,7 +17,19 @@ from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
-from app.schemas.submission import StepState, SubmissionDetail, SubmissionRunnerEvent, SubmissionSummary, SubmissionVisualEvent
+from app.schemas.submission import (
+    StepState,
+    SubmissionDetail,
+    SubmissionRunnerEvent,
+    SubmissionSummary,
+    SubmissionVisualEvent,
+    WorkspaceFileEntry,
+    WorkspaceFileListPayload,
+    FileUpdatePayload,
+    TestCreatePayload,
+    TestCreateResponse,
+    TestType,
+)
 from app.services.docker_manager import DockerManager
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.requirement_catalog import RequirementCatalogService
@@ -1153,3 +1165,135 @@ class SubmissionService:
             step_data["logs"] = step_logs[-5:]
             enriched.append(StepState(**step_data))
         return enriched
+
+    def list_workspace_files(self, submission: Submission) -> list[dict]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            raise FileNotFoundError("Submission workspace is not available")
+        template_dir = workspace_path / "template"
+        if not template_dir.is_dir():
+            raise FileNotFoundError("Template directory is not available")
+
+        def walk_dir(path: Path, base_path: Path) -> dict:
+            relative_path = path.relative_to(base_path)
+            entry = {
+                "path": str(relative_path.as_posix()),
+                "name": path.name,
+                "is_directory": path.is_dir(),
+            }
+            if path.is_dir():
+                children = []
+                for child in path.iterdir():
+                    if child.name.startswith(".arc"):
+                        continue
+                    if child.name.startswith(".git"):
+                        continue
+                    try:
+                        children.append(walk_dir(child, base_path))
+                    except Exception:
+                        continue
+                entry["children"] = sorted(children, key=lambda x: (not x["is_directory"], x["name"]))
+            return entry
+
+        try:
+            root = walk_dir(template_dir, template_dir)
+            return [root]
+        except Exception as e:
+            raise RuntimeError(f"Failed to list workspace files: {e}")
+
+    def update_workspace_file(self, submission: Submission, file_path: str, content: str) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            raise FileNotFoundError("Submission workspace is not available")
+        template_dir = workspace_path / "template"
+        if not template_dir.is_dir():
+            raise FileNotFoundError("Template directory is not available")
+
+        normalized_path = self._normalize_relative_path(file_path)
+        target_path = (template_dir / normalized_path).resolve()
+        template_dir_resolved = template_dir.resolve()
+
+        try:
+            target_path.relative_to(template_dir_resolved)
+        except ValueError:
+            raise FileNotFoundError(f"File path outside template directory: {file_path}")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(content, encoding="utf-8")
+
+        self._run_git(template_dir, ["add", str(normalized_path)])
+        try:
+            self._run_git(template_dir, ["commit", "-m", "Manual file update"])
+        except RuntimeError:
+            pass
+
+    def create_test_file(self, submission: Submission, test_id: str, req_id: str, test_type: str, scenario_id: Optional[str] = None, file_path: Optional[str] = None) -> str:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            raise FileNotFoundError("Submission workspace is not available")
+        template_dir = workspace_path / "template"
+        if not template_dir.is_dir():
+            raise FileNotFoundError("Template directory is not available")
+
+        if not file_path:
+            file_path = f"tests/{test_id}.spec.ts"
+
+        normalized_path = self._normalize_relative_path(file_path)
+        target_path = (template_dir / normalized_path).resolve()
+        template_dir_resolved = template_dir.resolve()
+
+        try:
+            target_path.relative_to(template_dir_resolved)
+        except ValueError:
+            raise FileNotFoundError(f"File path outside template directory: {file_path}")
+
+        test_template = f"""// Test for {req_id}
+// Test ID: {test_id}
+// Test Type: {test_type}
+"""
+        if scenario_id:
+            test_template += f"// Scenario ID: {scenario_id}\n"
+        test_template += f"""
+
+describe('{test_id}', () => {{
+  it('should implement the test', () => {{
+    // TODO: Implement the test
+  }});
+}});
+"""
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(test_template, encoding="utf-8")
+
+        self._register_test_in_traceability(submission, test_id, req_id, test_type, file_path, scenario_id)
+
+        self._run_git(template_dir, ["add", str(normalized_path)])
+        try:
+            self._run_git(template_dir, ["commit", "-m", f"Add test {test_id} for {req_id}"])
+        except RuntimeError:
+            pass
+
+        return file_path
+
+    def _register_test_in_traceability(self, submission: Submission, test_id: str, req_id: str, test_type: str, file_path: str, scenario_id: Optional[str] = None) -> None:
+        artifacts_dir = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not artifacts_dir:
+            return
+        artifacts_dir = artifacts_dir / "artifacts"
+        db_path = artifacts_dir / "traceability.db"
+
+        if not db_path.exists():
+            return
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO tests (
+                    test_id, req_id, scenario_id, type, file_path, first_line, passed
+                ) VALUES (?, ?, ?, ?, ?, 1, NULL)
+            """, (test_id, req_id, scenario_id, test_type, file_path))
+            conn.commit()
+        finally:
+            conn.close()

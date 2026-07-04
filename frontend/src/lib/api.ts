@@ -17,6 +17,9 @@ import type {
   UserTaskDraft,
   UserTaskDetail,
   UserTaskSummary,
+  WorkspaceFileListPayload,
+  FileUpdatePayload,
+  TestCreatePayload,
 } from "./types";
 
 const API_BASE = "/api";
@@ -120,20 +123,6 @@ export const api = {
     const filename = response.headers.get("Content-Disposition")
       ?.match(/filename=\"?([^"]+)\"?/)
       ?.[1] ?? "demo_agent.zip";
-    return new File([blob], filename, { type: "application/zip" });
-  },
-  async getStarterAgentFile() {
-    const response = await fetch(`${API_BASE}/requirements/starter-agent`, {
-      credentials: "include",
-    });
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
-      throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
-    }
-    const blob = await response.blob();
-    const filename = response.headers.get("Content-Disposition")
-      ?.match(/filename=\"?([^"]+)\"?/)
-      ?.[1] ?? "arcbench-agent-starter.zip";
     return new File([blob], filename, { type: "application/zip" });
   },
   listRequirements(catalog: "playground" | "competition" = "playground") {
@@ -276,6 +265,24 @@ export const api = {
   },
   getSubmissionPreviewUrl(submissionId: string) {
     return "http://1.95.169.80:3001/";
+  },
+
+  getWorkspaceFiles(submissionId: string) {
+    return request<WorkspaceFileListPayload>(`/submissions/${submissionId}/workspace/files`);
+  },
+
+  updateWorkspaceFile(submissionId: string, payload: FileUpdatePayload) {
+    return request<{ detail: string }>(`/submissions/${submissionId}/workspace/files`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createTest(submissionId: string, payload: TestCreatePayload) {
+    return request<{ detail: string; file_path: string }>(`/submissions/${submissionId}/workspace/tests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
   listMyTasks() {
     return request<UserTaskSummary[]>("/my-tasks");

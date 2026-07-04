@@ -56,7 +56,6 @@ export default function PlaygroundRequirementDetailPage() {
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [downloadingStarter, setDownloadingStarter] = useState(false);
   const [activeSubmission, setActiveSubmission] = useState<SubmissionDetail | null>(null);
   const [submissionTab, setSubmissionTab] = useState<"submit" | "history">("submit");
   const [loading, setLoading] = useState(true);
@@ -207,26 +206,6 @@ export default function PlaygroundRequirementDetailPage() {
     }
   };
 
-  const handleDownloadStarter = async () => {
-    try {
-      setDownloadingStarter(true);
-      const starterFile = await api.getStarterAgentFile();
-      const url = window.URL.createObjectURL(starterFile);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = starterFile.name;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(url);
-      message.success("Starter agent package downloaded.");
-    } catch (error) {
-      message.error((error as Error).message);
-    } finally {
-      setDownloadingStarter(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="page centered">
@@ -328,19 +307,6 @@ export default function PlaygroundRequirementDetailPage() {
               <>
                 <div className="submission-subsection">
                   <div className="submission-subsection-title">Upload Agent</div>
-                  <div className="submission-starter-actions">
-                    <button
-                      className="btn-download"
-                      type="button"
-                      onClick={() => void handleDownloadStarter()}
-                      disabled={downloadingStarter}
-                    >
-                      {downloadingStarter ? "Preparing starter..." : "Download Input Scaffold"}
-                    </button>
-                    <div className="submission-starter-hint">
-                      Starter zip includes `main.py`, the Python Agent Runtime SDK package, usage examples, and `requirements.txt`.
-                    </div>
-                  </div>
                   <div className="env-selector">
                     {[
                       { label: "Python", value: "python" },
@@ -399,7 +365,7 @@ export default function PlaygroundRequirementDetailPage() {
                         <UploadOutlined />
                       </div>
                       <div className="upload-text">Drop your agent code here</div>
-                      <div className="upload-hint">Python only | root main.py + requirements.txt | download the scaffold above if you need a starter package</div>
+                      <div className="upload-hint">Python only | root main.py + requirements.txt | entrypoint: python main.py -r &lt;requirements.md&gt;</div>
                     </label>
                   ) : (
                     <div className="builtin-agent-panel">

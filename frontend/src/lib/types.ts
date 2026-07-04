@@ -240,6 +240,30 @@ export type UserSummary = {
   created_at: string;
 };
 
+export type WorkspaceFileEntry = {
+  path: string;
+  name: string;
+  is_directory: boolean;
+  children?: WorkspaceFileEntry[];
+};
+
+export type WorkspaceFileListPayload = {
+  files: WorkspaceFileEntry[];
+};
+
+export type FileUpdatePayload = {
+  path: string;
+  content: string;
+};
+
+export type TestCreatePayload = {
+  test_id: string;
+  req_id: string;
+  test_type: string;
+  scenario_id?: string | null;
+  file_path?: string | null;
+};
+
 export type AuthResponse = {
   user: UserSummary;
 };

@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import time
 from pathlib import Path
 
@@ -18,7 +17,6 @@ from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
-from app.services.traceability_db_schema import ensure_traceability_schema
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -111,98 +109,12 @@ class ExecutionService:
             except RuntimeError:
                 return None
 
-        def sync_traceability_events(events: list[dict]) -> None:
-            if not events:
-                return
-            traceability_db_path = workspace_path / "artifacts" / "traceability.db"
-            if not traceability_db_path.exists():
-                return
-
-            connection = sqlite3.connect(traceability_db_path)
-            try:
-                ensure_traceability_schema(connection)
-                cursor = connection.cursor()
-                for event in events:
-                    event_type = str(event.get("type", "")).strip()
-                    if event_type == "interface_upsert":
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO interfaces (
-                                interface_id, req_ids, type, content, file_path, first_line, implemented, callers, callees
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                str(event.get("interface_id", "")).strip(),
-                                json.dumps(event.get("req_ids", []), ensure_ascii=False),
-                                str(event.get("interface_type", "")).strip(),
-                                str(event.get("content", "")).strip(),
-                                event.get("file_path"),
-                                event.get("first_line"),
-                                1 if event.get("implemented") else 0,
-                                json.dumps(event.get("callers", []), ensure_ascii=False),
-                                json.dumps(event.get("callees", []), ensure_ascii=False),
-                            ),
-                        )
-                    elif event_type == "interface_status":
-                        cursor.execute(
-                            "UPDATE interfaces SET implemented = ? WHERE interface_id = ?",
-                            (
-                                1 if event.get("implemented") else 0,
-                                str(event.get("interface_id", "")).strip(),
-                            ),
-                        )
-                    elif event_type == "test_upsert":
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO tests (
-                                test_id, req_id, interface_ids, type, file_path, passed, first_line
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                str(event.get("test_id", "")).strip(),
-                                str(event.get("req_id", "")).strip(),
-                                json.dumps(event.get("interface_ids", []), ensure_ascii=False),
-                                str(event.get("test_type", "")).strip(),
-                                event.get("file_path"),
-                                None,
-                                event.get("first_line"),
-                            ),
-                        )
-                    elif event_type == "requirement_state":
-                        req_id = str(event.get("node_id", "")).strip()
-                        phase = str(event.get("phase", "")).strip()
-                        status = str(event.get("status", "")).strip()
-                        normalized_state = None
-                        if phase == "design" and status == "completed":
-                            normalized_state = "DESIGNED"
-                        elif phase == "implement" and status == "completed":
-                            normalized_state = "IMPLEMENTED"
-                        elif phase == "test" and status == "passed":
-                            normalized_state = "PASSED"
-                        elif phase == "test" and status == "failed":
-                            normalized_state = "FAILED"
-                        if req_id and normalized_state:
-                            cursor.execute(
-                                """
-                                INSERT INTO node_states (req_id, state, updated_at)
-                                VALUES (?, ?, CURRENT_TIMESTAMP)
-                                ON CONFLICT(req_id) DO UPDATE SET
-                                    state=excluded.state,
-                                    updated_at=CURRENT_TIMESTAMP
-                                """,
-                                (req_id, normalized_state),
-                            )
-                connection.commit()
-            finally:
-                connection.close()
-
         def import_runner_events() -> list[dict]:
             nonlocal last_known_workspace_head_oid, processed_runner_event_count
             runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
             if not runner_events_path.exists():
                 return []
             imported_events: list[dict] = []
-            parsed_events: list[dict] = []
             refresh_flags = {
                 "submission": False,
                 "logs": False,
@@ -223,17 +135,12 @@ class ExecutionService:
                 except Exception:
                     debug_log.append("backend", f"Failed to parse runner event line: {line}")
                     continue
-                if isinstance(event, dict):
-                    parsed_events.append(event)
                 event_type = str(event.get("type", "")).strip()
                 if event_type == "requirement_state":
                     refresh_flags["submission"] = True
-                    refresh_flags["traceability_selected"] = True
-                    refresh_flags["traceability_all"] = True
                 elif event_type == "runner_state":
                     refresh_flags["submission"] = True
                 elif event_type in {"interface_upsert", "interface_status", "test_upsert"}:
-                    refresh_flags["submission"] = True
                     refresh_flags["traceability_selected"] = True
                     refresh_flags["traceability_all"] = True
                 elif event_type == "signal":
@@ -248,11 +155,6 @@ class ExecutionService:
                 if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
                     emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
-
-            try:
-                sync_traceability_events(parsed_events)
-            except Exception as exc:  # noqa: BLE001
-                debug_log.append("backend", f"Failed to sync traceability events: {exc}")
 
             head_changed = False
             latest_head_oid = resolve_workspace_head_oid()

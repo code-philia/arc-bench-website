@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
     matches: ["/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
   },
   { to: "/research", label: "Research", icon: <ReadOutlined />, matches: ["/research"] },
-  { to: "/api-doc", label: "Agent Runtime SDK", icon: <ApiOutlined />, matches: ["/api-doc"] },
+  { to: "/api-doc", label: "API Doc", icon: <ApiOutlined />, matches: ["/api-doc"] },
 ];
 
 function isNavItemActive(pathname: string, item: NavItem) {

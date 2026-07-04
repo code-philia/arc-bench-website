@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -145,3 +146,43 @@ class SubmissionSourcePayload(BaseModel):
     language: str
     content: str
     first_line: int
+
+
+class WorkspaceFileEntry(BaseModel):
+    path: str
+    name: str
+    is_directory: bool
+    children: Optional[List['WorkspaceFileEntry']] = None
+
+
+WorkspaceFileEntry.model_rebuild()
+
+
+class WorkspaceFileListPayload(BaseModel):
+    files: List[WorkspaceFileEntry]
+
+
+class FileUpdatePayload(BaseModel):
+    path: str
+    content: str
+
+
+class TestCreatePayload(BaseModel):
+    test_id: str
+    req_id: str
+    test_type: str  # "Unit" | "Integration" | "E2E"
+    scenario_id: Optional[str] = None
+    file_path: Optional[str] = None
+
+
+class TestCreateResponse(BaseModel):
+    test_id: str
+    req_id: str
+    test_type: str
+    file_path: str
+
+
+class TestType:
+    UNIT = "Unit"
+    INTEGRATION = "Integration"
+    E2E = "E2E"
