@@ -89,6 +89,7 @@ class SubmissionLogs(BaseModel):
     stderr: str
     visual_events: list[SubmissionVisualEvent] = Field(default_factory=list)
     runner_events: list[SubmissionRunnerEvent] = Field(default_factory=list)
+    runner_event_lines: list[str] = Field(default_factory=list)
 
 
 class SubmissionTraceabilityInterface(BaseModel):

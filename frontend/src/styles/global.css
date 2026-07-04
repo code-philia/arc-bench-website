@@ -3242,6 +3242,45 @@ button {
   gap: 6px;
 }
 
+.step-log-stream-shell {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.step-log-stream {
+  display: grid;
+  gap: 6px;
+  max-height: 176px;
+  overflow: hidden;
+  padding: 0;
+  animation: step-log-stream-rise 380ms ease;
+}
+
+.step-log-stream-item {
+  white-space: pre-wrap;
+}
+
+.step-log-stream-item.latest {
+  color: var(--accent);
+}
+
+.step-log-stream-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.step-log-stream-badge,
+.step-log-stream-status {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .step-log-item {
   font-size: 0.76rem;
   line-height: 1.45;
@@ -3254,6 +3293,17 @@ button {
 
 .step-log-item.error {
   color: var(--fail);
+}
+
+@keyframes step-log-stream-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes spin {

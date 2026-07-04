@@ -808,7 +808,7 @@ def run_web_template(stdout_file, stderr_file) -> dict:
     )
     append_runner_event("run_tests", "Template frontend built", status="success")
 
-    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "run_tests", install_args=["--omit=dev"])
+    install_node_dependencies(backend_dir, stdout_file, stderr_file, "backend", "run_tests")
 
     backend_env = {
         **os.environ,

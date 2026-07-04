@@ -95,6 +95,7 @@ export type SubmissionLogs = {
   stderr: string;
   visual_events: SubmissionVisualEvent[];
   runner_events?: SubmissionRunnerEvent[];
+  runner_event_lines?: string[];
 };
 
 export type SubmissionTraceabilityInterface = {

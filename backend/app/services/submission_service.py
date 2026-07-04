@@ -619,6 +619,8 @@ class SubmissionService:
         if submission.result_path and Path(submission.result_path).exists():
             tests = json.loads(Path(submission.result_path).read_text(encoding="utf-8")).get("tests", [])
         node_states = self.artifact_service.read_node_visual_states(submission)
+        visual_events = self.read_visual_events(submission)
+        node_states = self._overlay_visual_event_states(node_states, visual_events)
         return SubmissionDetail(
             id=submission.id,
             display_name=submission.display_name,
@@ -647,6 +649,29 @@ class SubmissionService:
             can_resume=self.can_resume(submission),
             pause_available=bool(self.get_pause_request_path(submission)),
         )
+
+    @staticmethod
+    def _overlay_visual_event_states(
+        node_states: dict[str, str],
+        visual_events: list[SubmissionVisualEvent],
+    ) -> dict[str, str]:
+        resolved = dict(node_states)
+        for event in visual_events:
+            node_id = str(event.node_id or "").strip()
+            if not node_id:
+                continue
+            visual_state: str | None = None
+            if event.phase == "design" and event.status == "completed":
+                visual_state = "design"
+            elif event.phase == "implement" and event.status == "completed":
+                visual_state = "implement"
+            elif event.phase == "test" and event.status == "passed":
+                visual_state = "test-passed"
+            elif event.phase == "test" and event.status == "failed":
+                visual_state = "test-failed"
+            if visual_state is not None:
+                resolved[node_id] = visual_state
+        return resolved
 
     def read_events(self, submission: Submission) -> list[dict]:
         event_log_path = self.get_event_log_path(submission)
@@ -763,11 +788,74 @@ class SubmissionService:
             )
         return runner_events
 
+    def read_runner_event_lines(self, submission: Submission) -> list[str]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            return []
+
+        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        if not runner_events_path.exists():
+            return []
+
+        lines: list[str] = []
+        for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                lines.append(line)
+                continue
+            if not isinstance(parsed, dict):
+                lines.append(line)
+                continue
+            lines.append(self._format_runner_event_log_line(parsed))
+        return lines
+
     def read_event_lines(self, submission: Submission) -> list[str]:
         return [
             f"[{event['timestamp']}] [{event['step_key']}] [{event['status']}] {event['message']}"
             for event in self.read_events(submission)
         ]
+
+    @staticmethod
+    def _format_runner_event_log_line(payload: dict) -> str:
+        timestamp = str(payload.get("timestamp", "")).strip() or "-"
+        event_type = str(payload.get("type", "")).strip() or "event"
+        message = str(payload.get("message", "")).strip()
+        if event_type == "requirement_state":
+            node_id = str(payload.get("node_id", "")).strip() or "node"
+            phase = str(payload.get("phase", "")).strip() or "phase"
+            status = str(payload.get("status", "")).strip() or "status"
+            summary = f"{node_id} {phase} {status}"
+            if message:
+                summary = f"{summary} | {message}"
+            return f"[{timestamp}] [{event_type}] {summary}"
+        if event_type == "runner_state":
+            state = str(payload.get("state", "")).strip() or "state"
+            summary = state
+            if message:
+                summary = f"{summary} | {message}"
+            return f"[{timestamp}] [{event_type}] {summary}"
+        if event_type == "signal":
+            reason = str(payload.get("reason", "")).strip() or "refresh"
+            return f"[{timestamp}] [{event_type}] {reason}"
+        if event_type == "interface_upsert":
+            interface_id = str(payload.get("interface_id", "")).strip() or "interface"
+            return f"[{timestamp}] [{event_type}] {interface_id}"
+        if event_type == "interface_status":
+            interface_id = str(payload.get("interface_id", "")).strip() or "interface"
+            implemented = "implemented" if bool(payload.get("implemented")) else "planned"
+            return f"[{timestamp}] [{event_type}] {interface_id} {implemented}"
+        if event_type == "test_upsert":
+            test_id = str(payload.get("test_id", "")).strip() or "test"
+            req_id = str(payload.get("req_id", "")).strip()
+            suffix = f" -> {req_id}" if req_id else ""
+            return f"[{timestamp}] [{event_type}] {test_id}{suffix}"
+        if message:
+            return f"[{timestamp}] [{event_type}] {message}"
+        return f"[{timestamp}] [{event_type}]"
 
     def update_steps(self, submission: Submission, steps: list[StepState]) -> None:
         submission.steps_json = json.dumps([step.model_dump() for step in steps])

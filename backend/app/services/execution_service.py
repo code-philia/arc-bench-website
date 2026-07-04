@@ -135,6 +135,7 @@ class ExecutionService:
                 except Exception:
                     debug_log.append("backend", f"Failed to parse runner event line: {line}")
                     continue
+                refresh_flags["logs"] = True
                 event_type = str(event.get("type", "")).strip()
                 if event_type == "requirement_state":
                     refresh_flags["submission"] = True

@@ -219,7 +219,15 @@ def get_submission_logs(
             stderr = stderr_file.read()
     visual_events = service.read_visual_events(submission)
     runner_events = service.read_runner_events(submission)
-    return SubmissionLogs(events=events, stdout=stdout, stderr=stderr, visual_events=visual_events, runner_events=runner_events)
+    runner_event_lines = service.read_runner_event_lines(submission)
+    return SubmissionLogs(
+        events=events,
+        stdout=stdout,
+        stderr=stderr,
+        visual_events=visual_events,
+        runner_events=runner_events,
+        runner_event_lines=runner_event_lines,
+    )
 
 
 @router.get("/{submission_id}/events")
