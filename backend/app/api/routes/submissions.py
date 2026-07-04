@@ -21,6 +21,10 @@ from app.schemas.submission import (
     SubmissionSourcePayload,
     SubmissionSummary,
     SubmissionTraceabilityPayload,
+    WorkspaceFileListPayload,
+    FileUpdatePayload,
+    TestCreatePayload,
+    TestCreateResponse,
 )
 from app.services.execution_service import ExecutionService
 from app.services.debug_log_service import DebugLogService
@@ -524,3 +528,74 @@ def get_submission_preview_file(
         status_code=410,
         detail="Submission-scoped preview proxy is disabled. Use the fixed host preview at http://1.95.169.80:3001/.",
     )
+
+
+@router.get("/{submission_id}/workspace/files", response_model=WorkspaceFileListPayload)
+def get_workspace_files(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> WorkspaceFileListPayload:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+        files = service.list_workspace_files(submission)
+        return WorkspaceFileListPayload(files=files)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{submission_id}/workspace/files")
+def update_workspace_file(
+    submission_id: str,
+    payload: FileUpdatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, str]:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+        service.update_workspace_file(submission, payload.path, payload.content)
+        SubmissionEventStream.publish(
+            submission_id,
+            reason="file_updated",
+            commit_history=True,
+        )
+        return {"detail": "File updated successfully"}
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{submission_id}/workspace/tests")
+def create_test(
+    submission_id: str,
+    payload: TestCreatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, str]:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+        file_path = service.create_test_file(
+            submission,
+            payload.test_id,
+            payload.req_id,
+            payload.test_type,
+            payload.scenario_id,
+            payload.file_path,
+        )
+        SubmissionEventStream.publish(
+            submission_id,
+            reason="test_created",
+            commit_history=True,
+            traceability_all=True,
+        )
+        return {"detail": "Test created successfully", "file_path": file_path}
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

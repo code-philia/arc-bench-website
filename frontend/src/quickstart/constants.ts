@@ -3,15 +3,17 @@ import type { QuickStartStep } from "./types";
 export const QUICK_START_REQUIREMENT_ID = "ticketbooking";
 export const QUICK_START_TASK_TYPE = "web";
 export const QUICK_START_DISPLAY_NAME = "Quick Start Demo Agent";
-export const QUICK_START_MODEL_NAME = "Agent Runtime SDK Demo";
+export const QUICK_START_MODEL_NAME = "ArcBench Demo Runtime";
 
-export const QUICK_START_PYTHON_SNIPPET = `from arcbench_agent_runtime import AgentRuntime
+export const QUICK_START_PYTHON_SNIPPET = `from arcbench_visual import (
+    mark_design_done,
+    mark_implementation_done,
+    mark_test_passed,
+)
 
-runtime = AgentRuntime.from_env()
-
-runtime.events.mark_design_done("REQ-1", "Flow design is finalized")
-runtime.events.mark_implementation_done("REQ-1", "Main page and form logic are implemented")
-runtime.events.mark_test_passed("REQ-1", "Local validation passed")
+mark_design_done("REQ-1", "Flow design is finalized")
+mark_implementation_done("REQ-1", "Main page and form logic are implemented")
+mark_test_passed("REQ-1", "Local validation passed")
 `;
 
 export const QUICK_START_STEPS: QuickStartStep[] = [
@@ -83,7 +85,7 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     route: `/playground/task-bank/${QUICK_START_TASK_TYPE}/${QUICK_START_REQUIREMENT_ID}/submissions/__dynamic__`,
     targetId: "quickstart-nav-api-doc",
     title: "Step 8/8",
-    message: "To enable real-time monitoring of requirement implementation progress, integrate the Agent Runtime SDK into your agent code. For example, in Python, you can use it to update requirement node states as shown below. For full details, open the Agent Runtime SDK page.",
+    message: "To enable real-time monitoring of requirement implementation progress, you can integrate the APIs we provide into your agent code. For example, in Python, you can use these APIs to update the status of requirement nodes as below. For more detailed API documentation, please refer to the API Doc.",
     buttonLabel: "Done",
     codeSnippet: QUICK_START_PYTHON_SNIPPET,
     preferredPlacement: "down",

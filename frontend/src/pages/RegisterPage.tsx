@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
-import { getRegisterErrorMessage } from "../lib/authErrors";
 
 const PASSWORD_REQUIREMENT_TEXT = "Password must be 8-128 characters.";
 
@@ -30,7 +29,7 @@ export default function RegisterPage() {
       message.success("Account created successfully.");
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      message.error(getRegisterErrorMessage(error));
+      message.error((error as Error).message);
     } finally {
       setSubmitting(false);
     }
@@ -66,7 +65,6 @@ export default function RegisterPage() {
             className="text-input"
             type="text"
             autoComplete="username"
-            placeholder="3-32 chars, letters, numbers, _ or -"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             required
@@ -82,7 +80,6 @@ export default function RegisterPage() {
             autoComplete="new-password"
             minLength={8}
             maxLength={128}
-            placeholder="8-128 characters"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required

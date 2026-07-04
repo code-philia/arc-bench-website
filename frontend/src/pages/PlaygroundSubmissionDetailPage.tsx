@@ -31,6 +31,7 @@ import type {
   SubmissionTraceabilityPayload,
   SubmissionEditableTaskPayload,
   SubmissionTaskAssets,
+  WorkspaceFileEntry,
 } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
@@ -410,6 +411,136 @@ function TraceabilityPanel({
   );
 }
 
+function WorkspaceFileTreeItem({
+  file,
+  selectedPath,
+  onSelect,
+  expandedDirs,
+  onToggleDir,
+}: {
+  file: WorkspaceFileEntry;
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
+  expandedDirs: Set<string>;
+  onToggleDir: (path: string) => void;
+}) {
+  const isDir = file.is_directory;
+  const isExpanded = expandedDirs.has(file.path);
+  const isSelected = selectedPath === file.path;
+
+  // 获取文件扩展名，用于显示不同的图标
+  const getFileIcon = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    switch (ext) {
+      case "js":
+      case "jsx":
+        return "🟨";
+      case "ts":
+      case "tsx":
+        return "🔷";
+      case "json":
+        return "📋";
+      case "css":
+      case "scss":
+      case "less":
+        return "🎨";
+      case "html":
+        return "🌐";
+      case "py":
+        return "🐍";
+      case "md":
+        return "📝";
+      default:
+        return "📄";
+    }
+  };
+
+  if (isDir) {
+    return (
+      <div>
+        <button
+          type="button"
+          style={{
+            width: "100%",
+            border: "none",
+            background: isSelected ? "rgba(0, 122, 204, 0.2)" : "transparent",
+            padding: "4px 8px",
+            textAlign: "left",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "13px",
+            color: "var(--text-primary)",
+            borderRadius: "3px",
+          }}
+          onClick={() => onToggleDir(file.path)}
+        >
+          <span
+            style={{
+              width: "16px",
+              height: "16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+              transition: "transform 0.1s ease",
+              fontSize: "10px",
+            }}
+          >
+            ▶
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "14px" }}>📁</span>
+            <span>{file.name}</span>
+          </span>
+        </button>
+        {isExpanded && file.children && (
+          <div style={{ paddingLeft: "12px" }}>
+            {file.children.map((child) => (
+              <WorkspaceFileTreeItem
+                key={child.path}
+                file={child}
+                selectedPath={selectedPath}
+                onSelect={onSelect}
+                expandedDirs={expandedDirs}
+                onToggleDir={onToggleDir}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      style={{
+        width: "100%",
+        border: "none",
+        background: isSelected ? "rgba(0, 122, 204, 0.2)" : "transparent",
+        padding: "4px 8px",
+        textAlign: "left",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        fontSize: "13px",
+        color: "var(--text-primary)",
+        borderRadius: "3px",
+      }}
+      onClick={() => onSelect(file.path)}
+    >
+      <span style={{ width: "16px" }} />
+      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <span style={{ fontSize: "14px" }}>{getFileIcon(file.name)}</span>
+        <span>{file.name}</span>
+      </span>
+    </button>
+  );
+}
+
 function SubmissionFilePanel({
   source,
   loading,
@@ -419,6 +550,13 @@ function SubmissionFilePanel({
   selectedDiffFilePath,
   onOpenDiffFile,
   emptyMessage,
+  submissionId,
+  submission,
+  setSource,
+  setFileViewMode,
+  refreshCommitHistory,
+  refreshTraceabilityForCurrentView,
+  selectedNodeId,
 }: {
   source: SubmissionSourcePayload | null;
   loading: boolean;
@@ -428,10 +566,120 @@ function SubmissionFilePanel({
   selectedDiffFilePath: string | null;
   onOpenDiffFile: (changedFile: SubmissionCommitChangedFile) => void;
   emptyMessage: string;
+  submissionId: string;
+  submission: SubmissionDetail | null;
+  setSource: (source: SubmissionSourcePayload | null) => void;
+  setFileViewMode: (mode: "traceability" | "diff" | null) => void;
+  refreshCommitHistory: (silent?: boolean) => Promise<SubmissionCommitHistoryPayload>;
+  refreshTraceabilityForCurrentView: () => void;
+  selectedNodeId: string | null;
 }) {
   const codeViewRef = useRef<HTMLPreElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileEntry[]>([]);
+  const [workspaceFilesLoading, setWorkspaceFilesLoading] = useState(false);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string>("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [showCreateTestModal, setShowCreateTestModal] = useState(false);
+  const [newTestId, setNewTestId] = useState("");
+  const [newTestType, setNewTestType] = useState("Unit");
+  const [selectedNodeIdForTest, setSelectedNodeIdForTest] = useState<string | null>(null);
   const showInlineLoading = loading && Boolean(source);
+  const isPaused = submission?.status === "PAUSED";
+
+  const loadWorkspaceFiles = async () => {
+    if (!submissionId || !isPaused) {
+      return;
+    }
+    setWorkspaceFilesLoading(true);
+    try {
+      const result = await api.getWorkspaceFiles(submissionId);
+      setWorkspaceFiles(result.files);
+      if (result.files.length > 0 && result.files[0].children) {
+        setExpandedDirs(new Set([result.files[0].path]));
+      }
+    } catch (e) {
+      console.error("Failed to load workspace files", e);
+    } finally {
+      setWorkspaceFilesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWorkspaceFiles();
+  }, [submissionId, isPaused]);
+
+  const openWorkspaceFile = async (path: string) => {
+    if (!submissionId) return;
+    setSelectedFilePath(path);
+    setIsEditing(false);
+    setUnsavedChanges(false);
+    try {
+      const result = await api.getSubmissionSource(submissionId, { filePath: path, kind: "file" });
+      setSource(result);
+      setFileContent(result.content);
+      setFileViewMode("traceability");
+    } catch (e) {
+      console.error("Failed to load file", e);
+    }
+  };
+
+  const toggleDirectory = (path: string) => {
+    const newExpanded = new Set(expandedDirs);
+    if (newExpanded.has(path)) {
+      newExpanded.delete(path);
+    } else {
+      newExpanded.add(path);
+    }
+    setExpandedDirs(newExpanded);
+  };
+
+  const saveFile = async () => {
+    if (!submissionId || !selectedFilePath) return;
+    try {
+      await api.updateWorkspaceFile(submissionId, {
+        path: selectedFilePath,
+        content: fileContent,
+      });
+      setUnsavedChanges(false);
+      setIsEditing(false);
+      await loadWorkspaceFiles();
+      await refreshCommitHistory(false);
+    } catch (e) {
+      console.error("Failed to save file", e);
+    }
+  };
+
+  const cancelEdit = () => {
+    if (source && selectedFilePath === source.file_path) {
+      setFileContent(source.content);
+    }
+    setIsEditing(false);
+    setUnsavedChanges(false);
+  };
+
+  const createTest = async () => {
+    if (!submissionId || !selectedNodeIdForTest || !newTestId) return;
+    try {
+      const result = await api.createTest(submissionId, {
+        test_id: newTestId,
+        req_id: selectedNodeIdForTest,
+        test_type: newTestType,
+      });
+      setShowCreateTestModal(false);
+      setNewTestId("");
+      await loadWorkspaceFiles();
+      await refreshCommitHistory(false);
+      refreshTraceabilityForCurrentView();
+      await openWorkspaceFile(result.file_path);
+    } catch (e) {
+      console.error("Failed to create test", e);
+    }
+  };
 
   useEffect(() => {
     if (!source || !codeViewRef.current) {
@@ -550,8 +798,10 @@ function SubmissionFilePanel({
     );
   }
 
-  const lines = codeLines(source.content);
+  const lines = codeLines(isEditing ? fileContent : source.content);
   const highlightedLine = formatLineNumber(source.first_line);
+  // 简化判断逻辑：只要选择了文件或者我们处于编辑状态，就认为是当前文件
+  const isCurrentFileSelected = selectedFilePath !== null;
 
   return (
     <div className={`ide-shell ${workspaceCollapsed ? "workspace-collapsed" : ""}`}>
@@ -570,10 +820,72 @@ function SubmissionFilePanel({
             </button>
           </div>
           <div className="ide-file-list">
-            <div className="ide-file-item active">
-              <span className="ide-file-kind kind-file">{source.language.toUpperCase()}</span>
-              <span className="ide-file-path">{source.file_path}</span>
-            </div>
+            {isPaused && (
+              <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
+                  <button
+                    type="button"
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      padding: "3px 6px",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                    onClick={loadWorkspaceFiles}
+                    disabled={workspaceFilesLoading}
+                  >
+                    🔄 Refresh
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      padding: "3px 6px",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                    onClick={() => {
+                      setSelectedNodeIdForTest(selectedNodeId ?? "ROOT");
+                      setShowCreateTestModal(true);
+                    }}
+                  >
+                    + Add Test
+                  </button>
+                </div>
+              </div>
+            )}
+            {isPaused && workspaceFiles.length > 0 ? (
+              workspaceFiles.map((file) => (
+                <WorkspaceFileTreeItem
+                  key={file.path}
+                  file={file}
+                  selectedPath={selectedFilePath}
+                  onSelect={openWorkspaceFile}
+                  expandedDirs={expandedDirs}
+                  onToggleDir={toggleDirectory}
+                />
+              ))
+            ) : (
+              <div style={{ padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-primary)" }}>
+                <span style={{ width: "16px" }} />
+                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontSize: "14px" }}>📄</span>
+                  <span>{source.file_path}</span>
+                </span>
+              </div>
+            )}
           </div>
         </aside>
       ) : (
@@ -596,42 +908,184 @@ function SubmissionFilePanel({
             <span />
           </div>
           <div className="ide-editor-title">{source.file_path}</div>
-          <div className="ide-editor-badge">{source.language.toUpperCase()}</div>
-        </div>
-        <pre ref={codeViewRef} className="ide-code-view">
-          <code>
-            {lines.map((line, index) => {
-              const lineNumber = index + 1;
-              const isHighlighted = lineNumber === highlightedLine;
-              return (
-                <div
-                  key={`${lineNumber}:${line}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "56px minmax(0, 1fr)",
-                    gap: "14px",
-                    background: isHighlighted ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
-                    borderRadius: "8px",
-                    padding: "0 8px",
-                    margin: "0 -8px",
-                  }}
-                >
-                  <span
-                    style={{
-                      color: isHighlighted ? "var(--accent)" : "var(--text-muted)",
-                      userSelect: "none",
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {isPaused && (
+              <>
+                {!isEditing ? (
+                  <button
+                    type="button"
+                    className="inline-link"
+                    onClick={() => {
+                      setFileContent(source.content);
+                      setIsEditing(true);
                     }}
                   >
-                    {lineNumber}
-                  </span>
-                  <span>{line || " "}</span>
-                </div>
-              );
-            })}
-          </code>
-        </pre>
+                    ✏️ Edit
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="inline-link"
+                      onClick={saveFile}
+                    >
+                      💾 Save
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-link"
+                      onClick={cancelEdit}
+                    >
+                      ❌ Cancel
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            <div className="ide-editor-badge">{source.language.toUpperCase()}</div>
+          </div>
+        </div>
+        {isEditing ? (
+          <textarea
+            ref={textareaRef}
+            className="ide-code-view"
+            value={fileContent}
+            onChange={(e) => {
+              setFileContent(e.target.value);
+              setUnsavedChanges(true);
+            }}
+            spellCheck={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              minHeight: "400px",
+              fontFamily: "monospace",
+              fontSize: "14px",
+              lineHeight: "1.6",
+              padding: "8px",
+              border: "none",
+              resize: "none",
+            }}
+          />
+        ) : (
+          <pre ref={codeViewRef} className="ide-code-view">
+            <code>
+              {lines.map((line, index) => {
+                const lineNumber = index + 1;
+                const isHighlighted = lineNumber === highlightedLine;
+                return (
+                  <div
+                    key={`${lineNumber}:${line}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "56px minmax(0, 1fr)",
+                      gap: "14px",
+                      background: isHighlighted ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
+                      borderRadius: "8px",
+                      padding: "0 8px",
+                      margin: "0 -8px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: isHighlighted ? "var(--accent)" : "var(--text-muted)",
+                        userSelect: "none",
+                      }}
+                    >
+                      {lineNumber}
+                    </span>
+                    <span>{line || " "}</span>
+                  </div>
+                );
+              })}
+            </code>
+          </pre>
+        )}
         {showInlineLoading ? <div className="ide-loading-overlay">Loading source...</div> : null}
       </section>
+
+      {showCreateTestModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setShowCreateTestModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "24px",
+              borderRadius: "8px",
+              minWidth: "400px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: "16px" }}>Add Test</h3>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "4px" }}>For Requirement:</label>
+              <div style={{ padding: "8px", background: "#f5f5f5", borderRadius: "4px" }}>
+                {selectedNodeIdForTest}
+              </div>
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "4px" }}>Test ID:</label>
+              <input
+                type="text"
+                value={newTestId}
+                onChange={(e) => setNewTestId(e.target.value)}
+                style={{ width: "100%", padding: "8px", border: "1px solid #ddd", borderRadius: "4px" }}
+                placeholder="e.g., REQ-1-test-login"
+              />
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "4px" }}>Test Type:</label>
+              <select
+                value={newTestType}
+                onChange={(e) => setNewTestType(e.target.value)}
+                style={{ width: "100%", padding: "8px", border: "1px solid #ddd", borderRadius: "4px" }}
+              >
+                <option value="Unit">Unit</option>
+                <option value="Integration">Integration</option>
+                <option value="E2E">E2E</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowCreateTestModal(false)}
+                style={{ padding: "8px 16px", border: "1px solid #ddd", borderRadius: "4px", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={createTest}
+                disabled={!newTestId}
+                style={{
+                  padding: "8px 16px",
+                  background: "#0078d4",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  opacity: newTestId ? 1 : 0.5,
+                }}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1944,6 +2398,13 @@ export default function PlaygroundSubmissionDetailPage() {
                 selectedDiffFilePath={selectedDiffFilePath}
                 onOpenDiffFile={openCommitDiffFile}
                 emptyMessage={filePanelEmptyMessage}
+                submissionId={submissionId}
+                submission={submission}
+                setSource={setSource}
+                setFileViewMode={setFileViewMode}
+                refreshCommitHistory={refreshCommitHistory}
+                refreshTraceabilityForCurrentView={refreshTraceabilityForCurrentView}
+                selectedNodeId={activeSelectedNodeId}
               />
             ) : activeTab === "results" ? (
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>

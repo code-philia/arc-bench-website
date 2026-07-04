@@ -1,64 +1,69 @@
 import { useMemo, useState, type ReactNode } from "react";
 
-type DocSectionKey = "overview" | "events" | "traceability" | "git" | "runtime";
+type LanguageKey = "python" | "javascript" | "typescript";
+type DocSectionKey = "overview" | "visual" | "traceability" | "runtime";
 
 const sectionLabels: Record<DocSectionKey, string> = {
   overview: "Overview",
-  events: "Event Client",
-  traceability: "Traceability Client",
-  git: "Git Client",
-  runtime: "Runtime Guide",
+  visual: "Visualization API",
+  traceability: "Traceability API",
+  runtime: "Runtime Notes",
 };
 
-const runtimeBootstrapExample = `from arcbench_agent_runtime import AgentRuntime
+const languageLabels: Record<LanguageKey, string> = {
+  python: "Python",
+  javascript: "JavaScript",
+  typescript: "TypeScript",
+};
 
-runtime = AgentRuntime.from_env()
-
-print(runtime.paths.project_dir)
-print(runtime.paths.runner_events_path)
-print(runtime.paths.traceability_db_path)
-`;
-
-const eventExample = `from arcbench_agent_runtime import AgentRuntime
-
-runtime = AgentRuntime.from_env()
-
-runtime.events.mark_design_done("REQ-1", "Flow design is finalized")
-runtime.events.mark_implementation_done("REQ-1", "Main page and form logic are implemented")
-runtime.events.mark_test_passed("REQ-1", "Local validation passed")
-runtime.events.mark_test_failed("REQ-2", "Pagination assertions are still failing")
-
-runtime.events.emit_runner_state("paused", "Waiting for external input")
-runtime.events.emit_refresh_signal(
-    reason="artifacts_updated",
-    submission=True,
-    logs=True,
-    traceability_selected=True,
-    traceability_all=True,
-    preview=True,
-)
-`;
-
-const traceabilityExample = `from arcbench_agent_runtime import AgentRuntime
-
-runtime = AgentRuntime.from_env()
-runtime.traceability.init_db()
-
-runtime.traceability.upsert_requirement(
-    req_id="REQ-2.2",
-    name="User Login",
-    description="Registered users can log in with email and password",
-    scenarios=[
-        {
-            "id": "REQ-2.2-SCN-1",
-            "name": "happy path",
-            "steps": [{"keyword": "WHEN", "content": "user submits valid credentials"}],
-        }
-    ],
+const visualExamples: Record<LanguageKey, string> = {
+  python: `from arcbench_visual import (
+    mark_design_done,
+    mark_implementation_done,
+    mark_test_failed,
+    mark_test_passed,
 )
 
-runtime.traceability.upsert_interface(
-    interface_id="IF-LOGIN-API",
+mark_design_done("REQ-1", "Flow design is finalized")
+mark_implementation_done("REQ-1", "Main page and form logic are implemented")
+mark_test_passed("REQ-1", "Local validation passed")
+mark_test_failed("REQ-2", "Pagination assertions are still failing")
+`,
+  javascript: `import {
+  markDesignDone,
+  markImplementationDone,
+  markTestFailed,
+  markTestPassed,
+} from "/workspace/sdk/arcbench_visual.js";
+
+markDesignDone("REQ-1", "State machine is planned");
+markImplementationDone("REQ-1", "Frontend interactions are complete");
+markTestPassed("REQ-1", "Smoke test succeeded");
+markTestFailed("REQ-2", "Pagination test is still failing");
+`,
+  typescript: `import {
+  markDesignDone,
+  markImplementationDone,
+  markTestFailed,
+  markTestPassed,
+} from "/workspace/sdk/arcbench_visual.ts";
+
+markDesignDone("REQ-1", "Data contract is defined");
+markImplementationDone("REQ-1", "API integration is done");
+markTestPassed("REQ-1", "Primary path verification passed");
+markTestFailed("REQ-2", "Retry state is not stable yet");
+`,
+};
+
+const traceabilityExamples: Record<LanguageKey, string> = {
+  python: `from arcbench_visual import (
+    register_interface,
+    register_test,
+    set_interface_implemented,
+)
+
+register_interface(
+    "IF-LOGIN-API",
     req_ids=["REQ-2.2"],
     type="API",
     content="POST /api/auth/login",
@@ -67,41 +72,72 @@ runtime.traceability.upsert_interface(
     implemented=False,
 )
 
-runtime.traceability.set_interface_implemented(
-    "IF-LOGIN-API",
-    True,
-    "Login handler is connected",
-)
+set_interface_implemented("IF-LOGIN-API", True, "Login handler is connected")
 
-runtime.traceability.upsert_test(
-    test_id="TEST-LOGIN-E2E",
+register_test(
+    "TEST-LOGIN-E2E",
     req_id="REQ-2.2",
+    scenario_id="REQ-2.2-SCN-1",
     type="E2E",
     file_path="tests/login.spec.ts",
     first_line="7",
-    interface_ids=["IF-LOGIN-API"],
-    passed=True,
-    scenario_id="REQ-2.2-SCN-1",
 )
+`,
+  javascript: `import {
+  registerInterface,
+  registerTest,
+  setInterfaceImplemented,
+} from "/workspace/sdk/arcbench_visual.js";
 
-runtime.traceability.upsert_node_state("REQ-2.2", "PASSED")
-`;
+registerInterface(
+  "IF-LOGIN-API",
+  ["REQ-2.2"],
+  "API",
+  "POST /api/auth/login",
+  "backend/src/routes/auth.ts",
+  "18",
+  false,
+);
 
-const gitExample = `from arcbench_agent_runtime import AgentRuntime
+setInterfaceImplemented("IF-LOGIN-API", true, "Login handler is connected");
 
-runtime = AgentRuntime.from_env()
+registerTest(
+  "TEST-LOGIN-E2E",
+  "REQ-2.2",
+  "E2E",
+  "tests/login.spec.ts",
+  "7",
+  "REQ-2.2-SCN-1",
+);
+`,
+  typescript: `import {
+  registerInterface,
+  registerTest,
+  setInterfaceImplemented,
+} from "/workspace/sdk/arcbench_visual.ts";
 
-runtime.git.ensure_repo(create_initial_commit=True)
+registerInterface(
+  "IF-LOGIN-API",
+  ["REQ-2.2"],
+  "API",
+  "POST /api/auth/login",
+  "backend/src/routes/auth.ts",
+  "18",
+  false,
+);
 
-with open("README.md", "a", encoding="utf-8") as handle:
-    handle.write("\\nImplementation note\\n")
+setInterfaceImplemented("IF-LOGIN-API", true, "Login handler is connected");
 
-committed = runtime.git.commit("REQ-1 (design): finalize login flow")
-print("committed:", committed)
-print("head:", runtime.git.current_head())
-
-runtime.git.rollback_last_commit(hard=True)
-`;
+registerTest(
+  "TEST-LOGIN-E2E",
+  "REQ-2.2",
+  "E2E",
+  "tests/login.spec.ts",
+  "7",
+  "REQ-2.2-SCN-1",
+);
+`,
+};
 
 const PY_KEYWORDS = new Set([
   "import", "from", "def", "class", "return", "if", "else", "elif",
@@ -109,22 +145,35 @@ const PY_KEYWORDS = new Set([
   "in", "not", "and", "or", "with", "pass", "raise", "yield", "lambda",
 ]);
 
+const JS_KEYWORDS = new Set([
+  "import", "from", "export", "const", "let", "var", "function",
+  "return", "if", "else", "for", "while", "try", "catch", "throw",
+  "new", "class", "extends", "async", "await", "of", "in", "typeof",
+  "instanceof", "default", "switch", "case", "break", "continue",
+  "null", "undefined", "true", "false",
+]);
+
 function tokenNode(kind: string, text: string): ReactNode {
   return <span className={`code-token code-${kind}`}>{text}</span>;
 }
 
-function highlightPythonLine(line: string): ReactNode[] {
+function highlightLine(line: string, lang: LanguageKey): ReactNode[] {
   const tokens: ReactNode[] = [];
+  const keywords = lang === "python" ? PY_KEYWORDS : JS_KEYWORDS;
   let index = 0;
 
   while (index < line.length) {
-    if (line[index] === "#") {
+    if (line[index] === "#" && lang === "python") {
+      tokens.push(tokenNode("comment", line.slice(index)));
+      break;
+    }
+    if (line[index] === "/" && line[index + 1] === "/") {
       tokens.push(tokenNode("comment", line.slice(index)));
       break;
     }
 
     const quote = line[index];
-    if (quote === "\"" || quote === "'") {
+    if (quote === "\"" || quote === "'" || quote === "`") {
       let cursor = index + 1;
       while (cursor < line.length && line[cursor] !== quote) {
         if (line[cursor] === "\\") cursor += 1;
@@ -140,7 +189,7 @@ function highlightPythonLine(line: string): ReactNode[] {
       let cursor = index;
       while (cursor < line.length && /[a-zA-Z0-9_]/.test(line[cursor])) cursor += 1;
       const word = line.slice(index, cursor);
-      if (PY_KEYWORDS.has(word)) {
+      if (keywords.has(word)) {
         tokens.push(tokenNode("keyword", word));
       } else if (cursor < line.length && line[cursor] === "(") {
         tokens.push(tokenNode("function", word));
@@ -158,13 +207,36 @@ function highlightPythonLine(line: string): ReactNode[] {
   return tokens;
 }
 
-function CodeBlock({ source }: { source: string }) {
-  const highlighted = useMemo(() => source.split(/\r?\n/).map((line) => highlightPythonLine(line)), [source]);
+function CodeBlock({
+  activeLanguage,
+  onChangeLanguage,
+  source,
+}: {
+  activeLanguage: LanguageKey;
+  onChangeLanguage: (language: LanguageKey) => void;
+  source: Record<LanguageKey, string>;
+}) {
+  const code = source[activeLanguage];
+  const highlighted = useMemo(() => {
+    return code.split(/\r?\n/).map((line) => highlightLine(line, activeLanguage));
+  }, [activeLanguage, code]);
 
   return (
     <div className="api-doc-code-block">
       <div className="api-doc-code-toolbar">
-        <span className="api-doc-code-lang-label">Python</span>
+        <span className="api-doc-code-lang-label">{languageLabels[activeLanguage]}</span>
+        <div className="api-doc-code-tabs" role="tablist" aria-label="Language examples">
+          {(Object.keys(languageLabels) as LanguageKey[]).map((language) => (
+            <button
+              key={language}
+              type="button"
+              className={`api-doc-code-tab${activeLanguage === language ? " active" : ""}`}
+              onClick={() => onChangeLanguage(language)}
+            >
+              {languageLabels[language]}
+            </button>
+          ))}
+        </div>
       </div>
       <pre className="api-doc-code">
         <code>
@@ -183,285 +255,112 @@ function OverviewPage() {
   return (
     <>
       <section className="api-doc-section-block">
-        <h2>How The UI Reacts</h2>
+        <h2>Execution Contract</h2>
         <p>
-          When your agent calls the SDK, it does two things at the same time: it performs the actual runtime action,
-          and it writes fresh signals into <code>runner-events.jsonl</code>. The website watches those event updates,
-          pushes a refresh notification to the browser, and then the frontend requests the latest submission,
-          traceability, commit, or preview data.
-        </p>
-        <div className="api-doc-flow-diagram" aria-label="Agent runtime communication flow">
-          <div className="api-doc-flow-card">
-            <div className="api-doc-flow-label">1. Agent</div>
-            <strong>Call SDK</strong>
-            <p><code>runtime.events</code>, <code>runtime.traceability</code>, <code>runtime.git</code></p>
-          </div>
-          <div className="api-doc-flow-arrow">→</div>
-          <div className="api-doc-flow-card">
-            <div className="api-doc-flow-label">2. Runtime Artifacts</div>
-            <strong>Write Updates</strong>
-            <p><code>runner-events.jsonl</code> and, when needed, <code>traceability.db</code></p>
-          </div>
-          <div className="api-doc-flow-arrow">→</div>
-          <div className="api-doc-flow-card">
-            <div className="api-doc-flow-label">3. Backend</div>
-            <strong>Detect + Notify</strong>
-            <p>Import new events, publish SSE refresh flags, expose fresh API data</p>
-          </div>
-          <div className="api-doc-flow-arrow">→</div>
-          <div className="api-doc-flow-card">
-            <div className="api-doc-flow-label">4. Frontend</div>
-            <strong>Refresh Panels</strong>
-            <p>Canvas, traceability, status, commit history, preview, and test result views update</p>
-          </div>
-        </div>
-        <div className="api-doc-callout-grid">
-          <article className="api-doc-callout-card">
-            <strong>Node state events</strong>
-            <p>Requirement nodes change color and phase on the canvas, and the submission status panel advances.</p>
-          </article>
-          <article className="api-doc-callout-card">
-            <strong>Traceability updates</strong>
-            <p>Interfaces, tests, and pass/fail overlays refresh after the frontend re-queries traceability data.</p>
-          </article>
-          <article className="api-doc-callout-card">
-            <strong>Git operations</strong>
-            <p>Commit history and preview panels refresh after the backend observes repository changes for the run.</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="api-doc-section-block">
-        <h2>Python SDK</h2>
-        <p>
-          The Python package <code>arcbench_agent_runtime</code> exposes the Agent Runtime SDK. Create one runtime
-          object with <code>AgentRuntime.from_env()</code>, then access the grouped clients on it:
-          <code>runtime.events</code>, <code>runtime.traceability</code>, and <code>runtime.git</code>.
+          ArcBench injects a built-in runtime SDK into the execution workspace. Your agent can use it to report
+          requirement-node progress and register traceability assets generated during the run.
         </p>
         <div className="api-doc-callout-grid">
           <article className="api-doc-callout-card">
-            <strong>Events client</strong>
-            <p>Emit requirement-state, runner-state, and refresh signals into <code>runner-events.jsonl</code>.</p>
+            <strong>Visualization stream</strong>
+            <p>Writes requirement progress events into <code>/workspace/artifacts/runner-events.jsonl</code>.</p>
           </article>
           <article className="api-doc-callout-card">
-            <strong>Traceability store</strong>
-            <p>Operate directly on the per-run <code>traceability.db</code> and emit synchronization signals.</p>
+            <strong>Unified event stream</strong>
+            <p>Writes interface, test, and requirement update events into <code>/workspace/artifacts/runner-events.jsonl</code>.</p>
           </article>
           <article className="api-doc-callout-card">
-            <strong>Git client</strong>
-            <p>Initialize repos, commit generated artifacts, and roll back history inside the workspace project.</p>
+            <strong>Execution database</strong>
+            <p>Runner materializes a per-run <code>/workspace/artifacts/traceability.db</code> SQLite database.</p>
           </article>
         </div>
-      </section>
-
-      <section className="api-doc-section-block">
-        <h2>Bootstrap Example</h2>
-        <CodeBlock source={runtimeBootstrapExample} />
-      </section>
-
-      <section className="api-doc-section-block">
-        <h2>Recommended Usage</h2>
-        <p>
-          Use <code>AgentRuntime.from_env()</code> once near the start of <code>main.py</code>, then pass the runtime
-          object through your agent workflow. All node-state updates, traceability mutations, and git actions should go
-          through this SDK.
-        </p>
       </section>
 
       <section className="api-doc-section-block">
         <h2>Automatic Registration</h2>
         <p>
-          Before your agent starts, the runtime can materialize the traceability database and your execution environment
-          already provides the standard artifact paths. Your agent should register the concrete interfaces, tests, node
-          states, and git actions it produces during the run.
-        </p>
-      </section>
-    </>
-  );
-}
-
-function EventsPage() {
-  return (
-    <>
-      <section className="api-doc-section-block">
-        <h2>Requirement and Runner Events</h2>
-        <p>
-          These APIs write directly into <code>/workspace/artifacts/runner-events.jsonl</code>. They drive the canvas
-          state machine, execution status, and frontend refresh behavior.
+          Before your agent starts, the runtime parses <code>requirements.yaml</code> and automatically registers every
+          requirement node and scenario. You only need to register the remaining assets you create: interfaces and tests.
         </p>
         <table className="api-doc-table">
           <thead>
             <tr>
-              <th>Client Method</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>runtime.events.mark_design_done(node_id, message=None)</code></td>
-              <td>Emit a design-completed state for a requirement node.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.events.mark_implementation_done(node_id, message=None)</code></td>
-              <td>Emit an implementation-completed state for a requirement node.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.events.mark_test_passed(node_id, message=None)</code></td>
-              <td>Emit a passed testing state for a requirement node.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.events.mark_test_failed(node_id, message=None)</code></td>
-              <td>Emit a failed testing state for a requirement node.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.events.emit_runner_state(state, message=None)</code></td>
-              <td>Publish a runner lifecycle state such as <code>paused</code> or <code>completed</code>.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.events.emit_refresh_signal(...)</code></td>
-              <td>Ask the website to refresh submission, traceability, preview, or commit history panels.</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section className="api-doc-section-block">
-        <h2>Example</h2>
-        <CodeBlock source={eventExample} />
-      </section>
-    </>
-  );
-}
-
-function TraceabilityPage() {
-  return (
-    <>
-      <section className="api-doc-section-block">
-        <h2>Database Lifecycle</h2>
-        <table className="api-doc-table">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>runtime.traceability.init_db(reset=False)</code></td>
-              <td>Create all runtime tables if they do not exist.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.traceability.init_db(reset=True)</code></td>
-              <td>Drop and recreate the runtime tables.</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section className="api-doc-section-block">
-        <h2>CRUD Surface</h2>
-        <table className="api-doc-table">
-          <thead>
-            <tr>
-              <th>Entity</th>
-              <th>Create / Update</th>
-              <th>Read</th>
-              <th>Delete</th>
+              <th>Asset</th>
+              <th>Source</th>
+              <th>When</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td><code>requirements</code></td>
-              <td><code>upsert_requirement</code>, <code>update_requirement_fields</code></td>
-              <td><code>get_requirement</code>, <code>list_requirements</code></td>
-              <td><code>delete_requirement</code></td>
+              <td><code>requirements.yaml</code></td>
+              <td>Automatically before agent execution</td>
             </tr>
             <tr>
               <td><code>scenarios</code></td>
-              <td><code>upsert_scenario</code></td>
-              <td><code>get_scenario</code>, <code>list_scenarios</code></td>
-              <td><code>delete_scenario</code></td>
+              <td><code>requirements.yaml</code></td>
+              <td>Automatically before agent execution</td>
             </tr>
             <tr>
               <td><code>interfaces</code></td>
-              <td><code>upsert_interface</code>, <code>update_interface_fields</code>, <code>set_interface_implemented</code></td>
-              <td><code>get_interface</code>, <code>list_interfaces</code></td>
-              <td><code>delete_interface</code></td>
+              <td>Agent SDK calls</td>
+              <td>Whenever your code defines or updates an interface</td>
             </tr>
             <tr>
               <td><code>tests</code></td>
-              <td><code>upsert_test</code>, <code>update_test_fields</code>, <code>set_test_pass_status</code></td>
-              <td><code>get_test</code>, <code>list_tests</code></td>
-              <td><code>delete_test</code></td>
-            </tr>
-            <tr>
-              <td><code>node_states</code></td>
-              <td><code>upsert_node_state</code></td>
-              <td><code>get_node_state</code>, <code>list_node_states</code></td>
-              <td><code>delete_node_state</code></td>
-            </tr>
-            <tr>
-              <td><code>call_edges</code></td>
-              <td><code>insert_call_edge</code></td>
-              <td><code>list_call_edges</code></td>
-              <td><code>delete_call_edge</code></td>
+              <td>Agent SDK calls</td>
+              <td>Whenever your code defines a test asset</td>
             </tr>
           </tbody>
         </table>
-      </section>
-
-      <section className="api-doc-section-block">
-        <h2>Example</h2>
-        <CodeBlock source={traceabilityExample} />
       </section>
     </>
   );
 }
 
-function GitPage() {
+function VisualizationPage({
+  language,
+  onLanguageChange,
+}: {
+  language: LanguageKey;
+  onLanguageChange: (language: LanguageKey) => void;
+}) {
   return (
     <>
       <section className="api-doc-section-block">
-        <h2>Repository Operations</h2>
+        <h2>Requirement State APIs</h2>
         <p>
-          The git client operates inside <code>runtime.paths.project_dir</code>. It also emits refresh signals so the
-          website can update commit history and preview state after repository changes.
+          Use these APIs to drive the canvas state machine on the submission detail page. The node id must match the
+          exact id in the requirement tree, such as <code>ROOT</code>, <code>REQ-1</code>, or <code>REQ-2.3</code>.
         </p>
         <table className="api-doc-table">
           <thead>
             <tr>
-              <th>Method</th>
-              <th>Description</th>
+              <th>Operation</th>
+              <th>Canvas Color</th>
+              <th>Meaning</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><code>runtime.git.ensure_repo(create_initial_commit=True)</code></td>
-              <td>Initialize a repo, configure identity, maintain the ArcBench gitignore block, and optionally create an initial commit.</td>
+              <td><code>markDesignDone</code> / <code>mark_design_done</code></td>
+              <td><span className="api-doc-color-chip design" />Orange</td>
+              <td>Design for this requirement node is complete.</td>
             </tr>
             <tr>
-              <td><code>runtime.git.commit(message)</code></td>
-              <td>Stage all changes and create one commit. Returns <code>False</code> if there is nothing to commit.</td>
+              <td><code>markImplementationDone</code> / <code>mark_implementation_done</code></td>
+              <td><span className="api-doc-color-chip implement" />Blue</td>
+              <td>Implementation for this requirement node is complete.</td>
             </tr>
             <tr>
-              <td><code>runtime.git.rollback_last_commit(hard=False)</code></td>
-              <td>Reset to <code>HEAD~1</code> with a soft or hard rollback.</td>
+              <td><code>markTestPassed</code> / <code>mark_test_passed</code></td>
+              <td><span className="api-doc-color-chip test-passed" />Green</td>
+              <td>Testing for this requirement node passed.</td>
             </tr>
             <tr>
-              <td><code>runtime.git.reset_to_commit(commit_oid, hard=True)</code></td>
-              <td>Reset the repository to a specific commit.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.git.restore_worktree()</code></td>
-              <td>Discard tracked working-tree changes with <code>git reset --hard</code>.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.git.clean_untracked()</code></td>
-              <td>Remove untracked files and directories with <code>git clean -fd</code>.</td>
-            </tr>
-            <tr>
-              <td><code>runtime.git.current_head()</code></td>
-              <td>Return the current commit SHA, or <code>None</code> when HEAD does not exist yet.</td>
+              <td><code>markTestFailed</code> / <code>mark_test_failed</code></td>
+              <td><span className="api-doc-color-chip test-failed" />Light red</td>
+              <td>Testing for this requirement node failed.</td>
             </tr>
           </tbody>
         </table>
@@ -469,7 +368,101 @@ function GitPage() {
 
       <section className="api-doc-section-block">
         <h2>Example</h2>
-        <CodeBlock source={gitExample} />
+        <CodeBlock activeLanguage={language} onChangeLanguage={onLanguageChange} source={visualExamples} />
+      </section>
+    </>
+  );
+}
+
+function TraceabilityPage({
+  language,
+  onLanguageChange,
+}: {
+  language: LanguageKey;
+  onLanguageChange: (language: LanguageKey) => void;
+}) {
+  return (
+    <>
+      <section className="api-doc-section-block">
+        <h2>Interface APIs</h2>
+        <p>
+          Register each interface asset once you define it, then update its implementation state when the code path is
+          actually completed. This keeps the TRACEABILITY panel aligned with the generated project.
+        </p>
+        <table className="api-doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Signature</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>register_interface</code></td>
+              <td><code>(interface_id, req_ids, type, content, file_path=None, first_line=None, implemented=False, callers=None, callees=None)</code></td>
+              <td>Create or replace one interface asset row.</td>
+            </tr>
+            <tr>
+              <td><code>set_interface_implemented</code></td>
+              <td><code>(interface_id, implemented, message=None)</code></td>
+              <td>Switch the interface implementation status.</td>
+            </tr>
+            <tr>
+              <td><code>mark_interface_implemented</code></td>
+              <td><code>(interface_id, message=None)</code></td>
+              <td>Shortcut for marking one interface as implemented.</td>
+            </tr>
+            <tr>
+              <td><code>mark_interface_unimplemented</code></td>
+              <td><code>(interface_id, message=None)</code></td>
+              <td>Shortcut for marking one interface as not implemented.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section className="api-doc-section-block">
+        <h2>Test APIs</h2>
+        <table className="api-doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Signature</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>register_test</code></td>
+              <td><code>(test_id, req_id, type, file_path=None, first_line=None, scenario_id=None)</code></td>
+              <td>Create or replace one test asset row linked to a requirement and optionally to a scenario.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section className="api-doc-section-block">
+        <h2>Accepted Types</h2>
+        <div className="api-doc-callout-grid">
+          <article className="api-doc-callout-card">
+            <strong>Interface types</strong>
+            <p><code>UI</code>, <code>API</code>, <code>FUNC</code>, <code>DB</code></p>
+          </article>
+          <article className="api-doc-callout-card">
+            <strong>Test types</strong>
+            <p><code>Unit</code>, <code>Integration</code>, <code>E2E</code></p>
+          </article>
+          <article className="api-doc-callout-card">
+            <strong>Relationship fields</strong>
+            <p><code>req_ids</code>, <code>scenario_id</code>, <code>callers</code>, <code>callees</code></p>
+          </article>
+        </div>
+      </section>
+
+      <section className="api-doc-section-block">
+        <h2>Example</h2>
+        <CodeBlock activeLanguage={language} onChangeLanguage={onLanguageChange} source={traceabilityExamples} />
       </section>
     </>
   );
@@ -490,34 +483,37 @@ function RuntimePage() {
           <tbody>
             <tr>
               <td><code>/workspace/task/requirements.yaml</code></td>
-              <td>Structured requirement tree input for the run.</td>
+              <td>Preferred structured requirement tree input for the run.</td>
             </tr>
             <tr>
               <td><code>/workspace/artifacts/runner-events.jsonl</code></td>
-              <td>Event stream consumed by the website for requirement states, refreshes, and runtime signals.</td>
+              <td>Requirement visualization event stream.</td>
+            </tr>
+            <tr>
+              <td><code>/workspace/artifacts/runner-events.jsonl</code></td>
+              <td>Unified event stream for requirement, interface, test, and runner update signals.</td>
             </tr>
             <tr>
               <td><code>/workspace/artifacts/traceability.db</code></td>
-              <td>SQLite database used by the traceability client.</td>
-            </tr>
-            <tr>
-              <td><code>/workspace/artifacts/demo-test-statuses.json</code></td>
-              <td>Auxiliary demo status store used for test and requirement pass/fail overlays.</td>
-            </tr>
-            <tr>
-              <td><code>/workspace/template</code></td>
-              <td>Generated project directory used by the git client.</td>
+              <td>SQLite database materialized by the runner for this execution.</td>
             </tr>
           </tbody>
         </table>
       </section>
 
       <section className="api-doc-section-block">
-        <h2>Python Entry Point</h2>
+        <h2>Import Paths</h2>
         <p>
-          The recommended pattern is to create the runtime once near the start of <code>main.py</code>, then pass that
-          object through your agent workflow. This keeps all event, database, and git operations bound to the same
-          runtime paths resolved from environment variables.
+          Python can import directly from <code>arcbench_visual</code>. JavaScript and TypeScript SDK files are injected
+          into <code>/workspace/sdk/arcbench_visual.js</code> and <code>/workspace/sdk/arcbench_visual.ts</code>.
+        </p>
+      </section>
+
+      <section className="api-doc-section-block">
+        <h2>Recommended Usage</h2>
+        <p>
+          Emit requirement states only at meaningful milestones. Register interfaces and tests as soon as they become
+          concrete artifacts, then toggle interface implementation status when code is actually wired.
         </p>
       </section>
     </>
@@ -526,17 +522,18 @@ function RuntimePage() {
 
 export default function ApiDocPage() {
   const [activeSection, setActiveSection] = useState<DocSectionKey>("overview");
+  const [activeLanguage, setActiveLanguage] = useState<LanguageKey>("python");
 
   return (
     <div className="page api-doc-page">
       <div className="api-doc-shell">
         <header className="api-doc-header">
-          <div className="api-doc-kicker">Agent Runtime SDK</div>
-          <h1>Agent Runtime SDK</h1>
+          <div className="api-doc-kicker">ArcBench Runtime API</div>
+          <h1>Visualization and Traceability SDK</h1>
           <p>
-            The Agent Runtime SDK centers on <code>AgentRuntime.from_env()</code>. It exposes a unified Python
-            interface for event emission, traceability database operations, and git automation inside the execution
-            container.
+            The runtime exposes a built-in SDK for progress reporting and asset registration inside the execution
+            container. Use it to update requirement-node states on the canvas and to populate the per-run traceability
+            database with interfaces and tests.
           </p>
         </header>
 
@@ -556,9 +553,12 @@ export default function ApiDocPage() {
 
           <article className="api-doc-content">
             {activeSection === "overview" ? <OverviewPage /> : null}
-            {activeSection === "events" ? <EventsPage /> : null}
-            {activeSection === "traceability" ? <TraceabilityPage /> : null}
-            {activeSection === "git" ? <GitPage /> : null}
+            {activeSection === "visual" ? (
+              <VisualizationPage language={activeLanguage} onLanguageChange={setActiveLanguage} />
+            ) : null}
+            {activeSection === "traceability" ? (
+              <TraceabilityPage language={activeLanguage} onLanguageChange={setActiveLanguage} />
+            ) : null}
             {activeSection === "runtime" ? <RuntimePage /> : null}
           </article>
         </div>
