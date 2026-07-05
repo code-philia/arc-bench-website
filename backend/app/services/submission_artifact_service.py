@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 import re
 
 from app.models.submission import Submission
 from app.services.runtime_path_service import RuntimePathService
+from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
 
 LANGUAGE_BY_SUFFIX = {
@@ -59,6 +62,7 @@ class GitChangedFileRecord:
 class SubmissionArtifactService:
     def __init__(self) -> None:
         self.runtime_paths = RuntimePathService()
+        self.traceability_seed_builder = TraceabilitySeedBuilder()
 
     def read_node_visual_states(self, submission: Submission) -> dict[str, str]:
         snapshot = self._read_traceability_snapshot(submission)
@@ -216,7 +220,14 @@ class SubmissionArtifactService:
         if workspace_path is None:
             return None
         snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
+        db_path = workspace_path / "artifacts" / "traceability.db"
+        self._refresh_traceability_snapshot_from_db(snapshot_path, db_path)
         return snapshot_path if snapshot_path.is_file() else None
+
+    def refresh_traceability_snapshot_for_workspace(self, workspace_path: Path, *, force: bool = False) -> bool:
+        snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
+        db_path = workspace_path / "artifacts" / "traceability.db"
+        return self._refresh_traceability_snapshot_from_db(snapshot_path, db_path, force=force)
 
     def _get_project_root(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -258,6 +269,33 @@ class SubmissionArtifactService:
         except (OSError, json.JSONDecodeError):
             return None
         return payload if isinstance(payload, dict) else None
+
+    def _refresh_traceability_snapshot_from_db(
+        self,
+        snapshot_path: Path,
+        db_path: Path,
+        *,
+        force: bool = False,
+    ) -> bool:
+        if not db_path.is_file():
+            return snapshot_path.is_file()
+
+        if not force and snapshot_path.is_file():
+            try:
+                if snapshot_path.stat().st_mtime_ns >= db_path.stat().st_mtime_ns:
+                    return True
+            except OSError:
+                pass
+
+        for delay in (0.0, 0.05, 0.15, 0.3):
+            if delay > 0:
+                time.sleep(delay)
+            try:
+                self.traceability_seed_builder.write_snapshot_file_from_database(snapshot_path, db_path)
+                return True
+            except (OSError, sqlite3.Error, ValueError):
+                continue
+        return snapshot_path.is_file()
 
     def _read_diff_source(self, submission: Submission, *, file_path: str, commit_oid: str | None) -> dict[str, str | int]:
         if not commit_oid or not commit_oid.strip():

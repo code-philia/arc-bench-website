@@ -15,6 +15,7 @@ from app.services.docker_manager import DockerManager
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
+from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
 from app.services.workspace_assembler import WorkspaceAssembler
@@ -31,6 +32,7 @@ class ExecutionService:
         self.assembler = WorkspaceAssembler()
         self.result_parser = ResultParser()
         self.runtime_paths = RuntimePathService()
+        self.artifact_service = SubmissionArtifactService()
 
     def run_submission(self, submission_id: str) -> None:
         self._run_submission_internal(submission_id, reuse_workspace=False)
@@ -166,6 +168,16 @@ class ExecutionService:
                 refresh_flags["commit_history"] = True
                 refresh_flags["preview"] = True
                 HostDemoPreviewService.mark_stale(submission_id)
+            if refresh_flags["traceability_selected"] or refresh_flags["traceability_all"]:
+                snapshot_updated = self.artifact_service.refresh_traceability_snapshot_for_workspace(
+                    workspace_path,
+                    force=True,
+                )
+                if not snapshot_updated:
+                    debug_log.append(
+                        "backend",
+                        "Traceability refresh was requested, but snapshot rebuild from traceability.db did not succeed",
+                    )
             if any(refresh_flags.values()):
                 SubmissionEventStream.publish(
                     submission_id,
