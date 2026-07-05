@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
-from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
+from app.core.enums import RuntimeType, SubmissionStatus
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.submission import (
@@ -56,7 +56,6 @@ def list_submissions(
 def create_submission(
     requirement_id: str = Form(...),
     runtime: RuntimeType = Form(...),
-    agent_source: AgentSourceType = Form(default=AgentSourceType.UPLOAD),
     catalog: str = Form(default="playground"),
     display_name: str | None = Form(None),
     model_name: str | None = Form(None),
@@ -70,7 +69,6 @@ def create_submission(
             runtime,
             user_id=current_user.id,
             upload=file,
-            agent_source=agent_source,
             catalog=catalog,
             display_name=display_name,
             model_name=model_name,

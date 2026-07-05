@@ -62,7 +62,6 @@ class DockerManager:
         source_paths = [
             self.settings.runner_context_dir / "run_submission.py",
             self.settings.runner_context_dir / "Dockerfile",
-            self.settings.builtin_arc_agent_dist_dir / "arc_agent-0.1.0-py3-none-any.whl",
         ]
         if any(not path.exists() for path in source_paths):
             return False
@@ -85,7 +84,6 @@ class DockerManager:
         submission_id: str,
         workspace_path: str | Path,
         *,
-        agent_source: str = "upload",
         github_email: str | None = None,
         github_username: str | None = None,
         log_callback=None,
@@ -107,11 +105,10 @@ class DockerManager:
             "VISUAL_MODEL": self.settings.builtin_visual_model or "",
             "ARC_DEBUG": str(self.settings.builtin_debug_mode),
         }
-        if agent_source == "builtin_arc_agent":
-            if github_email and github_email.strip():
-                environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
-            if github_username and github_username.strip():
-                environment["ARC_GIT_USER_NAME"] = github_username.strip()
+        if github_email and github_email.strip():
+            environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
+        if github_username and github_username.strip():
+            environment["ARC_GIT_USER_NAME"] = github_username.strip()
         return self.client.containers.create(
             self.settings.runner_image,
             name=f"arcbench-{submission_id}",
@@ -162,9 +159,8 @@ class DockerManager:
 
     @staticmethod
     def kill_agent_process(container, *, signal_name: str = "TERM") -> tuple[int, str]:
-        # Target the user-uploaded main.py process or the built-in arc-agent CLI
-        # without touching run_submission.py itself.
-        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py|arc-agent"])
+        # Target the uploaded main.py process without touching run_submission.py itself.
+        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py"])
 
     @staticmethod
     def collect_result(workspace_path: str | Path) -> Path:

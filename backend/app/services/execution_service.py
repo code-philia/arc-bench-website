@@ -68,8 +68,7 @@ class ExecutionService:
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
-        agent_source = str(submission.agent_source or "upload").strip()
-        start_agent_description = "Running built-in arc-agent" if agent_source == "builtin_arc_agent" else "Running uploaded agent"
+        start_agent_description = "Running uploaded agent"
         stdout_path = workspace_path / "artifacts" / "stdout.log"
         stderr_path = workspace_path / "artifacts" / "stderr.log"
         result_path = workspace_path / "artifacts" / "result.json"
@@ -263,7 +262,6 @@ class ExecutionService:
             container = manager.create_container(
                 submission.id,
                 workspace_path,
-                agent_source=agent_source,
                 github_email=user.github_email,
                 github_username=user.github_username,
                 log_callback=lambda line: debug_log.append("docker-build", line),

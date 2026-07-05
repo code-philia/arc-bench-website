@@ -2,8 +2,6 @@ FROM mcr.microsoft.com/playwright/python:v1.54.0-noble
 
 WORKDIR /opt/arcbench
 
-COPY arc_agent-0.1.0-py3-none-any.whl /tmp/arc_agent-0.1.0-py3-none-any.whl
-
 RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
 
 RUN apt-get update \
@@ -11,8 +9,6 @@ RUN apt-get update \
     && curl -fsSL https://nodejs.org/dist/v20.19.3/node-v20.19.3-linux-x64.tar.xz -o /tmp/node.tar.xz \
     && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
     && rm -f /tmp/node.tar.xz \
-    && python3 -m pip install -i https://mirrors.aliyun.com/pypi/simple --no-cache-dir /tmp/arc_agent-0.1.0-py3-none-any.whl \
-    && rm -f /tmp/arc_agent-0.1.0-py3-none-any.whl \
     && node --version \
     && npm --version \
     && rm -rf /var/lib/apt/lists/*

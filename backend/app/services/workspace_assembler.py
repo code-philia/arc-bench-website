@@ -4,7 +4,6 @@ import zipfile
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.enums import AgentSourceType
 from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
@@ -36,11 +35,9 @@ class WorkspaceAssembler:
         artifacts_dir.mkdir(parents=True, exist_ok=True)
         prompt_dir.mkdir(parents=True, exist_ok=True)
 
-        agent_source = AgentSourceType(submission.agent_source)
-        if agent_source == AgentSourceType.UPLOAD:
-            with zipfile.ZipFile(submission.archive_path, "r") as archive:
-                archive.extractall(submission_dir)
-            self._flatten_single_root(submission_dir)
+        with zipfile.ZipFile(submission.archive_path, "r") as archive:
+            archive.extractall(submission_dir)
+        self._flatten_single_root(submission_dir)
         template_source_root = Path(requirement.requirements_path).resolve().parents[2] / "template"
         shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
         shutil.copytree(Path(requirement.assets_path), task_dir / "assets", dirs_exist_ok=True)
@@ -78,19 +75,6 @@ class WorkspaceAssembler:
                     "runner_events_path": "/workspace/artifacts/runner-events.jsonl",
                     "traceability_db_path": "/workspace/artifacts/traceability.db",
                     "prompt_path": "/workspace/prompt/task_prompt.txt",
-                    "builtin_agent": {
-                        "command": [
-                            "arc-agent",
-                            "/workspace/task",
-                            "--output-dir",
-                            "/workspace/template",
-                            "--app-type",
-                            "web",
-                        ],
-                        "env": {
-                            "MODEL": submission.model_name or "",
-                        },
-                    },
                     "task": {
                         "category": requirement.category,
                         "requirement_id": requirement.id,

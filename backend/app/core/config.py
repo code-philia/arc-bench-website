@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"
-    builtin_arc_agent_dist_dir: Path = ROOT_DIR / "agentic-requirement-compiler" / "dist" / "arc-agent"
     builtin_openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("OPENAI_API_KEY", "ARCBENCH_BUILTIN_OPENAI_API_KEY"),
