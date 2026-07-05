@@ -23,7 +23,7 @@
   --nav-bg: rgba(10, 14, 23, 0.85);
   --hero-badge-border: rgba(0, 212, 170, 0.2);
   --td-border: rgba(37, 46, 68, 0.5);
-  --mono: "JetBrains Mono", "Cascadia Code", monospace;
+  --mono: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
   --sans: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
   --radius-sm: 6px;
   --radius: 10px;
@@ -4248,18 +4248,18 @@ button {
 .ide-sidebar {
   min-height: 0;
   border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-elevated) 100%);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
 }
 
 .ide-sidebar-title {
-  padding: 14px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -4294,25 +4294,28 @@ button {
 .ide-file-list {
   min-height: 0;
   overflow: auto;
-  padding: 10px 8px;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
 }
 
 .ide-file-item {
   width: 100%;
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
   color: var(--text);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 0;
+  padding: 5px 10px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-align: left;
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition), color var(--transition);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .ide-file-item:hover {
@@ -4321,8 +4324,11 @@ button {
 
 .ide-file-item.active {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg));
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
   color: var(--text);
+}
+
+.ide-file-item-static {
+  cursor: default;
 }
 
 .ide-file-kind {
@@ -4354,9 +4360,36 @@ button {
 
 .ide-file-path {
   min-width: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   line-height: 1.35;
   word-break: break-all;
+  font-family: var(--mono);
+}
+
+.ide-file-status {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+
+.ide-file-status.kind-change-a {
+  color: var(--pass);
+}
+
+.ide-file-status.kind-change-m {
+  color: var(--accent);
+}
+
+.ide-file-status.kind-change-d {
+  color: var(--fail);
+}
+
+.ide-file-status.kind-change-r {
+  color: var(--warn);
 }
 
 .ide-editor {
@@ -4429,6 +4462,7 @@ button {
   color: var(--text);
   font-size: 0.84rem;
   font-weight: 600;
+  font-family: var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4451,14 +4485,23 @@ button {
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 20px 22px;
+  padding: 14px 16px;
   overflow: auto;
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 0.84rem;
-  line-height: 1.65;
+  font-size: 0.82rem;
+  line-height: 1.55;
   white-space: pre;
+}
+
+.ide-code-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  border: none;
+  resize: none;
+  outline: none;
 }
 
 .ide-code-view.is-diff {
@@ -4552,15 +4595,81 @@ button {
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 24px;
+  padding: 14px 16px;
   overflow: auto;
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 0.875rem;
-  line-height: 1.65;
+  font-size: 0.82rem;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.ide-file-list > div > button {
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 3px 10px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  color: var(--text) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.35 !important;
+  font-family: var(--mono) !important;
+}
+
+.ide-file-list > div > button:hover {
+  background: var(--bg-hover) !important;
+}
+
+.ide-file-list > div > button[style*="rgba(0, 122, 204, 0.2)"] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg)) !important;
+}
+
+.ide-file-list > div > button > span:first-child {
+  width: 12px !important;
+  min-width: 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--text-dim) !important;
+  font-size: 9px !important;
+  flex-shrink: 0;
+}
+
+.ide-file-list > div > button > span:last-child {
+  min-width: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+}
+
+.ide-file-list > div > button > span:last-child > span:first-child {
+  display: none !important;
+}
+
+.ide-file-list > div > button > span:last-child > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-file-list > div > div[style*="paddingLeft"] {
+  padding-left: 14px !important;
+}
+
+.ide-file-list > div[style*="cursor: pointer"] {
+  padding: 5px 10px !important;
+  color: var(--text) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.35 !important;
+  font-family: var(--mono) !important;
 }
 
 .preview-panel-shell {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
@@ -407,30 +407,30 @@ function WorkspaceFileTreeItem({
   const isExpanded = expandedDirs.has(file.path);
   const isSelected = selectedPath === file.path;
 
-  // 获取文件扩展名，用于显示不同的图标
+  // 鑾峰彇鏂囦欢鎵╁睍鍚嶏紝鐢ㄤ簬鏄剧ず涓嶅悓鐨勫浘鏍?
   const getFileIcon = (name: string) => {
     const ext = name.split(".").pop()?.toLowerCase() || "";
     switch (ext) {
       case "js":
       case "jsx":
-        return "🟨";
+        return "馃煥";
       case "ts":
       case "tsx":
-        return "🔷";
+        return "馃敺";
       case "json":
-        return "📋";
+        return "馃搵";
       case "css":
       case "scss":
       case "less":
-        return "🎨";
+        return "馃帹";
       case "html":
-        return "🌐";
+        return "馃寪";
       case "py":
-        return "🐍";
+        return "馃悕";
       case "md":
-        return "📝";
+        return "馃摑";
       default:
-        return "📄";
+        return "馃搫";
     }
   };
 
@@ -467,10 +467,10 @@ function WorkspaceFileTreeItem({
               fontSize: "10px",
             }}
           >
-            ▶
+            鈻?
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "14px" }}>📁</span>
+            <span style={{ fontSize: "14px" }}>馃搧</span>
             <span>{file.name}</span>
           </span>
         </button>
@@ -758,10 +758,10 @@ function SubmissionFilePanel({
                     style={{
                       display: "grid",
                       gridTemplateColumns: "56px minmax(0, 1fr)",
-                      gap: "14px",
+                      gap: "12px",
                       borderRadius: 0,
-                      padding: "0 8px",
-                      margin: "0 -8px",
+                      padding: "0 6px",
+                      margin: "0 -6px",
                     }}
                   >
                     <span style={{ color: "var(--text-muted)", userSelect: "none" }}>{lineNumber}</span>
@@ -779,7 +779,7 @@ function SubmissionFilePanel({
 
   const lines = codeLines(isEditing ? fileContent : source.content);
   const highlightedLine = formatLineNumber(source.first_line);
-  // 简化判断逻辑：只要选择了文件或者我们处于编辑状态，就认为是当前文件
+  // 绠€鍖栧垽鏂€昏緫锛氬彧瑕侀€夋嫨浜嗘枃浠舵垨鑰呮垜浠浜庣紪杈戠姸鎬侊紝灏辫涓烘槸褰撳墠鏂囦欢
   const isCurrentFileSelected = selectedFilePath !== null;
 
   return (
@@ -819,7 +819,7 @@ function SubmissionFilePanel({
                     onClick={loadWorkspaceFiles}
                     disabled={workspaceFilesLoading}
                   >
-                    🔄 Refresh
+                    Refresh
                   </button>
                   <button
                     type="button"
@@ -858,11 +858,7 @@ function SubmissionFilePanel({
               ))
             ) : (
               <div style={{ padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-primary)" }}>
-                <span style={{ width: "16px" }} />
-                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ fontSize: "14px" }}>📄</span>
-                  <span>{source.file_path}</span>
-                </span>
+                <span>{source.file_path}</span>
               </div>
             )}
           </div>
@@ -899,7 +895,7 @@ function SubmissionFilePanel({
                       setIsEditing(true);
                     }}
                   >
-                    ✏️ Edit
+                    Edit
                   </button>
                 ) : (
                   <>
@@ -908,14 +904,14 @@ function SubmissionFilePanel({
                       className="inline-link"
                       onClick={saveFile}
                     >
-                      💾 Save
+                      Save
                     </button>
                     <button
                       type="button"
                       className="inline-link"
                       onClick={cancelEdit}
                     >
-                      ❌ Cancel
+                      Cancel
                     </button>
                   </>
                 )}
@@ -927,24 +923,13 @@ function SubmissionFilePanel({
         {isEditing ? (
           <textarea
             ref={textareaRef}
-            className="ide-code-view"
+            className="ide-code-view ide-code-editor"
             value={fileContent}
             onChange={(e) => {
               setFileContent(e.target.value);
               setUnsavedChanges(true);
             }}
             spellCheck={false}
-            style={{
-              width: "100%",
-              height: "100%",
-              minHeight: "400px",
-              fontFamily: "monospace",
-              fontSize: "14px",
-              lineHeight: "1.6",
-              padding: "8px",
-              border: "none",
-              resize: "none",
-            }}
           />
         ) : (
           <pre ref={codeViewRef} className="ide-code-view">
@@ -958,11 +943,11 @@ function SubmissionFilePanel({
                     style={{
                       display: "grid",
                       gridTemplateColumns: "56px minmax(0, 1fr)",
-                      gap: "14px",
+                      gap: "12px",
                       background: isHighlighted ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
-                      borderRadius: "8px",
-                      padding: "0 8px",
-                      margin: "0 -8px",
+                      borderRadius: 0,
+                      padding: "0 6px",
+                      margin: "0 -6px",
                     }}
                   >
                     <span
@@ -1003,7 +988,7 @@ function SubmissionFilePanel({
             style={{
               background: "white",
               padding: "24px",
-              borderRadius: "8px",
+              borderRadius: 0,
               minWidth: "400px",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1166,7 +1151,7 @@ function CommitHistoryPanel({
                 commit.short_oid,
                 commit.node_id,
                 formatCommitDateTime(commit.committed_at),
-              ].filter(Boolean).join(" · ")}</span>
+              ].filter(Boolean).join(" 路 ")}</span>
             </button>
           );
         })}
@@ -2605,3 +2590,4 @@ export default function PlaygroundSubmissionDetailPage() {
     </div>
   );
 }
+
