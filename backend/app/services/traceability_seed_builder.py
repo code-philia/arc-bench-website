@@ -57,13 +57,16 @@ class TraceabilitySeedBuilder:
 
     def write_seed_file(self, output_path: Path, requirement: Requirement, requirement_yaml_path: Path | None = None) -> None:
         seed = self.build_for_requirement(requirement, requirement_yaml_path=requirement_yaml_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        self._write_json_atomic(output_path, seed)
 
     def write_seed_file_from_yaml_text(self, output_path: Path, yaml_text: str) -> None:
         seed = self.build_from_yaml_text(yaml_text)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        self._write_json_atomic(output_path, seed)
+
+    def write_snapshot_file_from_yaml_text(self, output_path: Path, yaml_text: str) -> None:
+        seed = self.build_from_yaml_text(yaml_text)
+        snapshot = self._build_snapshot_from_seed(seed)
+        self._write_json_atomic(output_path, snapshot)
 
     def write_sqlite_database_from_yaml_text(self, output_path: Path, yaml_text: str) -> None:
         seed = self.build_from_yaml_text(yaml_text)
@@ -72,11 +75,13 @@ class TraceabilitySeedBuilder:
         try:
             cursor = connection.cursor()
             ensure_traceability_schema(connection)
-            cursor.execute("DELETE FROM requirements")
+            cursor.execute("DELETE FROM node_contracts")
+            cursor.execute("DELETE FROM scenarios")
+            cursor.execute("DELETE FROM node_states")
+            cursor.execute("DELETE FROM call_edges")
             cursor.execute("DELETE FROM tests")
             cursor.execute("DELETE FROM interfaces")
-            cursor.execute("DELETE FROM call_edges")
-            cursor.execute("DELETE FROM node_states")
+            cursor.execute("DELETE FROM requirements")
             cursor.executemany(
                 """
                 INSERT OR REPLACE INTO requirements (
@@ -98,9 +103,37 @@ class TraceabilitySeedBuilder:
                     for item in seed["requirements"]
                 ],
             )
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO scenarios (
+                    scenario_id, name, req_id, steps
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        str(item.get("scenario_id", "")).strip(),
+                        str(item.get("name", "")).strip(),
+                        str(item.get("req_id", "")).strip(),
+                        json.dumps(item.get("steps", []), ensure_ascii=False),
+                    )
+                    for item in seed["scenarios"]
+                    if str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
+                ],
+            )
             connection.commit()
         finally:
             connection.close()
+
+    def write_snapshot_file_from_database(self, output_path: Path, db_path: Path) -> None:
+        connection = sqlite3.connect(db_path)
+        connection.row_factory = sqlite3.Row
+        try:
+            ensure_traceability_schema(connection)
+            snapshot = self._build_snapshot_from_connection(connection)
+        finally:
+            connection.close()
+        self._write_json_atomic(output_path, snapshot)
 
     def _build_fallback_seed(self, requirement: Requirement) -> dict[str, list[dict[str, Any]]]:
         return {
@@ -222,3 +255,175 @@ class TraceabilitySeedBuilder:
             if child_id:
                 child_ids.append(child_id)
         return child_ids
+
+    def _build_snapshot_from_seed(self, seed: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+        requirements = [dict(item) for item in seed.get("requirements", []) if isinstance(item, dict)]
+        scenarios = [
+            {
+                "scenario_id": str(item.get("scenario_id", "")).strip(),
+                "name": str(item.get("name", "")).strip(),
+                "req_id": str(item.get("req_id", "")).strip(),
+                "steps": item.get("steps") if isinstance(item.get("steps"), list) else [],
+            }
+            for item in seed.get("scenarios", [])
+            if isinstance(item, dict)
+        ]
+        return {
+            "requirements": requirements,
+            "scenarios": scenarios,
+            "interfaces": [],
+            "tests": [],
+            "call_edges": [],
+            "node_states": [],
+            "node_contracts": [],
+        }
+
+    def _build_snapshot_from_connection(self, connection: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+        requirements_rows = connection.execute("SELECT * FROM requirements ORDER BY req_id").fetchall()
+        requirements = [
+            {
+                "req_id": str(row["req_id"] or "").strip(),
+                "name": str(row["name"] or "").strip(),
+                "description": str(row["description"] or "").strip(),
+                "visual_reference": self._parse_json_list(row["visual_reference"]),
+                "scenarios": self._parse_json_list(row["scenarios"]),
+                "parent_id": self._as_optional_text(row["parent_id"]),
+                "children_ids": self._parse_json_list(row["children_ids"]),
+                "dependencies": self._parse_json_list(row["dependencies"]),
+            }
+            for row in requirements_rows
+        ]
+
+        scenarios: list[dict[str, Any]] = []
+        if self._table_exists(connection, "scenarios"):
+            scenarios = [
+                {
+                    "scenario_id": str(row["scenario_id"] or "").strip(),
+                    "name": str(row["name"] or "").strip(),
+                    "req_id": str(row["req_id"] or "").strip(),
+                    "steps": self._parse_json_list(row["steps"]),
+                }
+                for row in connection.execute("SELECT * FROM scenarios ORDER BY scenario_id").fetchall()
+            ]
+        if not scenarios:
+            for requirement in requirements:
+                req_id = str(requirement.get("req_id") or "").strip()
+                for scenario in requirement.get("scenarios", []):
+                    if not isinstance(scenario, dict):
+                        continue
+                    scenario_id = str(scenario.get("id") or scenario.get("scenario_id") or "").strip()
+                    if not scenario_id or not req_id:
+                        continue
+                    scenarios.append(
+                        {
+                            "scenario_id": scenario_id,
+                            "name": str(scenario.get("name") or "").strip(),
+                            "req_id": req_id,
+                            "steps": scenario.get("steps") if isinstance(scenario.get("steps"), list) else [],
+                        }
+                    )
+
+        interfaces = []
+        if self._table_exists(connection, "interfaces"):
+            interfaces = [
+                {
+                    "interface_id": str(row["interface_id"] or "").strip(),
+                    "req_ids": self._parse_json_list(row["req_ids"]),
+                    "type": str(row["type"] or "").strip(),
+                    "content": str(row["content"] or "").strip(),
+                    "file_path": self._as_optional_text(row["file_path"]),
+                    "first_line": self._as_optional_text(row["first_line"]),
+                    "implemented": bool(row["implemented"]),
+                    "callers": self._parse_json_list(row["callers"]),
+                    "callees": self._parse_json_list(row["callees"]),
+                }
+                for row in connection.execute("SELECT * FROM interfaces ORDER BY interface_id").fetchall()
+            ]
+
+        tests = []
+        if self._table_exists(connection, "tests"):
+            tests = [
+                {
+                    "test_id": str(row["test_id"] or "").strip(),
+                    "req_id": str(row["req_id"] or "").strip(),
+                    "interface_ids": self._parse_json_list(row["interface_ids"]),
+                    "type": str(row["type"] or "").strip(),
+                    "file_path": self._as_optional_text(row["file_path"]),
+                    "passed": self._parse_bool(row["passed"]),
+                    "first_line": self._as_optional_text(row["first_line"]),
+                }
+                for row in connection.execute("SELECT * FROM tests ORDER BY test_id").fetchall()
+            ]
+
+        call_edges = []
+        if self._table_exists(connection, "call_edges"):
+            call_edges = [dict(row) for row in connection.execute(
+                "SELECT * FROM call_edges ORDER BY source_req_id, target_req_id, from_interface_id, to_interface_id"
+            ).fetchall()]
+
+        node_states = []
+        if self._table_exists(connection, "node_states"):
+            node_states = [dict(row) for row in connection.execute("SELECT * FROM node_states ORDER BY req_id").fetchall()]
+
+        node_contracts = []
+        if self._table_exists(connection, "node_contracts"):
+            for row in connection.execute("SELECT * FROM node_contracts ORDER BY req_id").fetchall():
+                try:
+                    content = json.loads(str(row["content"] or "").strip()) if str(row["content"] or "").strip() else {}
+                except json.JSONDecodeError:
+                    content = {}
+                node_contracts.append(
+                    {
+                        "req_id": str(row["req_id"] or "").strip(),
+                        "content": content,
+                        "updated_at": self._as_optional_text(row["updated_at"]),
+                    }
+                )
+
+        return {
+            "requirements": requirements,
+            "scenarios": scenarios,
+            "interfaces": interfaces,
+            "tests": tests,
+            "call_edges": call_edges,
+            "node_states": node_states,
+            "node_contracts": node_contracts,
+        }
+
+    @staticmethod
+    def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp_path.replace(path)
+
+    @staticmethod
+    def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+        row = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
+    @staticmethod
+    def _parse_json_list(value: Any) -> list[Any]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        try:
+            parsed = json.loads(str(value))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+        return parsed if isinstance(parsed, list) else []
+
+    @staticmethod
+    def _parse_bool(value: Any) -> bool | None:
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true"}:
+            return True
+        if normalized in {"0", "false"}:
+            return False
+        return None

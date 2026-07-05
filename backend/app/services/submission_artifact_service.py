@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -62,84 +61,72 @@ class SubmissionArtifactService:
         self.runtime_paths = RuntimePathService()
 
     def read_node_visual_states(self, submission: Submission) -> dict[str, str]:
-        traceability_db_path = self._get_traceability_db_path(submission)
-        if traceability_db_path is None:
+        snapshot = self._read_traceability_snapshot(submission)
+        if snapshot is None:
             return {}
-
-        connection = self._connect_traceability_db(traceability_db_path)
-        try:
-            cursor = connection.cursor()
-            if not self._table_exists(cursor, "node_states"):
-                return {}
-            visual_states: dict[str, str] = {}
-            for row in cursor.execute("SELECT req_id, state FROM node_states ORDER BY req_id"):
-                req_id = str(row["req_id"] or "").strip()
-                visual_state = self._normalize_node_visual_state(row["state"])
-                if req_id and visual_state:
-                    visual_states[req_id] = visual_state
-            return visual_states
-        finally:
-            connection.close()
+        node_states = snapshot.get("node_states")
+        if not isinstance(node_states, list):
+            return {}
+        visual_states: dict[str, str] = {}
+        for row in node_states:
+            if not isinstance(row, dict):
+                continue
+            req_id = str(row.get("req_id") or "").strip()
+            visual_state = self._normalize_node_visual_state(row.get("state"))
+            if req_id and visual_state:
+                visual_states[req_id] = visual_state
+        return visual_states
 
     def read_traceability(self, submission: Submission, node_id: str) -> dict[str, list[dict]]:
-        traceability_db_path = self._get_traceability_db_path(submission)
-        if traceability_db_path is None:
+        snapshot = self._read_traceability_snapshot(submission)
+        if snapshot is None:
             return {"interfaces": [], "tests": []}
         test_status_by_id = self._read_demo_test_statuses(submission)
 
         interfaces: list[dict] = []
         tests: list[dict] = []
 
-        connection = self._connect_traceability_db(traceability_db_path)
-        try:
-            cursor = connection.cursor()
-            if self._table_exists(cursor, "interfaces"):
-                for row in cursor.execute("SELECT * FROM interfaces ORDER BY interface_id"):
-                    row_data = dict(row)
-                    req_ids = self._parse_json_list(row_data.get("req_ids"))
-                    if node_id and node_id != "__all__" and node_id not in req_ids:
-                        continue
-                    interfaces.append(
-                        {
-                            "interface_id": str(row_data.get("interface_id") or ""),
-                            "req_ids": req_ids,
-                            "type": str(row_data.get("type") or ""),
-                            "content": str(row_data.get("content") or ""),
-                            "file_path": str(row_data.get("file_path") or ""),
-                            "first_line": self._parse_positive_int(row_data.get("first_line")),
-                            "implemented": bool(row_data.get("implemented")),
-                            "callers": self._parse_json_list(row_data.get("callers")),
-                            "callees": self._parse_json_list(row_data.get("callees")),
-                        }
-                    )
+        for row in snapshot.get("interfaces", []):
+            if not isinstance(row, dict):
+                continue
+            req_ids = self._parse_json_list(row.get("req_ids"))
+            if node_id and node_id != "__all__" and node_id not in req_ids:
+                continue
+            interfaces.append(
+                {
+                    "interface_id": str(row.get("interface_id") or ""),
+                    "req_ids": req_ids,
+                    "type": str(row.get("type") or ""),
+                    "content": str(row.get("content") or ""),
+                    "file_path": str(row.get("file_path") or ""),
+                    "first_line": self._parse_positive_int(row.get("first_line")),
+                    "implemented": bool(row.get("implemented")),
+                    "callers": self._parse_json_list(row.get("callers")),
+                    "callees": self._parse_json_list(row.get("callees")),
+                }
+            )
 
-            if self._table_exists(cursor, "tests"):
-                if node_id and node_id != "__all__":
-                    test_cursor = cursor.execute(
-                        "SELECT * FROM tests WHERE req_id = ? ORDER BY test_id",
-                        (node_id,),
-                    )
-                else:
-                    test_cursor = cursor.execute("SELECT * FROM tests ORDER BY test_id")
-                for row in test_cursor:
-                    row_data = dict(row)
-                    test_id = str(row_data.get("test_id") or "")
-                    tests.append(
-                        {
-                            "test_id": test_id,
-                            "req_id": str(row_data.get("req_id") or ""),
-                            "scenario_id": None,
-                            "type": str(row_data.get("type") or ""),
-                            "file_path": str(row_data.get("file_path") or ""),
-                            "first_line": self._parse_positive_int(row_data.get("first_line")),
-                            "status": self._resolve_test_status(
-                                test_status_by_id.get(test_id),
-                                row_data.get("passed"),
-                            ),
-                        }
-                    )
-        finally:
-            connection.close()
+        for row in snapshot.get("tests", []):
+            if not isinstance(row, dict):
+                continue
+            req_id = str(row.get("req_id") or "")
+            if node_id and node_id != "__all__" and node_id != req_id:
+                continue
+            test_id = str(row.get("test_id") or "")
+            tests.append(
+                {
+                    "test_id": test_id,
+                    "req_id": req_id,
+                    "scenario_id": None,
+                    "type": str(row.get("type") or ""),
+                    "file_path": str(row.get("file_path") or ""),
+                    "first_line": self._parse_positive_int(row.get("first_line")),
+                    "status": self._resolve_test_status(
+                        test_status_by_id.get(test_id),
+                        row.get("passed"),
+                    ),
+                }
+            )
 
         return {"interfaces": interfaces, "tests": tests}
 
@@ -224,12 +211,12 @@ class SubmissionArtifactService:
             )
         return {"availability": "available", "commits": commits}
 
-    def _get_traceability_db_path(self, submission: Submission) -> Path | None:
+    def _get_traceability_snapshot_path(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return None
-        traceability_db_path = workspace_path / "artifacts" / "traceability.db"
-        return traceability_db_path if traceability_db_path.is_file() else None
+        snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
+        return snapshot_path if snapshot_path.is_file() else None
 
     def _get_project_root(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -262,12 +249,15 @@ class SubmissionArtifactService:
                 normalized[key] = status
         return normalized
 
-    @staticmethod
-    def _connect_traceability_db(traceability_db_path: Path) -> sqlite3.Connection:
-        connection = sqlite3.connect(traceability_db_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA query_only = ON")
-        return connection
+    def _read_traceability_snapshot(self, submission: Submission) -> dict[str, object] | None:
+        snapshot_path = self._get_traceability_snapshot_path(submission)
+        if snapshot_path is None:
+            return None
+        try:
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
 
     def _read_diff_source(self, submission: Submission, *, file_path: str, commit_oid: str | None) -> dict[str, str | int]:
         if not commit_oid or not commit_oid.strip():
@@ -492,10 +482,3 @@ class SubmissionArtifactService:
             return "test-failed"
         return "default"
 
-    @staticmethod
-    def _table_exists(cursor: sqlite3.Cursor, table_name: str) -> bool:
-        row = cursor.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
-            (table_name,),
-        ).fetchone()
-        return row is not None

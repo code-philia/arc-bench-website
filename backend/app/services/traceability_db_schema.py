@@ -36,6 +36,16 @@ def ensure_traceability_schema(connection: sqlite3.Connection) -> None:
     )
     cursor.execute(
         """
+        CREATE TABLE IF NOT EXISTS scenarios (
+            scenario_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            req_id TEXT NOT NULL,
+            steps TEXT NOT NULL
+        )
+        """
+    )
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS interfaces (
             interface_id TEXT PRIMARY KEY,
             req_ids TEXT,
@@ -80,6 +90,15 @@ def ensure_traceability_schema(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS node_states (
             req_id TEXT PRIMARY KEY,
             state TEXT,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS node_contracts (
+            req_id TEXT PRIMARY KEY,
+            content TEXT,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """

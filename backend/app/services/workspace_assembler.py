@@ -74,6 +74,7 @@ class WorkspaceAssembler:
                     "output_dir": "/workspace/template",
                     "runner_events_path": "/workspace/artifacts/runner-events.jsonl",
                     "traceability_db_path": "/workspace/artifacts/traceability.db",
+                    "traceability_snapshot_path": "/workspace/artifacts/traceability.snapshot.json",
                     "prompt_path": "/workspace/prompt/task_prompt.txt",
                     "task": {
                         "category": requirement.category,

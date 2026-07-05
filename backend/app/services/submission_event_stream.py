@@ -4,8 +4,11 @@ import json
 import queue
 import threading
 import time
+from collections import defaultdict, deque
 from dataclasses import dataclass
-from collections import defaultdict
+
+
+MAX_EVENT_HISTORY = 256
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,7 @@ class SubmissionEventStream:
     _lock = threading.Lock()
     _versions: dict[str, int] = defaultdict(int)
     _subscribers: dict[str, set[queue.Queue[SubmissionEvent | None]]] = defaultdict(set)
+    _history: dict[str, deque[SubmissionEvent]] = defaultdict(lambda: deque(maxlen=MAX_EVENT_HISTORY))
 
     @classmethod
     def publish(
@@ -81,6 +85,7 @@ class SubmissionEventStream:
                 ),
                 reason=reason,
             )
+            cls._history[submission_id].append(event)
             subscribers = list(cls._subscribers.get(submission_id, set()))
         for subscriber in subscribers:
             try:
@@ -91,7 +96,8 @@ class SubmissionEventStream:
 
     @classmethod
     def snapshot(cls, submission_id: str) -> list[SubmissionEvent]:
-        return []
+        with cls._lock:
+            return list(cls._history.get(submission_id, ()))
 
     @classmethod
     def subscribe(cls, submission_id: str) -> queue.Queue[SubmissionEvent | None]:
@@ -118,6 +124,7 @@ class SubmissionEventStream:
                 for submission_id, subscribers in cls._subscribers.items()
             }
             cls._subscribers.clear()
+            cls._history.clear()
         for subscribers in subscribers_by_submission.values():
             for subscriber in subscribers:
                 try:

@@ -320,12 +320,14 @@ class SubmissionService:
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
         traceability_db_path = workspace_path / "artifacts" / "traceability.db"
+        traceability_snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
         traceability_seed_path = workspace_path / "artifacts" / "traceability-seed.json"
         demo_test_status_path = workspace_path / "artifacts" / "demo-test-statuses.json"
         from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
         seed_builder = TraceabilitySeedBuilder()
         seed_builder.write_sqlite_database_from_yaml_text(traceability_db_path, requirements_yaml)
+        seed_builder.write_snapshot_file_from_yaml_text(traceability_snapshot_path, requirements_yaml)
         seed_builder.write_seed_file_from_yaml_text(traceability_seed_path, requirements_yaml)
         WorkspaceAssembler()._write_demo_test_status_seed(demo_test_status_path)  # noqa: SLF001
 
@@ -1025,6 +1027,7 @@ class SubmissionService:
         if template_traceability_db_path.is_file():
             shutil.copy2(template_traceability_db_path, target_traceability_db_path)
             self._normalize_traceability_database(target_traceability_db_path)
+            self._write_traceability_snapshot_from_db(workspace_path)
             return
 
         payload = self.read_submission_task_documents(submission)
@@ -1085,6 +1088,16 @@ class SubmissionService:
             ensure_traceability_schema(connection)
         finally:
             connection.close()
+
+    def _write_traceability_snapshot_from_db(self, workspace_path: Path) -> None:
+        artifacts_dir = workspace_path / "artifacts"
+        db_path = artifacts_dir / "traceability.db"
+        snapshot_path = artifacts_dir / "traceability.snapshot.json"
+        if not db_path.is_file():
+            return
+        from app.services.traceability_seed_builder import TraceabilitySeedBuilder
+
+        TraceabilitySeedBuilder().write_snapshot_file_from_database(snapshot_path, db_path)
 
     @staticmethod
     def _build_checkpoint_completed_entries(commits: list[dict]) -> list[dict[str, int | str | None]]:
@@ -1337,15 +1350,15 @@ describe('{test_id}', () => {{
         if not db_path.exists():
             return
 
-        import sqlite3
         conn = sqlite3.connect(db_path)
         try:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO tests (
-                    test_id, req_id, scenario_id, type, file_path, first_line, passed
+                    test_id, req_id, interface_ids, type, file_path, first_line, passed
                 ) VALUES (?, ?, ?, ?, ?, 1, NULL)
-            """, (test_id, req_id, scenario_id, test_type, file_path))
+            """, (test_id, req_id, "[]", test_type, file_path))
             conn.commit()
         finally:
             conn.close()
+        self._write_traceability_snapshot_from_db(artifacts_dir.parent)

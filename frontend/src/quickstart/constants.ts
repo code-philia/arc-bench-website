@@ -5,15 +5,13 @@ export const QUICK_START_TASK_TYPE = "web";
 export const QUICK_START_DISPLAY_NAME = "Quick Start Demo Agent";
 export const QUICK_START_MODEL_NAME = "ArcBench Demo Runtime";
 
-export const QUICK_START_PYTHON_SNIPPET = `from arcbench_visual import (
-    mark_design_done,
-    mark_implementation_done,
-    mark_test_passed,
-)
+export const QUICK_START_PYTHON_SNIPPET = `from arcbench_agent_runtime import AgentRuntime
 
-mark_design_done("REQ-1", "Flow design is finalized")
-mark_implementation_done("REQ-1", "Main page and form logic are implemented")
-mark_test_passed("REQ-1", "Local validation passed")
+runtime = AgentRuntime.from_env()
+
+runtime.events.mark_design_done("REQ-1", "Flow design is finalized")
+runtime.events.mark_implementation_done("REQ-1", "Main page and form logic are implemented")
+runtime.events.mark_test_passed("REQ-1", "Local validation passed")
 `;
 
 export const QUICK_START_STEPS: QuickStartStep[] = [

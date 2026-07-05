@@ -15,6 +15,7 @@ const overviewDiagram = String.raw`Agent code
     v
 arcbench_agent_runtime
     |-- write traceability.db
+    |-- atomically refresh traceability.snapshot.json
     |-- append runner-events.jsonl
     v
 ArcBench backend file watcher
@@ -110,8 +111,9 @@ function OverviewPage() {
         <h2>Execution Flow</h2>
         <p>
           Your agent should call the built-in <code>arcbench_agent_runtime</code> package. The SDK owns the fixed event
-          protocol, writes <code>runner-events.jsonl</code>, updates <code>traceability.db</code>, and lets the backend
-          drive frontend refreshes.
+          protocol, writes <code>runner-events.jsonl</code>, updates the live <code>traceability.db</code>, refreshes
+          <code> traceability.snapshot.json </code>, and lets the backend drive frontend refreshes from the snapshot
+          instead of reading the live database.
         </p>
         <CodeBlock source={overviewDiagram} />
       </section>
@@ -250,8 +252,10 @@ function TraceabilityPage() {
       <section className="api-doc-section-block">
         <h2>Automatic Refresh</h2>
         <p>
-          These APIs both modify <code>traceability.db</code> and append the corresponding fixed-format events into
-          <code>runner-events.jsonl</code>. The frontend then reloads the affected traceability views automatically.
+          These APIs update <code>traceability.db</code>, atomically refresh <code>traceability.snapshot.json</code>,
+          and append the corresponding fixed-format events into <code>runner-events.jsonl</code>. The backend watches
+          new event lines, reloads data from the snapshot, and the frontend refreshes the affected traceability views
+          automatically.
         </p>
       </section>
 

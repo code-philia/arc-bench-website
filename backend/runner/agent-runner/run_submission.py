@@ -27,6 +27,7 @@ STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
 TRACEABILITY_DB_PATH = ARTIFACTS_DIR / "traceability.db"
+TRACEABILITY_SNAPSHOT_PATH = ARTIFACTS_DIR / "traceability.snapshot.json"
 TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
 PAUSE_REQUEST_PATH = ARTIFACTS_DIR / "pause.request.json"
 RESUME_REQUEST_PATH = ARTIFACTS_DIR / "resume.request.json"
@@ -72,9 +73,134 @@ def append_runner_state(state: str, message: str) -> None:
         output.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
 
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _parse_json_list(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _parse_bool(value) -> bool | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true"}:
+        return True
+    if normalized in {"0", "false"}:
+        return False
+    return None
+
+
+def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def write_traceability_snapshot(connection: sqlite3.Connection) -> None:
+    payload = {
+        "requirements": [],
+        "scenarios": [],
+        "interfaces": [],
+        "tests": [],
+        "call_edges": [],
+        "node_states": [],
+        "node_contracts": [],
+    }
+    if _table_exists(connection, "requirements"):
+        payload["requirements"] = [
+            {
+                "req_id": str(row["req_id"] or "").strip(),
+                "name": str(row["name"] or "").strip(),
+                "description": str(row["description"] or "").strip(),
+                "visual_reference": _parse_json_list(row["visual_reference"]),
+                "scenarios": _parse_json_list(row["scenarios"]),
+                "parent_id": str(row["parent_id"] or "").strip() or None,
+                "children_ids": _parse_json_list(row["children_ids"]),
+                "dependencies": _parse_json_list(row["dependencies"]),
+            }
+            for row in connection.execute("SELECT * FROM requirements ORDER BY req_id").fetchall()
+        ]
+    if _table_exists(connection, "scenarios"):
+        payload["scenarios"] = [
+            {
+                "scenario_id": str(row["scenario_id"] or "").strip(),
+                "name": str(row["name"] or "").strip(),
+                "req_id": str(row["req_id"] or "").strip(),
+                "steps": _parse_json_list(row["steps"]),
+            }
+            for row in connection.execute("SELECT * FROM scenarios ORDER BY scenario_id").fetchall()
+        ]
+    if _table_exists(connection, "interfaces"):
+        payload["interfaces"] = [
+            {
+                "interface_id": str(row["interface_id"] or "").strip(),
+                "req_ids": _parse_json_list(row["req_ids"]),
+                "type": str(row["type"] or "").strip(),
+                "content": str(row["content"] or "").strip(),
+                "file_path": str(row["file_path"] or "").strip() or None,
+                "first_line": str(row["first_line"] or "").strip() or None,
+                "implemented": bool(row["implemented"]),
+                "callers": _parse_json_list(row["callers"]),
+                "callees": _parse_json_list(row["callees"]),
+            }
+            for row in connection.execute("SELECT * FROM interfaces ORDER BY interface_id").fetchall()
+        ]
+    if _table_exists(connection, "tests"):
+        payload["tests"] = [
+            {
+                "test_id": str(row["test_id"] or "").strip(),
+                "req_id": str(row["req_id"] or "").strip(),
+                "interface_ids": _parse_json_list(row["interface_ids"]),
+                "type": str(row["type"] or "").strip(),
+                "file_path": str(row["file_path"] or "").strip() or None,
+                "passed": _parse_bool(row["passed"]),
+                "first_line": str(row["first_line"] or "").strip() or None,
+            }
+            for row in connection.execute("SELECT * FROM tests ORDER BY test_id").fetchall()
+        ]
+    if _table_exists(connection, "call_edges"):
+        payload["call_edges"] = [dict(row) for row in connection.execute(
+            "SELECT * FROM call_edges ORDER BY source_req_id, target_req_id, from_interface_id, to_interface_id"
+        ).fetchall()]
+    if _table_exists(connection, "node_states"):
+        payload["node_states"] = [dict(row) for row in connection.execute("SELECT * FROM node_states ORDER BY req_id").fetchall()]
+    if _table_exists(connection, "node_contracts"):
+        payload["node_contracts"] = []
+        for row in connection.execute("SELECT * FROM node_contracts ORDER BY req_id").fetchall():
+            content_text = str(row["content"] or "").strip()
+            try:
+                content = json.loads(content_text) if content_text else {}
+            except json.JSONDecodeError:
+                content = {}
+            payload["node_contracts"].append(
+                {
+                    "req_id": str(row["req_id"] or "").strip(),
+                    "content": content,
+                    "updated_at": str(row["updated_at"] or "").strip() or None,
+                }
+            )
+    _write_json_atomic(TRACEABILITY_SNAPSHOT_PATH, payload)
+
+
 def reset_traceability_storage() -> None:
     for path in (
         TRACEABILITY_DB_PATH,
+        TRACEABILITY_SNAPSHOT_PATH,
         TRACEABILITY_DB_PATH.with_suffix(".db-wal"),
         TRACEABILITY_DB_PATH.with_suffix(".db-shm"),
         ARTIFACTS_DIR / "traceability.db-wal",
@@ -91,6 +217,7 @@ def initialize_traceability_db() -> None:
     reset_traceability_storage()
     append_debug_log(f"Initializing traceability database at {TRACEABILITY_DB_PATH}")
     connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    connection.row_factory = sqlite3.Row
     try:
         cursor = connection.cursor()
         cursor.execute(
@@ -104,6 +231,16 @@ def initialize_traceability_db() -> None:
                 parent_id TEXT,
                 children_ids TEXT,
                 dependencies TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scenarios (
+                scenario_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                req_id TEXT NOT NULL,
+                steps TEXT NOT NULL
             )
             """
         )
@@ -157,7 +294,17 @@ def initialize_traceability_db() -> None:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS node_contracts (
+                req_id TEXT PRIMARY KEY,
+                content TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         connection.commit()
+        write_traceability_snapshot(connection)
     finally:
         connection.close()
 
@@ -174,6 +321,7 @@ def seed_traceability_requirements() -> tuple[int, int]:
         raise RuntimeError("traceability-seed.json must contain requirements and scenarios arrays")
 
     connection = sqlite3.connect(TRACEABILITY_DB_PATH)
+    connection.row_factory = sqlite3.Row
     try:
         cursor = connection.cursor()
         cursor.executemany(
@@ -198,7 +346,26 @@ def seed_traceability_requirements() -> tuple[int, int]:
                 if str(item.get("req_id", "")).strip()
             ],
         )
+        cursor.executemany(
+            """
+            INSERT OR REPLACE INTO scenarios (
+                scenario_id, name, req_id, steps
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(item.get("scenario_id", "")).strip(),
+                    str(item.get("name", "")).strip(),
+                    str(item.get("req_id", "")).strip(),
+                    json.dumps(item.get("steps", []), ensure_ascii=False),
+                )
+                for item in scenarios
+                if str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
+            ],
+        )
         connection.commit()
+        write_traceability_snapshot(connection)
     finally:
         connection.close()
 
@@ -325,6 +492,7 @@ def build_agent_environment() -> dict[str, str]:
         "ARCBENCH_ARTIFACTS_DIR": str(ARTIFACTS_DIR),
         "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
         "ARCBENCH_TRACEABILITY_DB_PATH": str(TRACEABILITY_DB_PATH),
+        "ARCBENCH_TRACEABILITY_SNAPSHOT_PATH": str(TRACEABILITY_SNAPSHOT_PATH),
         "ARCBENCH_TRACEABILITY_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
         "ARCBENCH_CHECKPOINT_PATH": str(CHECKPOINT_PATH),

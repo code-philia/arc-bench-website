@@ -1243,6 +1243,8 @@ export default function PlaygroundSubmissionDetailPage() {
   });
   const eventSourceRef = useRef<EventSource | null>(null);
   const sseReconnectRef = useRef<number | null>(null);
+  const activeSelectedNodeIdRef = useRef<string | null>("ROOT");
+  const traceabilityOverlayVisibleRef = useRef(false);
   const visualEventCountRef = useRef(0);
   const isSidebarDragging = useRef(false);
   const sidebarDragStartX = useRef(0);
@@ -1310,6 +1312,14 @@ export default function PlaygroundSubmissionDetailPage() {
     : "Select an interface or test to inspect source.";
   const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
   const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;
+
+  useEffect(() => {
+    activeSelectedNodeIdRef.current = activeSelectedNodeId;
+  }, [activeSelectedNodeId]);
+
+  useEffect(() => {
+    traceabilityOverlayVisibleRef.current = traceabilityOverlayVisible;
+  }, [traceabilityOverlayVisible]);
 
   const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
     available: false,
@@ -1542,6 +1552,16 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
 
+    const refreshTraceabilityForLiveView = () => {
+      if (traceabilityOverlayVisibleRef.current) {
+        void refreshAllTraceability().catch(() => undefined);
+        return;
+      }
+      if (activeSelectedNodeIdRef.current) {
+        void refreshSelectedTraceability(activeSelectedNodeIdRef.current, false).catch(() => undefined);
+      }
+    };
+
     const handleSseEvent = (event: SubmissionSseEvent) => {
       if (event.refresh.submission) {
         void refreshSubmissionDetail().catch(() => undefined);
@@ -1556,7 +1576,7 @@ export default function PlaygroundSubmissionDetailPage() {
         void loadPreviewStatus(true);
       }
       if (event.refresh.traceability_all || event.refresh.traceability_selected) {
-        refreshTraceabilityForCurrentView();
+        refreshTraceabilityForLiveView();
       }
     };
 
@@ -1586,7 +1606,7 @@ export default function PlaygroundSubmissionDetailPage() {
         sseReconnectRef.current = null;
       }
     };
-  }, [activeSelectedNodeId, submissionId, traceabilityOverlayVisible, user]);
+  }, [submissionId, user]);
 
   const catalogTree = useMemo(() => resolveRequirementCatalogTree(requirement), [requirement]);
 
