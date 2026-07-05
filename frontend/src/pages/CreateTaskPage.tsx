@@ -345,6 +345,7 @@ export default function CreateTaskPage() {
               onDeleteNode={handleDeleteNode}
               onReindexIds={handleReindexIds}
               onConnectDependency={handleConnectDependency}
+              taskAssets={draftTaskAssets}
               autoFitOnTreeChange={false}
               renderDetailContent={(node) => (
                 <RequirementNodeDetailContent

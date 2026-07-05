@@ -41,10 +41,12 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 
+import { getFirstDescriptionImage } from "../../lib/descriptionMedia";
 import { findNodeById, type RequirementNode } from "../../lib/taskTree";
 
 import type {
   RequirementVisualState,
+  SubmissionTaskAssets,
   SubmissionTraceabilityInterface,
   SubmissionTraceabilityPayload,
   SubmissionTraceabilityTest,
@@ -63,6 +65,7 @@ type FlowNodeData = {
   traceabilityId?: string;
   filePath?: string;
   firstLine?: number | null;
+  thumbnailSrc?: string | null;
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
   type?: RequirementNode["type"];
   itemType?: string;
@@ -100,6 +103,7 @@ type RequirementTreeCanvasProps = {
   onReindexIds?: () => void;
   onConnectDependency?: (sourceId: string, targetId: string) => void;
   renderDetailContent?: (node: RequirementNode) => React.ReactNode;
+  taskAssets?: SubmissionTaskAssets | null;
   nodeStates?: Record<string, RequirementVisualState>;
   focusNodeId?: string | null;
   pulseNodeId?: string | null;
@@ -123,10 +127,10 @@ type RequirementTreeCanvasProps = {
   }) => void;
 };
 
-const NODE_WIDTH = 228;
-const NODE_HEIGHT = 88;
-const HORIZONTAL_GAP = 96;
-const VERTICAL_GAP = 58;
+const NODE_WIDTH = 244;
+const NODE_HEIGHT = 112;
+const HORIZONTAL_GAP = 68;
+const VERTICAL_GAP = 45;
 const TRACEABILITY_NODE_WIDTH = 188;
 const TRACEABILITY_COLUMN_GAP = 56;
 const TRACEABILITY_ROW_GAP = 20;
@@ -281,6 +285,7 @@ function buildFlowFromTree(
   showInterfaces: boolean,
   showTests: boolean,
   allTraceability: TraceabilityCanvasPayload | null,
+  taskAssets: SubmissionTaskAssets | null,
   onMeasuredHeightChange?: (nodeId: string, height: number) => void,
 ): FlowGraph {
   const root = hierarchy(tree, (node) => node.children);
@@ -349,6 +354,7 @@ function buildFlowFromTree(
         kind: "requirement",
         label: node.id,
         title: node.name,
+        thumbnailSrc: getFirstDescriptionImage(node.description, taskAssets),
         type: node.type,
         selected: requirementSelected,
         visualState: nodeStates[node.id] ?? "default",
@@ -424,12 +430,19 @@ function buildFlowFromTree(
         return ranges.some(([rStart, rEnd]) => start < rEnd + padding && end + padding > rStart);
       };
       if (collides(bestStart)) {
-        const candidates: number[] = [];
+        const candidates = new Set<number>([bestStart, minStart]);
         for (const [rStart, rEnd] of ranges) {
-          candidates.push(rEnd + padding);
+          candidates.add(rEnd + padding);
+          candidates.add(Math.max(minStart, rStart - padding - blockHeight));
         }
-        candidates.sort((a, b) => Math.abs(a - desiredStartY) - Math.abs(b - desiredStartY));
-        for (const c of candidates) {
+        const sortedCandidates = [...candidates].sort((a, b) => {
+          const distanceDelta = Math.abs(a - desiredStartY) - Math.abs(b - desiredStartY);
+          if (distanceDelta !== 0) {
+            return distanceDelta;
+          }
+          return a - b;
+        });
+        for (const c of sortedCandidates) {
           if (c >= minStart && !collides(c)) { bestStart = c; break; }
         }
         if (collides(bestStart)) {
@@ -438,6 +451,7 @@ function buildFlowFromTree(
         }
       }
       ranges.push([bestStart, bestStart + blockHeight]);
+      ranges.sort((a, b) => a[0] - b[0]);
       return bestStart;
     };
     for (const anchorNodeId of anchorNodeIds) {
@@ -865,8 +879,17 @@ function RequirementFlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
         className="task-flow-handle traceability-source"
         isConnectable={false}
       />
-      <strong>{data.label}</strong>
-      <span>{data.title}</span>
+      <div className="task-flow-requirement-body">
+        <div className="task-flow-requirement-copy">
+          <span className="task-flow-requirement-id">{data.label}</span>
+          <strong>{data.title}</strong>
+        </div>
+        {data.thumbnailSrc ? (
+          <div className="task-flow-requirement-thumbnail" aria-hidden="true">
+            <img key={data.thumbnailSrc} src={data.thumbnailSrc} alt="" loading="eager" decoding="sync" />
+          </div>
+        ) : null}
+      </div>
       {data.dependencySourcesVisible ? <span className="task-flow-handle-visual dependency-source" aria-hidden="true" /> : null}
       <Handle
         id="dependency-source"
@@ -922,6 +945,7 @@ function TreeCanvasInner({
   onReindexIds,
   onConnectDependency,
   renderDetailContent,
+  taskAssets = null,
   nodeStates = {},
   focusNodeId = null,
   pulseNodeId = null,
@@ -944,6 +968,8 @@ function TreeCanvasInner({
   const previewArrowPathRef = useRef<SVGPathElement | null>(null);
   const previewSourcePointRef = useRef<{ x: number; y: number } | null>(null);
 
+  const [detailWidth, setDetailWidth] = useState(392);
+  const [isResizingDetail, setIsResizingDetail] = useState(false);
   const [measuredTraceabilityHeights, setMeasuredTraceabilityHeights] = useState<Record<string, number>>({});
   const [dependencyConnectionActive, setDependencyConnectionActive] = useState(false);
   const [clickConnectionSourceId, setClickConnectionSourceId] = useState<string | null>(null);
@@ -962,6 +988,34 @@ function TreeCanvasInner({
       return { ...current, [nodeId]: normalizedHeight };
     });
   }, []);
+
+  useEffect(() => {
+    if (!isResizingDetail) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const viewportWidth = window.innerWidth;
+      const maxWidth = Math.max(320, Math.round(viewportWidth * 0.48));
+      const nextWidth = Math.max(320, Math.min(maxWidth, viewportWidth - event.clientX));
+      setDetailWidth(nextWidth);
+      if (!detailExpanded) {
+        onDetailExpandedChange(true);
+      }
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingDetail(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [detailExpanded, isResizingDetail, onDetailExpandedChange]);
 
   useEffect(() => {
     if (!traceabilityNodes || !selectedNodeId) {
@@ -1011,6 +1065,7 @@ function TreeCanvasInner({
       showInterfaces,
       showTests,
       allTraceability ?? null,
+      taskAssets,
       handleMeasuredTraceabilityHeightChange,
     ),
     [
@@ -1029,6 +1084,7 @@ function TreeCanvasInner({
       showInterfaces,
       showTests,
       allTraceability,
+      taskAssets,
     ],
   );
 
@@ -1081,6 +1137,7 @@ function TreeCanvasInner({
             currentData?.kind === incomingData?.kind &&
             currentData?.label === incomingData?.label &&
             currentData?.title === incomingData?.title &&
+            currentData?.thumbnailSrc === incomingData?.thumbnailSrc &&
             currentData?.type === incomingData?.type &&
             currentData?.selected === incomingData?.selected &&
             currentData?.traceabilityId === incomingData?.traceabilityId &&
@@ -1426,10 +1483,28 @@ function TreeCanvasInner({
           </ReactFlow>
         </div>
       </div>
+      {selectedNode && detailPlacement === "right" && detailExpanded ? (
+        <div
+          className="create-task-detail-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize detail panel"
+          onPointerDown={(event) => {
+            if (window.innerWidth <= 820) {
+              return;
+            }
+            event.preventDefault();
+            setIsResizingDetail(true);
+          }}
+        >
+          <span className="create-task-detail-resizer-handle" />
+        </div>
+      ) : null}
       {selectedNode ? (
         <div
           data-quickstart-id={detailTestId}
           className={`create-task-detail-drawer detail-placement-${detailPlacement} ${detailExpanded ? "expanded" : "collapsed"}`}
+          style={detailPlacement === "right" && detailExpanded ? { width: `${detailWidth}px` } : undefined}
         >
           <div className="create-task-detail-top">
             <div>

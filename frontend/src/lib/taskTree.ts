@@ -71,6 +71,46 @@ function parseScalar(raw: string): unknown {
   return value;
 }
 
+function isBlockScalarIndicator(value: string): boolean {
+  return /^[>|][+-]?$/.test(value.trim());
+}
+
+function collectBlockScalar(
+  tokens: LineToken[],
+  startIndex: number,
+  parentIndent: number,
+  indicator: string,
+): [string, number] {
+  const lines: string[] = [];
+  let index = startIndex;
+
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token.indent <= parentIndent) {
+      break;
+    }
+    lines.push(token.text);
+    index += 1;
+  }
+
+  const normalizedIndicator = indicator.trim();
+  const isFolded = normalizedIndicator.startsWith(">");
+  const chompStrip = normalizedIndicator.endsWith("-");
+
+  let content = "";
+  if (isFolded) {
+    content = lines.join(" ").replace(/\s+/g, " ").trim();
+  } else {
+    content = lines.join("\n");
+  }
+
+  if (!chompStrip && content) {
+    content += "\n";
+  }
+
+  return [content, index];
+}
+
 function tokenizeYaml(input: string): LineToken[] {
   return input
     .replace(/\r\n/g, "\n")
@@ -135,6 +175,13 @@ function parseObject(tokens: LineToken[], startIndex: number, indent: number): [
       continue;
     }
 
+    if (isBlockScalarIndicator(rawValue)) {
+      const [blockValue, nextIndex] = collectBlockScalar(tokens, index + 1, indent, rawValue);
+      result[key] = blockValue;
+      index = nextIndex;
+      continue;
+    }
+
     result[key] = parseScalar(rawValue);
     index += 1;
   }
@@ -173,8 +220,14 @@ function parseArray(tokens: LineToken[], startIndex: number, indent: number): [u
       const key = rest.slice(0, separator).trim();
       const rawValue = rest.slice(separator + 1).trim();
       const item: UnknownRecord = {};
-      item[key] = rawValue ? parseScalar(rawValue) : "";
-      index += 1;
+      if (rawValue && isBlockScalarIndicator(rawValue)) {
+        const [blockValue, nextIndex] = collectBlockScalar(tokens, index + 1, indent, rawValue);
+        item[key] = blockValue;
+        index = nextIndex;
+      } else {
+        item[key] = rawValue ? parseScalar(rawValue) : "";
+        index += 1;
+      }
 
       while (index < tokens.length) {
         const next = tokens[index];

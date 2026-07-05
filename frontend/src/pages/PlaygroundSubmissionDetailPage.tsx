@@ -2309,6 +2309,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     : (useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId)}
                   showLegend
                   detailTestId="quickstart-submission-node-detail"
+                  taskAssets={submissionTaskAssets}
                   autoFitOnTreeChange={false}
                   traceabilityNodes={visibleTraceability}
                   allTraceability={allTraceability}
