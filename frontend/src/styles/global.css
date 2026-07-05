@@ -4508,6 +4508,35 @@ button {
   color: var(--text);
 }
 
+.code-token.comment {
+  color: #6b7280;
+}
+
+.code-token.string {
+  color: #d97706;
+}
+
+.code-token.keyword {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.code-token.type {
+  color: #0f766e;
+}
+
+.code-token.number {
+  color: #9333ea;
+}
+
+.code-token.operator {
+  color: #475569;
+}
+
+.code-token.annotation {
+  color: #c2410c;
+}
+
 .ide-loading-overlay {
   position: absolute;
   inset: 52px 0 0 0;

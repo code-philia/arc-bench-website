@@ -70,6 +70,93 @@ function codeLines(content: string) {
   return content.replace(/\r\n/g, "\n").split("\n");
 }
 
+type CodeGrammar = "nodejs" | "java";
+type CodeTokenKind = "plain" | "comment" | "string" | "keyword" | "type" | "number" | "operator" | "annotation";
+type CodeToken = {
+  value: string;
+  kind: CodeTokenKind;
+};
+
+const NODEJS_HIGHLIGHT_PATTERN =
+  /(\/\/.*$|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:import|from|export|default|const|let|var|function|return|if|else|for|while|switch|case|break|continue|try|catch|finally|throw|async|await|new|class|extends|super|typeof|instanceof|in|of|null|undefined|true|false)\b|\b(?:process|require|module|exports|console|Promise|Array|Object|String|Number|Boolean|Map|Set|Date|RegExp|Error)\b|\b\d+(?:\.\d+)?\b|[{}()[\].,;:+\-*/%=&|!<>?]+)/g;
+const JAVA_HIGHLIGHT_PATTERN =
+  /(\/\/.*$|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|@\w+|\b(?:package|import|public|private|protected|static|final|class|interface|enum|extends|implements|void|new|return|if|else|for|while|switch|case|break|continue|try|catch|finally|throw|throws|this|super|null|true|false)\b|\b(?:String|Integer|Long|Double|Float|Boolean|List|ArrayList|Map|HashMap|Set|HashSet|Optional|Exception|RuntimeException|Activity|Fragment|Bundle|Intent|View|TextView|RecyclerView)\b|\b\d+(?:\.\d+)?\b|[{}()[\].,;:+\-*/%=&|!<>?]+)/g;
+
+function resolveCodeGrammar(taskType: "web" | "mobile" | "kernel" | "mixed"): CodeGrammar | null {
+  if (taskType === "web") {
+    return "nodejs";
+  }
+  if (taskType === "mobile") {
+    return "java";
+  }
+  return null;
+}
+
+function classifyCodeToken(token: string, grammar: CodeGrammar): CodeTokenKind {
+  if (!token) {
+    return "plain";
+  }
+  if (token.startsWith("//") || token.startsWith("/*")) {
+    return "comment";
+  }
+  if (token.startsWith("\"") || token.startsWith("'") || token.startsWith("`")) {
+    return "string";
+  }
+  if (grammar === "java" && token.startsWith("@")) {
+    return "annotation";
+  }
+  if (/^\d+(?:\.\d+)?$/.test(token)) {
+    return "number";
+  }
+  if (/^[{}()[\].,;:+\-*/%=&|!<>?]+$/.test(token)) {
+    return "operator";
+  }
+
+  if (grammar === "nodejs") {
+    if (/^(import|from|export|default|const|let|var|function|return|if|else|for|while|switch|case|break|continue|try|catch|finally|throw|async|await|new|class|extends|super|typeof|instanceof|in|of|null|undefined|true|false)$/.test(token)) {
+      return "keyword";
+    }
+    if (/^(process|require|module|exports|console|Promise|Array|Object|String|Number|Boolean|Map|Set|Date|RegExp|Error)$/.test(token)) {
+      return "type";
+    }
+    return "plain";
+  }
+
+  if (/^(package|import|public|private|protected|static|final|class|interface|enum|extends|implements|void|new|return|if|else|for|while|switch|case|break|continue|try|catch|finally|throw|throws|this|super|null|true|false)$/.test(token)) {
+    return "keyword";
+  }
+  if (/^(String|Integer|Long|Double|Float|Boolean|List|ArrayList|Map|HashMap|Set|HashSet|Optional|Exception|RuntimeException|Activity|Fragment|Bundle|Intent|View|TextView|RecyclerView)$/.test(token)) {
+    return "type";
+  }
+  return "plain";
+}
+
+function tokenizeCodeLine(line: string, grammar: CodeGrammar | null): CodeToken[] {
+  if (!grammar || !line) {
+    return [{ value: line, kind: "plain" }];
+  }
+  const pattern = grammar === "nodejs" ? NODEJS_HIGHLIGHT_PATTERN : JAVA_HIGHLIGHT_PATTERN;
+  pattern.lastIndex = 0;
+  const tokens: CodeToken[] = [];
+  let cursor = 0;
+
+  for (const match of line.matchAll(pattern)) {
+    const matchValue = match[0] ?? "";
+    const matchIndex = match.index ?? 0;
+    if (matchIndex > cursor) {
+      tokens.push({ value: line.slice(cursor, matchIndex), kind: "plain" });
+    }
+    tokens.push({ value: matchValue, kind: classifyCodeToken(matchValue, grammar) });
+    cursor = matchIndex + matchValue.length;
+  }
+
+  if (cursor < line.length) {
+    tokens.push({ value: line.slice(cursor), kind: "plain" });
+  }
+
+  return tokens.length > 0 ? tokens : [{ value: line, kind: "plain" }];
+}
+
 function formatCommitDateTime(value: string) {
   return new Date(value).toLocaleString();
 }
@@ -531,6 +618,7 @@ function SubmissionFilePanel({
   emptyMessage,
   submissionId,
   submission,
+  taskType,
   setSource,
   setFileViewMode,
   refreshCommitHistory,
@@ -547,6 +635,7 @@ function SubmissionFilePanel({
   emptyMessage: string;
   submissionId: string;
   submission: SubmissionDetail | null;
+  taskType: "web" | "mobile" | "kernel" | "mixed";
   setSource: (source: SubmissionSourcePayload | null) => void;
   setFileViewMode: (mode: "traceability" | "diff" | null) => void;
   refreshCommitHistory: (silent?: boolean) => Promise<SubmissionCommitHistoryPayload>;
@@ -569,6 +658,7 @@ function SubmissionFilePanel({
   const [selectedNodeIdForTest, setSelectedNodeIdForTest] = useState<string | null>(null);
   const showInlineLoading = loading && Boolean(source);
   const isPaused = submission?.status === "PAUSED";
+  const codeGrammar = resolveCodeGrammar(taskType);
 
   const loadWorkspaceFiles = async () => {
     if (!submissionId || !isPaused) {
@@ -779,8 +869,10 @@ function SubmissionFilePanel({
 
   const lines = codeLines(isEditing ? fileContent : source.content);
   const highlightedLine = formatLineNumber(source.first_line);
-  // 绠€鍖栧垽鏂€昏緫锛氬彧瑕侀€夋嫨浜嗘枃浠舵垨鑰呮垜浠浜庣紪杈戠姸鎬侊紝灏辫涓烘槸褰撳墠鏂囦欢
-  const isCurrentFileSelected = selectedFilePath !== null;
+  const highlightedTokens = useMemo(
+    () => lines.map((line) => tokenizeCodeLine(line, codeGrammar)),
+    [codeGrammar, lines],
+  );
 
   return (
     <div className={`ide-shell ${workspaceCollapsed ? "workspace-collapsed" : ""}`}>
@@ -937,6 +1029,7 @@ function SubmissionFilePanel({
               {lines.map((line, index) => {
                 const lineNumber = index + 1;
                 const isHighlighted = lineNumber === highlightedLine;
+                const tokens = highlightedTokens[index] ?? [{ value: line, kind: "plain" as const }];
                 return (
                   <div
                     key={`${lineNumber}:${line}`}
@@ -958,7 +1051,16 @@ function SubmissionFilePanel({
                     >
                       {lineNumber}
                     </span>
-                    <span>{line || " "}</span>
+                    <span>
+                      {tokens.length === 0 ? " " : tokens.map((token, tokenIndex) => (
+                        <span
+                          key={`${lineNumber}:${tokenIndex}:${token.value}`}
+                          className={token.kind === "plain" ? undefined : `code-token ${token.kind}`}
+                        >
+                          {token.value}
+                        </span>
+                      ))}
+                    </span>
                   </div>
                 );
               })}
@@ -2386,6 +2488,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 emptyMessage={filePanelEmptyMessage}
                 submissionId={submissionId}
                 submission={submission}
+                taskType={taskType}
                 setSource={setSource}
                 setFileViewMode={setFileViewMode}
                 refreshCommitHistory={refreshCommitHistory}
