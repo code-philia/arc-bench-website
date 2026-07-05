@@ -279,11 +279,7 @@ class TraceabilityStore:
                     ),
                 )
             connection.commit()
-        self.events.emit_refresh_signal(
-            reason="requirements_updated",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("requirements_updated")
 
     def update_requirement_fields(self, req_id: str, **fields: Any) -> None:
         current = self.get_requirement(req_id)
@@ -311,11 +307,7 @@ class TraceabilityStore:
             connection.commit()
         self.events.clear_demo_test_statuses(test_ids)
         self.events.set_demo_requirement_status(req_id, None)
-        self.events.emit_refresh_signal(
-            reason="requirement_deleted",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("requirement_deleted")
 
     def get_scenario(self, scenario_id: str) -> dict[str, Any] | None:
         with self.connection() as connection:
@@ -384,11 +376,7 @@ class TraceabilityStore:
                     (_json_list(updated), normalized_req_id),
                 )
             connection.commit()
-        self.events.emit_refresh_signal(
-            reason="scenarios_updated",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("scenarios_updated")
 
     def delete_scenario(self, scenario_id: str) -> None:
         scenario = self.get_scenario(scenario_id)
@@ -411,11 +399,7 @@ class TraceabilityStore:
                     (_json_list(scenarios), scenario["req_id"]),
                 )
             connection.commit()
-        self.events.emit_refresh_signal(
-            reason="scenario_deleted",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("scenario_deleted")
 
     def get_interface(self, interface_id: str) -> dict[str, Any] | None:
         with self.connection() as connection:
@@ -493,7 +477,7 @@ class TraceabilityStore:
             )
             connection.commit()
         if emit_event:
-            self.events.emit_traceability_event(payload)
+            self.events._emit_traceability_event(payload)
 
     def update_interface_fields(self, interface_id: str, **fields: Any) -> None:
         current = self.get_interface(interface_id)
@@ -519,7 +503,7 @@ class TraceabilityStore:
                 (1 if implemented else 0, interface_id),
             )
             connection.commit()
-        self.events.emit_traceability_event(
+        self.events._emit_traceability_event(
             {
                 "type": "interface_status",
                 "interface_id": str(interface_id or "").strip(),
@@ -532,11 +516,7 @@ class TraceabilityStore:
         with self.connection() as connection:
             connection.execute("DELETE FROM interfaces WHERE interface_id = ?", (interface_id,))
             connection.commit()
-        self.events.emit_refresh_signal(
-            reason="interface_deleted",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("interface_deleted")
 
     def get_test(self, test_id: str) -> dict[str, Any] | None:
         with self.connection() as connection:
@@ -607,7 +587,7 @@ class TraceabilityStore:
             "passed" if passed is True else "failed" if passed is False else None,
         )
         if emit_event:
-            self.events.emit_traceability_event(
+            self.events._emit_traceability_event(
                 {
                     "type": "test_upsert",
                     "test_id": normalized_test_id,
@@ -646,11 +626,7 @@ class TraceabilityStore:
             test_id,
             "passed" if passed is True else "failed" if passed is False else None,
         )
-        self.events.emit_refresh_signal(
-            reason="test_status_updated",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("test_status_updated")
 
     def set_test_pass_statuses(self, status_by_test_id: dict[str, bool | None]) -> None:
         if not status_by_test_id:
@@ -668,11 +644,7 @@ class TraceabilityStore:
                 for test_id, passed in status_by_test_id.items()
             }
         )
-        self.events.emit_refresh_signal(
-            reason="test_statuses_updated",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("test_statuses_updated")
 
     def reset_test_pass_statuses_for_requirement(self, req_id: str) -> None:
         tests = self.list_tests(req_id=req_id)
@@ -682,22 +654,14 @@ class TraceabilityStore:
             connection.commit()
         self.events.clear_demo_test_statuses(test_ids)
         self.events.set_demo_requirement_status(req_id, None)
-        self.events.emit_refresh_signal(
-            reason="test_statuses_reset",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("test_statuses_reset")
 
     def delete_test(self, test_id: str) -> None:
         with self.connection() as connection:
             connection.execute("DELETE FROM tests WHERE test_id = ?", (test_id,))
             connection.commit()
         self.events.set_demo_test_status(test_id, None)
-        self.events.emit_refresh_signal(
-            reason="test_deleted",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("test_deleted")
 
     def insert_call_edge(
         self,
@@ -718,11 +682,7 @@ class TraceabilityStore:
                 (source_req_id, target_req_id, from_interface_id, to_interface_id, edge_type),
             )
             connection.commit()
-        self.events.emit_refresh_signal(
-            reason="call_edges_updated",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("call_edges_updated")
 
     def list_call_edges(self, *, req_id: str | None = None) -> list[dict[str, Any]]:
         with self.connection() as connection:
@@ -758,11 +718,7 @@ class TraceabilityStore:
                 (source_req_id, target_req_id, from_interface_id, to_interface_id),
             )
             connection.commit()
-        self.events.emit_refresh_signal(
-            reason="call_edge_deleted",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("call_edge_deleted")
 
     def upsert_node_state(self, req_id: str, state: str) -> None:
         normalized_req_id = str(req_id or "").strip()
@@ -788,12 +744,7 @@ class TraceabilityStore:
             self.events.set_demo_requirement_status(normalized_req_id, "failed")
         else:
             self.events.set_demo_requirement_status(normalized_req_id, None)
-        self.events.emit_refresh_signal(
-            reason="node_state_updated",
-            submission=True,
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("node_state_updated")
 
     def get_node_state(self, req_id: str) -> dict[str, Any] | None:
         with self.connection() as connection:
@@ -810,12 +761,7 @@ class TraceabilityStore:
             connection.execute("DELETE FROM node_states WHERE req_id = ?", (req_id,))
             connection.commit()
         self.events.set_demo_requirement_status(req_id, None)
-        self.events.emit_refresh_signal(
-            reason="node_state_deleted",
-            submission=True,
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("node_state_deleted")
 
     def upsert_node_contract(self, req_id: str, content: dict[str, Any]) -> None:
         with self.connection() as connection:
@@ -866,8 +812,4 @@ class TraceabilityStore:
             connection.commit()
         self.events.clear_demo_test_statuses(test_ids)
         self.events.set_demo_requirement_status(req_id, None)
-        self.events.emit_refresh_signal(
-            reason="design_artifacts_cleared",
-            traceability_selected=True,
-            traceability_all=True,
-        )
+        self.events.notify_traceability_changed("design_artifacts_cleared")
