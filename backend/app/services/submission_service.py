@@ -1261,8 +1261,17 @@ class SubmissionService:
             return entry
 
         try:
-            root = walk_dir(template_dir, template_dir)
-            return [root]
+            children = []
+            for child in template_dir.iterdir():
+                if child.name.startswith(".arc"):
+                    continue
+                if child.name.startswith(".git"):
+                    continue
+                try:
+                    children.append(walk_dir(child, template_dir))
+                except Exception:
+                    continue
+            return sorted(children, key=lambda x: (not x["is_directory"], x["name"]))
         except Exception as e:
             raise RuntimeError(f"Failed to list workspace files: {e}")
 

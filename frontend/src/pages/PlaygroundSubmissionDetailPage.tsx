@@ -270,6 +270,24 @@ function changedFileLabel(changedFile: SubmissionCommitChangedFile) {
   return changedFile.file_path;
 }
 
+function changedFileMarker(changeType: string): "U" | "M" | "D" | "R" {
+  const normalized = changeType.toUpperCase();
+  if (normalized === "A") {
+    return "U";
+  }
+  if (normalized === "D") {
+    return "D";
+  }
+  if (normalized === "R") {
+    return "R";
+  }
+  return "M";
+}
+
+function changedFileMarkerClass(changeType: string): string {
+  return `kind-change-${changedFileMarker(changeType).toLowerCase()}`;
+}
+
 function readDiffHeaderPath(diffContent: string, fallback: string) {
   const lines = codeLines(diffContent);
   for (const line of lines) {
@@ -514,7 +532,9 @@ function WorkspaceFileTreeItem({
           style={{ paddingLeft: `${8 + depth * 14}px` }}
           onClick={() => onToggleDir(file.path)}
         >
-          <span className={`ide-tree-chevron ${isExpanded ? "expanded" : ""}`} aria-hidden="true">⌄</span>
+          <span className="ide-tree-chevron" aria-hidden="true">
+            <TreeChevronIcon expanded={isExpanded} />
+          </span>
           <span className="ide-tree-label">{file.name}</span>
         </button>
         {isExpanded && file.children && (
@@ -549,7 +569,23 @@ function WorkspaceFileTreeItem({
   );
 }
 
+function TreeChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`ide-tree-chevron-icon${expanded ? " expanded" : ""}`}
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M4.25 2.5L7.75 6L4.25 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function SubmissionFilePanel({
+  panelMode,
   source,
   loading,
   error,
@@ -562,11 +598,11 @@ function SubmissionFilePanel({
   submission,
   taskType,
   setSource,
-  setFileViewMode,
   refreshCommitHistory,
   refreshTraceabilityForCurrentView,
   selectedNodeId,
 }: {
+  panelMode: "workspace" | "diff";
   source: SubmissionSourcePayload | null;
   loading: boolean;
   error: string | null;
@@ -579,7 +615,6 @@ function SubmissionFilePanel({
   submission: SubmissionDetail | null;
   taskType: "web" | "mobile" | "kernel" | "mixed";
   setSource: (source: SubmissionSourcePayload | null) => void;
-  setFileViewMode: (mode: "traceability" | "diff" | null) => void;
   refreshCommitHistory: (silent?: boolean) => Promise<SubmissionCommitHistoryPayload>;
   refreshTraceabilityForCurrentView: () => void;
   selectedNodeId: string | null;
@@ -601,6 +636,16 @@ function SubmissionFilePanel({
   const showInlineLoading = loading && Boolean(source);
   const isPaused = submission?.status === "PAUSED";
   const codeGrammar = resolveCodeGrammar(taskType);
+  const isDiffPanel = panelMode === "diff";
+  const diffSource = isDiffPanel && source?.kind === "diff" ? source : null;
+  const fileSource = !isDiffPanel && source?.kind === "file" ? source : null;
+  const effectiveFileContent = isEditing ? fileContent : (fileSource?.content ?? "");
+  const lines = useMemo(() => codeLines(effectiveFileContent), [effectiveFileContent]);
+  const highlightedLine = formatLineNumber(fileSource?.first_line ?? 1);
+  const highlightedTokens = useMemo(
+    () => lines.map((line) => tokenizeCodeLine(line, codeGrammar)),
+    [codeGrammar, lines],
+  );
 
   const loadWorkspaceFiles = async () => {
     if (!submissionId) {
@@ -629,11 +674,11 @@ function SubmissionFilePanel({
   }, [submissionId]);
 
   useEffect(() => {
-    if (!source?.file_path) {
+    if (!fileSource?.file_path) {
       return;
     }
-    setSelectedFilePath(source.file_path);
-    const expandedParents = buildExpandedDirectoryChain(source.file_path);
+    setSelectedFilePath(fileSource.file_path);
+    const expandedParents = buildExpandedDirectoryChain(fileSource.file_path);
     if (expandedParents.length === 0) {
       return;
     }
@@ -642,7 +687,7 @@ function SubmissionFilePanel({
       expandedParents.forEach((path) => next.add(path));
       return next;
     });
-  }, [source?.file_path]);
+  }, [fileSource?.file_path]);
 
   const openWorkspaceFile = async (path: string) => {
     if (!submissionId) return;
@@ -653,7 +698,6 @@ function SubmissionFilePanel({
       const result = await api.getSubmissionSource(submissionId, { filePath: path, kind: "file" });
       setSource(result);
       setFileContent(result.content);
-      setFileViewMode("traceability");
     } catch (e) {
       console.error("Failed to load file", e);
     }
@@ -686,8 +730,8 @@ function SubmissionFilePanel({
   };
 
   const cancelEdit = () => {
-    if (source && selectedFilePath === source.file_path) {
-      setFileContent(source.content);
+    if (fileSource && selectedFilePath === fileSource.file_path) {
+      setFileContent(fileSource.content);
     }
     setIsEditing(false);
     setUnsavedChanges(false);
@@ -725,17 +769,13 @@ function SubmissionFilePanel({
     return <div className="ide-empty-state">Loading source...</div>;
   }
 
-  if (error) {
+  if (error && ((isDiffPanel && !diffSource) || (!isDiffPanel && !fileSource))) {
     return <div className="ide-empty-state">{error}</div>;
   }
 
-  if (!source) {
-    return <div className="ide-empty-state">{emptyMessage}</div>;
-  }
-
-  if (source.kind === "diff") {
-    const diffLines = codeLines(source.content);
-    const diffDisplayPath = readDiffHeaderPath(source.content, source.file_path);
+  if (isDiffPanel) {
+    const diffLines = codeLines(diffSource?.content ?? "");
+    const diffDisplayPath = diffSource ? readDiffHeaderPath(diffSource.content, diffSource.file_path) : (selectedDiffFilePath ?? "Diff");
     const hasWorkspaceFiles = diffFiles.length > 0;
     const editorTitle = selectedDiffFilePath ?? diffDisplayPath;
     return (
@@ -764,8 +804,8 @@ function SubmissionFilePanel({
                     className={`ide-file-item diff-workspace-item${isActive ? " active" : ""}`}
                     onClick={() => onOpenDiffFile(changedFile)}
                   >
-                    <span className={`ide-file-status kind-change-${changedFile.change_type.toLowerCase()}`}>
-                      {changedFile.change_type}
+                    <span className={`ide-file-status ${changedFileMarkerClass(changedFile.change_type)}`}>
+                      {changedFileMarker(changedFile.change_type)}
                     </span>
                     <span className="ide-file-path">{changedFileLabel(changedFile)}</span>
                   </button>
@@ -796,42 +836,41 @@ function SubmissionFilePanel({
             </div>
             <div className="ide-editor-badge">DIFF</div>
           </div>
-          <pre ref={codeViewRef} className="ide-code-view is-diff">
-            <code>
-              {diffLines.map((line, index) => {
-                const lineNumber = index + 1;
-                return (
-                  <div
-                    key={`${lineNumber}:${line}`}
-                    className={diffLineClassName(line)}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "56px minmax(0, 1fr)",
-                      gap: "12px",
-                      borderRadius: 0,
-                      padding: "0 6px",
-                      margin: "0 -6px",
-                    }}
-                  >
-                    <span style={{ color: "var(--text-muted)", userSelect: "none" }}>{lineNumber}</span>
-                    <span>{line || " "}</span>
-                  </div>
-                );
-              })}
-            </code>
-          </pre>
+          {diffSource ? (
+            <pre ref={codeViewRef} className="ide-code-view is-diff">
+              <code>
+                {diffLines.map((line, index) => {
+                  const lineNumber = index + 1;
+                  return (
+                    <div
+                      key={`${lineNumber}:${line}`}
+                      className={diffLineClassName(line)}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "56px minmax(0, 1fr)",
+                        gap: "12px",
+                        borderRadius: 0,
+                        padding: "0 6px",
+                        margin: "0 -6px",
+                      }}
+                    >
+                      <span style={{ color: "var(--text-muted)", userSelect: "none" }}>{lineNumber}</span>
+                      <span>{line || " "}</span>
+                    </div>
+                  );
+                })}
+              </code>
+            </pre>
+          ) : (
+            <div className="ide-empty-state">
+              {diffCommit ? "Select a changed file to inspect its diff." : emptyMessage}
+            </div>
+          )}
           {showInlineLoading ? <div className="ide-loading-overlay">Loading diff...</div> : null}
         </section>
       </div>
     );
   }
-
-  const lines = codeLines(isEditing ? fileContent : source.content);
-  const highlightedLine = formatLineNumber(source.first_line);
-  const highlightedTokens = useMemo(
-    () => lines.map((line) => tokenizeCodeLine(line, codeGrammar)),
-    [codeGrammar, lines],
-  );
 
   return (
     <div className={`ide-shell ${workspaceCollapsed ? "workspace-collapsed" : ""}`}>
@@ -926,20 +965,20 @@ function SubmissionFilePanel({
         </button>
       )}
 
-      <section className="ide-editor">
-        <div className="ide-editor-topbar">
-          <div className="ide-editor-tabbar">
-            <div className="ide-editor-tab active">{source.file_path}</div>
-          </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {isPaused && (
+        <section className="ide-editor">
+          <div className="ide-editor-topbar">
+            <div className="ide-editor-tabbar">
+              <div className="ide-editor-tab active">{fileSource?.file_path ?? "workspace/template"}</div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {isPaused && fileSource ? (
               <>
                 {!isEditing ? (
                   <button
                     type="button"
                     className="inline-link"
                     onClick={() => {
-                      setFileContent(source.content);
+                      setFileContent(fileSource.content);
                       setIsEditing(true);
                     }}
                   >
@@ -964,11 +1003,11 @@ function SubmissionFilePanel({
                   </>
                 )}
               </>
-            )}
-            <div className="ide-editor-badge">{source.language.toUpperCase()}</div>
+            ) : null}
+            {fileSource ? <div className="ide-editor-badge">{fileSource.language.toUpperCase()}</div> : null}
           </div>
         </div>
-        {isEditing ? (
+        {isEditing && fileSource ? (
           <textarea
             ref={textareaRef}
             className="ide-code-view ide-code-editor"
@@ -979,7 +1018,7 @@ function SubmissionFilePanel({
             }}
             spellCheck={false}
           />
-        ) : (
+        ) : fileSource ? (
           <pre ref={codeViewRef} className="ide-code-view">
             <code>
               {lines.map((line, index) => {
@@ -1022,6 +1061,8 @@ function SubmissionFilePanel({
               })}
             </code>
           </pre>
+        ) : (
+          <div className="ide-empty-state">{emptyMessage}</div>
         )}
         {showInlineLoading ? <div className="ide-loading-overlay">Loading source...</div> : null}
       </section>
@@ -1268,7 +1309,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"canvas" | "results" | "stdio" | "file">("canvas");
+  const [activeTab, setActiveTab] = useState<"canvas" | "file" | "diff" | "results" | "stdio">("canvas");
   const [stdioTab, setStdioTab] = useState<"stdout" | "stderr">("stdout");
   const [sidebarTab, setSidebarTab] = useState<"status" | "traceability">("status");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
@@ -1311,7 +1352,6 @@ export default function PlaygroundSubmissionDetailPage() {
   const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
-  const [fileViewMode, setFileViewMode] = useState<"traceability" | "diff" | null>(null);
   const [commitHistory, setCommitHistory] = useState<SubmissionCommitHistoryPayload | null>(null);
   const [commitHistoryLoading, setCommitHistoryLoading] = useState(false);
   const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
@@ -1350,9 +1390,8 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     return findNodeById(editableTree, editableNodeId);
   }, [editableNodeId, editableTree]);
-  const filePanelEmptyMessage = fileViewMode === "diff"
-    ? "Select a commit history entry to inspect its diff."
-    : "Select an interface or test to inspect source.";
+  const filePanelEmptyMessage = "Select a file from workspace/template to inspect source.";
+  const diffPanelEmptyMessage = "Select a commit history entry to inspect its diff.";
   const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
   const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;
 
@@ -1501,7 +1540,6 @@ export default function PlaygroundSubmissionDetailPage() {
     setTraceabilityOverlayVisible(false);
     setSource(null);
     setSourceError(null);
-    setFileViewMode(null);
     setCommitHistory(null);
     setCommitHistoryError(null);
     setSelectedCommitOid(null);
@@ -1811,7 +1849,6 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     setSelectedCommitOid(null);
-    setFileViewMode("traceability");
     setActiveTab("file");
     setSourceLoading(true);
     setSourceError(null);
@@ -1831,10 +1868,9 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     setSelectedCommitOid(commit.oid);
-    setFileViewMode("diff");
     const firstChangedFile = commit.changed_files[0] ?? null;
     setSelectedDiffFilePath(firstChangedFile?.file_path ?? null);
-    setActiveTab("file");
+    setActiveTab("diff");
     setSourceLoading(true);
     setSourceError(null);
     try {
@@ -1856,7 +1892,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId || !selectedDiffCommit) {
       return;
     }
-    setFileViewMode("diff");
+    setActiveTab("diff");
     setSelectedDiffFilePath(changedFile.file_path);
     setSourceLoading(true);
     setSourceError(null);
@@ -1888,7 +1924,7 @@ export default function PlaygroundSubmissionDetailPage() {
         quickStart.setDetailExpanded(true);
       }
     }
-    if (activeTab === "file") {
+    if (activeTab === "diff") {
       void openCommitDiff(commit);
     }
   };
@@ -2083,7 +2119,7 @@ export default function PlaygroundSubmissionDetailPage() {
   };
 
   useEffect(() => {
-    if (activeTab !== "file" || source || sourceLoading || !selectedDiffCommit) {
+    if (activeTab !== "diff" || source?.kind === "diff" || sourceLoading || !selectedDiffCommit) {
       return;
     }
     void openCommitDiff(selectedDiffCommit);
@@ -2320,20 +2356,21 @@ export default function PlaygroundSubmissionDetailPage() {
           minWidth: 0,
         }}>
           <div className="doc-tabs" style={{ borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
-            {[
-              { key: "canvas", label: "Canvas" },
-              { key: "file", label: "File" },
-              { key: "results", label: "Test Result" },
-              { key: "stdio", label: "Stdout/Stderror" },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
-                type="button"
-                onClick={() => setActiveTab(tab.key as "canvas" | "results" | "stdio" | "file")}
-              >
-                {tab.label}
-              </button>
+              {[
+                { key: "canvas", label: "Canvas" },
+                { key: "file", label: "File" },
+                { key: "diff", label: "Diff" },
+                { key: "results", label: "Test Result" },
+                { key: "stdio", label: "Stdout/Stderror" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key as "canvas" | "file" | "diff" | "results" | "stdio")}
+                >
+                  {tab.label}
+                </button>
             ))}
           </div>
 
@@ -2455,6 +2492,7 @@ export default function PlaygroundSubmissionDetailPage() {
             ) : null}
             {activeTab === "file" ? (
               <SubmissionFilePanel
+                panelMode="workspace"
                 source={source}
                 loading={sourceLoading}
                 error={sourceError}
@@ -2467,7 +2505,25 @@ export default function PlaygroundSubmissionDetailPage() {
                 submission={submission}
                 taskType={taskType}
                 setSource={setSource}
-                setFileViewMode={setFileViewMode}
+                refreshCommitHistory={refreshCommitHistory}
+                refreshTraceabilityForCurrentView={refreshTraceabilityForCurrentView}
+                selectedNodeId={activeSelectedNodeId}
+              />
+            ) : activeTab === "diff" ? (
+              <SubmissionFilePanel
+                panelMode="diff"
+                source={source}
+                loading={sourceLoading}
+                error={sourceError}
+                diffCommit={selectedDiffCommit}
+                diffFiles={selectedDiffCommit?.changed_files ?? []}
+                selectedDiffFilePath={selectedDiffFilePath}
+                onOpenDiffFile={openCommitDiffFile}
+                emptyMessage={diffPanelEmptyMessage}
+                submissionId={submissionId}
+                submission={submission}
+                taskType={taskType}
+                setSource={setSource}
                 refreshCommitHistory={refreshCommitHistory}
                 refreshTraceabilityForCurrentView={refreshTraceabilityForCurrentView}
                 selectedNodeId={activeSelectedNodeId}

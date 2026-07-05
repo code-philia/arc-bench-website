@@ -4329,7 +4329,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0;
-  font-family: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
+  font-family: var(--sans);
 }
 
 .ide-file-item {
@@ -4345,7 +4345,7 @@ button {
   text-align: left;
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition), color var(--transition);
-  font-family: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
+  font-family: var(--sans);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -4395,7 +4395,7 @@ button {
   font-size: 0.78rem;
   line-height: 1.35;
   word-break: break-all;
-  font-family: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
+  font-family: var(--sans);
 }
 
 .ide-file-status {
@@ -4408,12 +4408,12 @@ button {
   color: var(--text-dim);
 }
 
-.ide-file-status.kind-change-a {
+.ide-file-status.kind-change-u {
   color: var(--pass);
 }
 
 .ide-file-status.kind-change-m {
-  color: var(--accent);
+  color: var(--warn);
 }
 
 .ide-file-status.kind-change-d {
@@ -4421,7 +4421,7 @@ button {
 }
 
 .ide-file-status.kind-change-r {
-  color: var(--warn);
+  color: var(--text-dim);
 }
 
 .ide-editor {
@@ -4597,7 +4597,7 @@ button {
   gap: 4px;
   text-align: left;
   cursor: pointer;
-  font-family: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
+  font-family: var(--sans);
   font-size: 0.8rem;
   line-height: 1.25;
   transition: background var(--transition), color var(--transition);
@@ -4624,12 +4624,7 @@ button {
 }
 
 .ide-tree-chevron {
-  transform: rotate(-90deg);
-  transition: transform 120ms ease;
-}
-
-.ide-tree-chevron.expanded {
-  transform: rotate(0deg);
+  color: #8b97a8;
 }
 
 .ide-tree-label {
@@ -4637,6 +4632,17 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ide-tree-chevron-icon {
+  display: block;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 120ms ease;
+}
+
+.ide-tree-chevron-icon.expanded {
+  transform: rotate(90deg);
 }
 
 .ide-file-list-empty {
