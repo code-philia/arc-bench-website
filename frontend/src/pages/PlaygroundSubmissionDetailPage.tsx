@@ -161,6 +161,15 @@ function formatCommitDateTime(value: string) {
   return new Date(value).toLocaleString();
 }
 
+function buildExpandedDirectoryChain(filePath: string): string[] {
+  const segments = filePath.split("/").filter(Boolean);
+  const expanded: string[] = [];
+  for (let index = 1; index < segments.length; index += 1) {
+    expanded.push(segments.slice(0, index).join("/"));
+  }
+  return expanded;
+}
+
 function PanelChevronIcon({
   direction,
   size = 16,
@@ -483,86 +492,33 @@ function WorkspaceFileTreeItem({
   onSelect,
   expandedDirs,
   onToggleDir,
+  depth = 0,
 }: {
   file: WorkspaceFileEntry;
   selectedPath: string | null;
   onSelect: (path: string) => void;
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
+  depth?: number;
 }) {
   const isDir = file.is_directory;
   const isExpanded = expandedDirs.has(file.path);
   const isSelected = selectedPath === file.path;
 
-  // 鑾峰彇鏂囦欢鎵╁睍鍚嶏紝鐢ㄤ簬鏄剧ず涓嶅悓鐨勫浘鏍?
-  const getFileIcon = (name: string) => {
-    const ext = name.split(".").pop()?.toLowerCase() || "";
-    switch (ext) {
-      case "js":
-      case "jsx":
-        return "馃煥";
-      case "ts":
-      case "tsx":
-        return "馃敺";
-      case "json":
-        return "馃搵";
-      case "css":
-      case "scss":
-      case "less":
-        return "馃帹";
-      case "html":
-        return "馃寪";
-      case "py":
-        return "馃悕";
-      case "md":
-        return "馃摑";
-      default:
-        return "馃搫";
-    }
-  };
-
   if (isDir) {
     return (
-      <div>
+      <div className="ide-tree-group">
         <button
           type="button"
-          style={{
-            width: "100%",
-            border: "none",
-            background: isSelected ? "rgba(0, 122, 204, 0.2)" : "transparent",
-            padding: "4px 8px",
-            textAlign: "left",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "13px",
-            color: "var(--text-primary)",
-            borderRadius: "3px",
-          }}
+          className={`ide-tree-item ide-tree-dir${isSelected ? " active" : ""}`}
+          style={{ paddingLeft: `${8 + depth * 14}px` }}
           onClick={() => onToggleDir(file.path)}
         >
-          <span
-            style={{
-              width: "16px",
-              height: "16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-              transition: "transform 0.1s ease",
-              fontSize: "10px",
-            }}
-          >
-            鈻?
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "14px" }}>馃搧</span>
-            <span>{file.name}</span>
-          </span>
+          <span className={`ide-tree-chevron ${isExpanded ? "expanded" : ""}`} aria-hidden="true">⌄</span>
+          <span className="ide-tree-label">{file.name}</span>
         </button>
         {isExpanded && file.children && (
-          <div style={{ paddingLeft: "12px" }}>
+          <div>
             {file.children.map((child) => (
               <WorkspaceFileTreeItem
                 key={child.path}
@@ -571,6 +527,7 @@ function WorkspaceFileTreeItem({
                 onSelect={onSelect}
                 expandedDirs={expandedDirs}
                 onToggleDir={onToggleDir}
+                depth={depth + 1}
               />
             ))}
           </div>
@@ -582,27 +539,12 @@ function WorkspaceFileTreeItem({
   return (
     <button
       type="button"
-      style={{
-        width: "100%",
-        border: "none",
-        background: isSelected ? "rgba(0, 122, 204, 0.2)" : "transparent",
-        padding: "4px 8px",
-        textAlign: "left",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        gap: "6px",
-        fontSize: "13px",
-        color: "var(--text-primary)",
-        borderRadius: "3px",
-      }}
+      className={`ide-tree-item ide-tree-file${isSelected ? " active" : ""}`}
+      style={{ paddingLeft: `${8 + depth * 14}px` }}
       onClick={() => onSelect(file.path)}
     >
-      <span style={{ width: "16px" }} />
-      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-        <span style={{ fontSize: "14px" }}>{getFileIcon(file.name)}</span>
-        <span>{file.name}</span>
-      </span>
+      <span className="ide-tree-spacer" aria-hidden="true" />
+      <span className="ide-tree-label">{file.name}</span>
     </button>
   );
 }
@@ -661,16 +603,20 @@ function SubmissionFilePanel({
   const codeGrammar = resolveCodeGrammar(taskType);
 
   const loadWorkspaceFiles = async () => {
-    if (!submissionId || !isPaused) {
+    if (!submissionId) {
       return;
     }
     setWorkspaceFilesLoading(true);
     try {
       const result = await api.getWorkspaceFiles(submissionId);
       setWorkspaceFiles(result.files);
-      if (result.files.length > 0 && result.files[0].children) {
-        setExpandedDirs(new Set([result.files[0].path]));
-      }
+      setExpandedDirs((current) => {
+        const next = new Set(current);
+        if (result.files.length > 0 && result.files[0].children) {
+          next.add(result.files[0].path);
+        }
+        return next;
+      });
     } catch (e) {
       console.error("Failed to load workspace files", e);
     } finally {
@@ -680,7 +626,23 @@ function SubmissionFilePanel({
 
   useEffect(() => {
     loadWorkspaceFiles();
-  }, [submissionId, isPaused]);
+  }, [submissionId]);
+
+  useEffect(() => {
+    if (!source?.file_path) {
+      return;
+    }
+    setSelectedFilePath(source.file_path);
+    const expandedParents = buildExpandedDirectoryChain(source.file_path);
+    if (expandedParents.length === 0) {
+      return;
+    }
+    setExpandedDirs((current) => {
+      const next = new Set(current);
+      expandedParents.forEach((path) => next.add(path));
+      return next;
+    });
+  }, [source?.file_path]);
 
   const openWorkspaceFile = async (path: string) => {
     if (!submissionId) return;
@@ -802,7 +764,7 @@ function SubmissionFilePanel({
                     className={`ide-file-item diff-workspace-item${isActive ? " active" : ""}`}
                     onClick={() => onOpenDiffFile(changedFile)}
                   >
-                    <span className={`ide-file-kind kind-diff kind-change-${changedFile.change_type.toLowerCase()}`}>
+                    <span className={`ide-file-status kind-change-${changedFile.change_type.toLowerCase()}`}>
                       {changedFile.change_type}
                     </span>
                     <span className="ide-file-path">{changedFileLabel(changedFile)}</span>
@@ -829,12 +791,9 @@ function SubmissionFilePanel({
 
         <section className="ide-editor">
           <div className="ide-editor-topbar">
-            <div className="ide-window-dots" aria-hidden="true">
-              <span />
-              <span />
-              <span />
+            <div className="ide-editor-tabbar">
+              <div className="ide-editor-tab active">{editorTitle}</div>
             </div>
-            <div className="ide-editor-title">{editorTitle}</div>
             <div className="ide-editor-badge">DIFF</div>
           </div>
           <pre ref={codeViewRef} className="ide-code-view is-diff">
@@ -891,7 +850,7 @@ function SubmissionFilePanel({
             </button>
           </div>
           <div className="ide-file-list">
-            {isPaused && (
+            {isPaused ? (
               <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
                   <button
@@ -936,8 +895,8 @@ function SubmissionFilePanel({
                   </button>
                 </div>
               </div>
-            )}
-            {isPaused && workspaceFiles.length > 0 ? (
+            ) : null}
+            {workspaceFiles.length > 0 ? (
               workspaceFiles.map((file) => (
                 <WorkspaceFileTreeItem
                   key={file.path}
@@ -949,8 +908,8 @@ function SubmissionFilePanel({
                 />
               ))
             ) : (
-              <div style={{ padding: "4px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-primary)" }}>
-                <span>{source.file_path}</span>
+              <div className="ide-file-list-empty">
+                {workspaceFilesLoading ? "Loading workspace..." : "Workspace files are not available."}
               </div>
             )}
           </div>
@@ -969,12 +928,9 @@ function SubmissionFilePanel({
 
       <section className="ide-editor">
         <div className="ide-editor-topbar">
-          <div className="ide-window-dots" aria-hidden="true">
-            <span />
-            <span />
-            <span />
+          <div className="ide-editor-tabbar">
+            <div className="ide-editor-tab active">{source.file_path}</div>
           </div>
-          <div className="ide-editor-title">{source.file_path}</div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {isPaused && (
               <>
@@ -2051,6 +2007,17 @@ export default function PlaygroundSubmissionDetailPage() {
     }
   };
 
+  const handleParseTraceability = () => {
+    setSidebarTab("traceability");
+    if (activeSelectedNodeId) {
+      void refreshSelectedTraceability(activeSelectedNodeId, true).catch(() => undefined);
+      return;
+    }
+    if (traceabilityOverlayVisible) {
+      void refreshAllTraceability().catch(() => undefined);
+    }
+  };
+
   const onSidebarResizeMouseDown = (event: React.MouseEvent) => {
     event.preventDefault();
     isSidebarDragging.current = true;
@@ -2218,20 +2185,30 @@ export default function PlaygroundSubmissionDetailPage() {
                 </div>
               </div>
 
-              <div className="submission-side-tabs">
+              <div className="submission-side-toolbar">
+                <div className="submission-side-tabs">
+                  <button
+                    type="button"
+                    className={`submission-side-tab ${sidebarTab === "status" ? "active" : ""}`}
+                    onClick={() => setSidebarTab("status")}
+                  >
+                    Status
+                  </button>
+                  <button
+                    type="button"
+                    className={`submission-side-tab ${sidebarTab === "traceability" ? "active" : ""}`}
+                    onClick={() => setSidebarTab("traceability")}
+                  >
+                    Traceability
+                  </button>
+                </div>
                 <button
                   type="button"
-                  className={`submission-side-tab ${sidebarTab === "status" ? "active" : ""}`}
-                  onClick={() => setSidebarTab("status")}
+                  className="submission-side-parse"
+                  onClick={handleParseTraceability}
+                  disabled={traceabilityLoading || (!activeSelectedNodeId && !traceabilityOverlayVisible)}
                 >
-                  STATUS
-                </button>
-                <button
-                  type="button"
-                  className={`submission-side-tab ${sidebarTab === "traceability" ? "active" : ""}`}
-                  onClick={() => setSidebarTab("traceability")}
-                >
-                  TRACEABILITY
+                  Parse
                 </button>
               </div>
 
