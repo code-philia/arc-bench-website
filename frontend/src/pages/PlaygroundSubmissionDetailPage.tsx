@@ -11,7 +11,6 @@ import {
   cloneRequirementTree,
   findNodeById,
   parseTaskTreeYaml,
-  requirementMarkdownToTree,
   taskTreeToMarkdown,
   taskTreeToYaml,
   updateNodeInTree,
@@ -101,39 +100,19 @@ function isCommitHistoryStreaming(status: string | null | undefined) {
   return status ? ["PENDING", "RUNNING", "PAUSE_REQUESTED"].includes(status) : false;
 }
 
-function countRequirementNodes(node: RequirementNode): number {
-  return 1 + node.children.reduce((count, child) => count + countRequirementNodes(child), 0);
-}
-
 function resolveEditableTree(
   payload: SubmissionEditableTaskPayload,
   fallbackTree: RequirementNode | null,
 ): RequirementNode | null {
-  const candidates: RequirementNode[] = [];
-
   if (payload.requirements_yaml.trim()) {
     try {
-      candidates.push(parseTaskTreeYaml(payload.requirements_yaml));
+      return parseTaskTreeYaml(payload.requirements_yaml);
     } catch {
-      // Fall back to markdown parsing below.
+      return fallbackTree ? cloneRequirementTree(fallbackTree) : null;
     }
   }
 
-  if (payload.requirements_md.trim()) {
-    try {
-      candidates.push(requirementMarkdownToTree(payload.requirements_md));
-    } catch {
-      // Fall back to the current canvas tree below.
-    }
-  }
-
-  if (candidates.length === 0) {
-    return fallbackTree ? cloneRequirementTree(fallbackTree) : null;
-  }
-
-  return candidates.reduce((best, candidate) =>
-    countRequirementNodes(candidate) > countRequirementNodes(best) ? candidate : best,
-  );
+  return fallbackTree ? cloneRequirementTree(fallbackTree) : null;
 }
 
 function resolveRequirementCatalogTree(requirement: RequirementDetail | null): RequirementNode | null {
@@ -144,10 +123,10 @@ function resolveRequirementCatalogTree(requirement: RequirementDetail | null): R
     try {
       return parseTaskTreeYaml(requirement.requirements_yaml);
     } catch {
-      return requirementMarkdownToTree(requirement.requirements_markdown);
+      return null;
     }
   }
-  return requirementMarkdownToTree(requirement.requirements_markdown);
+  return null;
 }
 
 function diffLineClassName(line: string) {
