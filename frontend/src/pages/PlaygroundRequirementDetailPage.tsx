@@ -1,5 +1,5 @@
 import { message } from "antd";
-import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -302,13 +302,17 @@ export default function PlaygroundRequirementDetailPage() {
               <>
                 <div className="submission-subsection">
                   <div className="submission-subsection-title">Upload Agent</div>
+                  <a
+                    className="btn-outline competition-download-btn submission-download-btn"
+                    href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}`}
+                  >
+                    <DownloadOutlined /> Download Agent Template
+                  </a>
                   <div className="env-selector">
                     {[
                       { label: "Python", value: "python" },
                       { label: "Node.js", value: "nodejs", disabled: true },
-                      { label: "Go", value: "go", disabled: true },
-                      { label: "Java", value: "java", disabled: true },
-                      { label: "Docker", value: "docker", disabled: true },
+                      { label: "Go", value: "go", disabled: true }
                     ].map((option) => (
                       <button
                         key={option.value}

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.requirement import CompetitionDetail, CompetitionSummary, RequirementDetail, RequirementSummary
+from app.services.agent_starter_service import AgentStarterService
 from app.services.demo_agent_service import DemoAgentService
 from app.services.requirement_catalog import RequirementCatalogService
 
@@ -84,6 +85,32 @@ def download_public_task(requirement_id: str, download_kind: str, db: Session = 
 def download_demo_agent() -> Response:
     try:
         content, filename = DemoAgentService().build_bundle()
+    except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@router.get("/{requirement_id}/starter-agent")
+def download_starter_agent(
+    requirement_id: str,
+    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    db: Session = Depends(get_db),
+) -> Response:
+    service = RequirementCatalogService.for_catalog(db, catalog)
+    try:
+        requirement = service.get_entry(requirement_id)
+        content, filename = AgentStarterService().build_bundle(task_type=requirement.category)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(

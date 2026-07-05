@@ -13,18 +13,20 @@ class AgentStarterService:
         self.settings = get_settings()
         self.package_root = self.settings.agent_runtime_package_root
 
-    def build_bundle(self) -> tuple[bytes, str]:
+    def build_bundle(self, *, task_type: str) -> tuple[bytes, str]:
         if not self.package_root.is_dir():
             raise FileNotFoundError(f"Agent runtime package root not found: {self.package_root}")
 
+        template_root = self._resolve_template_root(task_type)
         memory_file = BytesIO()
         with zipfile.ZipFile(memory_file, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             self._write_main_py(archive)
             self._write_examples(archive)
             self._write_requirements_txt(archive)
-            self._write_readme(archive)
+            self._write_readme(archive, task_type=task_type)
             self._add_package_sources(archive)
-        return memory_file.getvalue(), "arcbench-agent-starter.zip"
+            self._add_task_template(archive, template_root)
+        return memory_file.getvalue(), f"arcbench-agent-starter-{task_type}.zip"
 
     def _write_main_py(self, archive: zipfile.ZipFile) -> None:
         content = textwrap.dedent(
@@ -155,12 +157,14 @@ class AgentStarterService:
         content = "arcbench-agent-runtime\n"
         archive.writestr("requirements.txt", content)
 
-    def _write_readme(self, archive: zipfile.ZipFile) -> None:
+    def _write_readme(self, archive: zipfile.ZipFile, *, task_type: str) -> None:
         content = textwrap.dedent(
-            """
+            f"""
             # ARC-Bench Agent Starter
 
             This starter zip is the recommended input scaffold for uploaded Python agents.
+
+            Task type: `{task_type}`
 
             Included files:
 
@@ -168,6 +172,7 @@ class AgentStarterService:
             - `arcbench_agent_runtime/`: SDK source package
             - `examples/python_usage.py`: usage examples
             - `requirements.txt`: starter dependencies
+            - `template/`: reference project template matching the task type
 
             Runtime assumptions:
 
@@ -187,3 +192,19 @@ class AgentStarterService:
                 continue
             relative_path = path.relative_to(src_root)
             archive.write(path, arcname=relative_path.as_posix())
+
+    def _add_task_template(self, archive: zipfile.ZipFile, template_root: Path) -> None:
+        if not template_root.is_dir():
+            raise FileNotFoundError(f"Task template directory not found: {template_root}")
+        for path in sorted(template_root.rglob("*")):
+            if path.is_dir():
+                continue
+            relative_path = path.relative_to(template_root)
+            archive.write(path, arcname=f"template/{relative_path.as_posix()}")
+
+    def _resolve_template_root(self, task_type: str) -> Path:
+        normalized = str(task_type or "").strip().lower()
+        arc_bench_root = self.settings.requirements_root.parent.parent
+        if normalized == "mobile":
+            return arc_bench_root / "mobileapp" / "template"
+        return arc_bench_root / "webapp" / "template"

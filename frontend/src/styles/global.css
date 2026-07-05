@@ -2899,6 +2899,10 @@ button {
   letter-spacing: 0.06em;
 }
 
+.submission-download-btn {
+  margin-bottom: 14px;
+}
+
 .submission-summary-card {
   display: grid;
   gap: 14px;
