@@ -3675,6 +3675,15 @@ button {
   margin-bottom: 0;
 }
 
+.api-doc-page code,
+.api-doc-page pre,
+.api-doc-page pre code,
+.api-doc-page .api-doc-table code,
+.api-doc-page .api-doc-code,
+.api-doc-page .api-doc-code-lang-label {
+  font-family: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace !important;
+}
+
 .api-doc-callout-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3786,7 +3795,7 @@ button {
   background: #f8fafc;
   overflow: auto;
   color: #0f172a;
-  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-family: var(--mono);
   font-size: 0.81rem;
   line-height: 1.7;
 }
@@ -3811,7 +3820,7 @@ button {
 
 .api-doc-code-lang-label {
   color: #334155;
-  font-family: "JetBrains Mono", "Cascadia Code", monospace;
+  font-family: var(--mono);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -5139,26 +5148,37 @@ button {
 }
 
 .playground-benchmark-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.playground-benchmark-header-bar {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
 }
 
 .playground-benchmark-title {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  padding: 0;
+  justify-content: center;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 20px;
   border: 0;
   background: none;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
 
 .playground-benchmark-copy {
-  margin: 8px 0 0;
-  max-width: 860px;
+  margin: 0;
   color: var(--text-dim);
   font-size: 0.92rem;
   line-height: 1.6;
+  text-align: center;
 }
 
 .playground-benchmark-card-grid {

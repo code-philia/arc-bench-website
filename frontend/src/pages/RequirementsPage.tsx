@@ -16,15 +16,7 @@ type HeroRow = {
   avgPassRate: number;
 };
 
-const heroRows: HeroRow[] = [
-  { username: "arc_alice", model: "Claude Sonnet 4", track: "web", totalTotalM: 842.6, runtimeSeconds: 33215, avgPassRate: 89.2 },
-  { username: "browsersmith", model: "GPT-4.1", track: "web", totalTotalM: 801.4, runtimeSeconds: 30108, avgPassRate: 86.1 },
-  { username: "mobileforge", model: "Gemini 2.5 Pro", track: "mobile", totalTotalM: 765.9, runtimeSeconds: 38842, avgPassRate: 84.4 },
-  { username: "kernel_lane", model: "DeepSeek V3", track: "kernel", totalTotalM: 789.3, runtimeSeconds: 42736, avgPassRate: 85.2 },
-  { username: "operator_xu", model: "Claude 3.5 Sonnet", track: "web", totalTotalM: 733.7, runtimeSeconds: 29561, avgPassRate: 82.9 },
-  { username: "mobilepilot", model: "Gemini Flash", track: "mobile", totalTotalM: 698.2, runtimeSeconds: 27429, avgPassRate: 79.8 },
-  { username: "ops_nova", model: "Qwen 3 Coder", track: "kernel", totalTotalM: 672.5, runtimeSeconds: 44105, avgPassRate: 77.5 },
-];
+const heroRows: HeroRow[] = [];
 
 const rankBadges = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
@@ -119,44 +111,48 @@ export default function RequirementsPage() {
             </div>
 
             <div className="leaderboard-table-wrap competition-heroes-table-wrap">
-              <table className="leaderboard-table leaderboard-table-clean competition-heroes-table compact">
-                <thead>
-                  <tr>
-                    <th style={{ width: "84px" }}>Rank</th>
-                    <th style={{ width: "168px" }}>User</th>
-                    <th style={{ width: "240px" }}>Model</th>
-                    <th style={{ width: "156px" }}>Avg. Pass Rate</th>
-                    <th style={{ width: "168px" }}>TOTAL TOKEN</th>
-                    <th style={{ width: "176px" }}>RUNTIME</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboardRows.map((row) => (
-                    <tr key={`${row.username}-${row.model}`} className={row.rank === 1 ? "is-top" : ""}>
-                      <td className="leaderboard-rank-cell">
-                        {row.rank <= 3 ? (
-                          <span className={`competition-rank-badge rank-${row.rank}`}>{rankBadges[row.rank - 1]}</span>
-                        ) : (
-                          row.rank
-                        )}
-                      </td>
-                      <td>
-                        <div className="competition-user-cell compact">
-                          <strong>{row.username}</strong>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="leaderboard-model-cell compact">
-                          <span className="model-chip">{row.model}</span>
-                        </div>
-                      </td>
-                      <td>{row.avgPassRate.toFixed(1)}%</td>
-                      <td>{row.totalTotalM.toFixed(1)}M</td>
-                      <td>{formatRuntime(row.runtimeSeconds)}</td>
+              {leaderboardRows.length === 0 ? (
+                <div className="empty-state competition-bank-state">No leaderboard data yet.</div>
+              ) : (
+                <table className="leaderboard-table leaderboard-table-clean competition-heroes-table compact">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "84px" }}>Rank</th>
+                      <th style={{ width: "168px" }}>User</th>
+                      <th style={{ width: "240px" }}>Model</th>
+                      <th style={{ width: "156px" }}>Avg. Pass Rate</th>
+                      <th style={{ width: "168px" }}>TOTAL TOKEN</th>
+                      <th style={{ width: "176px" }}>RUNTIME</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {leaderboardRows.map((row) => (
+                      <tr key={`${row.username}-${row.model}`} className={row.rank === 1 ? "is-top" : ""}>
+                        <td className="leaderboard-rank-cell">
+                          {row.rank <= 3 ? (
+                            <span className={`competition-rank-badge rank-${row.rank}`}>{rankBadges[row.rank - 1]}</span>
+                          ) : (
+                            row.rank
+                          )}
+                        </td>
+                        <td>
+                          <div className="competition-user-cell compact">
+                            <strong>{row.username}</strong>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="leaderboard-model-cell compact">
+                            <span className="model-chip">{row.model}</span>
+                          </div>
+                        </td>
+                        <td>{row.avgPassRate.toFixed(1)}%</td>
+                        <td>{row.totalTotalM.toFixed(1)}M</td>
+                        <td>{formatRuntime(row.runtimeSeconds)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </section>
 

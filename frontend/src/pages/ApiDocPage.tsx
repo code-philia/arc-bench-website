@@ -14,13 +14,14 @@ const overviewDiagram = String.raw`Agent code
     | call Agent Runtime SDK
     v
 arcbench_agent_runtime
-    |-- write traceability.db
+    |-- write live traceability.db (/tmp/arcbench/traceability.db)
     |-- atomically refresh traceability.snapshot.json
     |-- append runner-events.jsonl
     v
 ArcBench backend file watcher
     |-- detect new lines in runner-events.jsonl
     |-- parse fixed event payloads
+    |-- read latest traceability snapshot
     |-- notify frontend which panel should refresh
     v
 Frontend
@@ -73,7 +74,7 @@ runtime.traceability.upsert_test(
 )
 
 runtime.traceability.set_test_pass_status("TEST-LOGIN-E2E", True)
-runtime.traceability.upsert_node_state("REQ-1", "PASSED")`;
+runtime.traceability.upsert_node_state("REQ-1", "CONVERGED")`;
 
 const gitExample = `from arcbench_agent_runtime import AgentRuntime
 
@@ -111,9 +112,10 @@ function OverviewPage() {
         <h2>Execution Flow</h2>
         <p>
           Your agent should call the built-in <code>arcbench_agent_runtime</code> package. The SDK owns the fixed event
-          protocol, writes <code>runner-events.jsonl</code>, updates the live <code>traceability.db</code>, refreshes
-          <code> traceability.snapshot.json </code>, and lets the backend drive frontend refreshes from the snapshot
-          instead of reading the live database.
+          protocol, appends <code>runner-events.jsonl</code>, writes the container-local live
+          <code> /tmp/arcbench/traceability.db </code>, atomically refreshes
+          <code> /workspace/artifacts/traceability.snapshot.json </code>, and lets the backend drive frontend refreshes
+          by reading the snapshot instead of the live database.
         </p>
         <CodeBlock source={overviewDiagram} />
       </section>
@@ -200,6 +202,14 @@ function NodeStatePage() {
               <td><code>runtime.events.mark_run_failed(message=None)</code></td>
               <td>Mark the whole agent run as failed.</td>
             </tr>
+            <tr>
+              <td><code>runtime.events.mark_run_paused(message=None)</code></td>
+              <td>Mark the whole agent run as paused.</td>
+            </tr>
+            <tr>
+              <td><code>runtime.events.mark_run_resumed(message=None)</code></td>
+              <td>Mark the whole agent run as resumed.</td>
+            </tr>
           </tbody>
         </table>
       </section>
@@ -239,11 +249,15 @@ function TraceabilityPage() {
             </tr>
             <tr>
               <td>Tests</td>
-              <td><code>upsert_test</code>, <code>update_test_fields</code>, <code>set_test_pass_status</code>, <code>delete_test</code></td>
+              <td><code>upsert_test</code>, <code>update_test_fields</code>, <code>set_test_pass_status</code>, <code>set_test_pass_statuses</code>, <code>reset_test_pass_statuses_for_requirement</code>, <code>delete_test</code></td>
             </tr>
             <tr>
               <td>Node status and links</td>
               <td><code>upsert_node_state</code>, <code>delete_node_state</code>, <code>insert_call_edge</code>, <code>delete_call_edge</code></td>
+            </tr>
+            <tr>
+              <td>Node contracts and cleanup</td>
+              <td><code>upsert_node_contract</code>, <code>delete_node_contract</code>, <code>clear_node_design_artifacts</code></td>
             </tr>
           </tbody>
         </table>
@@ -252,10 +266,10 @@ function TraceabilityPage() {
       <section className="api-doc-section-block">
         <h2>Automatic Refresh</h2>
         <p>
-          These APIs update <code>traceability.db</code>, atomically refresh <code>traceability.snapshot.json</code>,
-          and append the corresponding fixed-format events into <code>runner-events.jsonl</code>. The backend watches
-          new event lines, reloads data from the snapshot, and the frontend refreshes the affected traceability views
-          automatically.
+          These APIs write the live database, atomically refresh
+          <code> traceability.snapshot.json </code>, and append fixed-format events into
+          <code> runner-events.jsonl </code>. The backend watches new event lines, reloads data from the snapshot, and
+          the frontend refreshes the affected traceability views automatically.
         </p>
       </section>
 
@@ -285,6 +299,14 @@ function GitPage() {
               <td>Initialize the repository and configure runtime git identity.</td>
             </tr>
             <tr>
+              <td><code>runtime.git.ensure_arc_gitignore()</code></td>
+              <td>Write the managed ArcBench gitignore block for runtime artifacts and build outputs.</td>
+            </tr>
+            <tr>
+              <td><code>runtime.git.configure_identity()</code></td>
+              <td>Configure git author and committer identity from the runtime environment.</td>
+            </tr>
+            <tr>
               <td><code>runtime.git.commit(message)</code></td>
               <td>Create one commit and trigger commit-history and preview refresh.</td>
             </tr>
@@ -304,6 +326,10 @@ function GitPage() {
               <td><code>runtime.git.clean_untracked()</code></td>
               <td>Remove untracked files.</td>
             </tr>
+            <tr>
+              <td><code>runtime.git.status_porcelain()</code>, <code>runtime.git.current_head()</code></td>
+              <td>Read repository status and the current HEAD commit id.</td>
+            </tr>
           </tbody>
         </table>
       </section>
@@ -311,7 +337,7 @@ function GitPage() {
       <section className="api-doc-section-block">
         <h2>Manual File Sync Case</h2>
         <p>
-          If you change git state or traceability artifacts outside the SDK, call
+          If you bypass the SDK and change git state or traceability artifacts manually, call
           <code> runtime.events.notify_commit_history_changed(...) </code> or
           <code> runtime.events.notify_traceability_changed(...) </code> after the manual write so ArcBench can refresh
           the right panels without exposing raw event payloads.

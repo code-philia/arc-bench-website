@@ -184,12 +184,12 @@ export default function PlaygroundPage() {
 
         <section className="playground-benchmark-section" aria-label="ARC-Bench">
           <div className="playground-benchmark-header">
-            <div>
+            <div className="playground-benchmark-header-bar">
               <div className="playground-bank-title playground-benchmark-title">ARC-Bench</div>
-              <p className="playground-benchmark-copy">
-                Public benchmark tracks from `arc-bench`, packaged with requirement documents, tests, references, and starter project context.
-              </p>
             </div>
+            <p className="playground-benchmark-copy">
+              Public benchmark tracks from `arc-bench`, packaged with requirement documents, tests, references, and starter project context.
+            </p>
           </div>
           <div className="playground-benchmark-card-grid">
             {benchmarkLoading ? (

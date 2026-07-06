@@ -103,6 +103,10 @@ class RequirementCatalogService:
                 requirements_md = requirements_path.read_text(encoding="utf-8")
                 requirement_yaml_path = self._resolve_requirement_yaml_path(requirements_path)
                 leaf_requirement_count = self._count_leaf_requirements(requirement_yaml_path)
+                total_test_count = self._count_test_files(tests_path)
+                display_test_count = total_test_count
+                if self.catalog_name in {"competition", "benchmark"} and category == "web":
+                    display_test_count = leaf_requirement_count
                 rows.append(
                     CatalogRequirementEntry(
                         id=requirement_id,
@@ -110,7 +114,7 @@ class RequirementCatalogService:
                         category=category,
                         summary=self._extract_summary(requirements_md),
                         test_runner="playwright",
-                        total_tests=leaf_requirement_count * 3,
+                        total_tests=display_test_count,
                         module_count=leaf_requirement_count,
                         requirements_path=requirements_path,
                         prerequisites_path=prerequisites_path,
@@ -134,6 +138,8 @@ class RequirementCatalogService:
         sources: list[tuple[str, Path, Path, Path]] = []
         for app_root in sorted(competition_root.iterdir()):
             if not app_root.is_dir() or not app_root.name.endswith("app"):
+                continue
+            if app_root.name != "webapp":
                 continue
             sources.append(
                 (
@@ -576,6 +582,12 @@ class RequirementCatalogService:
         if len(valid_children) == 0:
             return 1
         return sum(self._count_leaf_nodes(child) for child in valid_children)
+
+    @staticmethod
+    def _count_test_files(tests_path: Path) -> int:
+        if not tests_path.exists() or not tests_path.is_dir():
+            return 0
+        return sum(1 for path in tests_path.rglob("*") if path.is_file())
 
     @staticmethod
     def _read_text_if_exists(path: Path) -> str:
