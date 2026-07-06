@@ -1360,7 +1360,11 @@ export default function PlaygroundSubmissionDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
   const location = useLocation();
   const taskType = normalizeTaskType(rawTaskType);
-  const requirementCatalog = location.pathname.startsWith("/submissions/") ? "competition" : "playground";
+  const requirementCatalog: "playground" | "competition" | "benchmark" = location.pathname.startsWith("/submissions/")
+    ? "competition"
+    : location.pathname.startsWith("/playground/arc-bench/")
+      ? "benchmark"
+      : "playground";
   const { user } = useAuth();
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
@@ -2208,11 +2212,18 @@ export default function PlaygroundSubmissionDetailPage() {
               <Link className="inline-link" to="/login">
                 Login
               </Link>
-            ) : (
-              <Link className="inline-link" to={`/playground/task-bank/${taskType}/${requirementId}`}>
-                Back to task
-              </Link>
-            )}
+              ) : (
+                <Link
+                  className="inline-link"
+                  to={
+                    requirementCatalog === "benchmark"
+                      ? `/playground/arc-bench/${taskType}/${requirementId}`
+                      : `/playground/task-bank/${taskType}/${requirementId}`
+                  }
+                >
+                  Back to task
+                </Link>
+              )}
           </div>
         </div>
       </div>

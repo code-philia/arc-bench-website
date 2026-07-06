@@ -26,6 +26,7 @@ app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(requirements.router, prefix=settings.api_prefix)
 app.include_router(requirements.competition_router, prefix=settings.api_prefix)
+app.include_router(requirements.benchmark_router, prefix=settings.api_prefix)
 app.include_router(submissions.router, prefix=settings.api_prefix)
 app.include_router(user_tasks.router, prefix=settings.api_prefix)
 

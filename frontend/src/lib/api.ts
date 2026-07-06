@@ -1,5 +1,7 @@
 import type {
   AuthResponse,
+  BenchmarkDetail,
+  BenchmarkSummary,
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
@@ -111,6 +113,12 @@ export const api = {
   getCompetition(competitionId: string) {
     return request<CompetitionDetail>(`/competitions/${competitionId}`);
   },
+  listBenchmarks() {
+    return request<BenchmarkSummary[]>("/benchmarks");
+  },
+  getBenchmark(benchmarkId: string) {
+    return request<BenchmarkDetail>(`/benchmarks/${benchmarkId}`);
+  },
   async getDemoAgentFile() {
     const response = await fetch(`${API_BASE}/competitions/public/demo-agent`, {
       credentials: "include",
@@ -125,10 +133,10 @@ export const api = {
       ?.[1] ?? "demo_agent.zip";
     return new File([blob], filename, { type: "application/zip" });
   },
-  listRequirements(catalog: "playground" | "competition" = "playground") {
+  listRequirements(catalog: "playground" | "competition" | "benchmark" = "playground") {
     return request<RequirementSummary[]>(`/requirements?catalog=${catalog}`);
   },
-  getRequirement(requirementId: string, catalog: "playground" | "competition" = "playground") {
+  getRequirement(requirementId: string, catalog: "playground" | "competition" | "benchmark" = "playground") {
     return request<RequirementDetail>(`/requirements/${requirementId}?catalog=${catalog}`);
   },
   listSubmissions(requirementId?: string) {
@@ -239,7 +247,7 @@ export const api = {
     file?: File | null;
     displayName?: string;
     modelName?: string;
-    catalog?: "playground" | "competition";
+    catalog?: "playground" | "competition" | "benchmark";
   }) {
     const form = new FormData();
     form.append("requirement_id", payload.requirementId);

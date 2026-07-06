@@ -44,6 +44,25 @@ export type CompetitionDetail = CompetitionSummary & {
   tasks: CompetitionTaskSummary[];
 };
 
+export type BenchmarkDownloadLinks = {
+  track_bundle: string | null;
+  task_bundle: string | null;
+};
+
+export type BenchmarkSummary = {
+  id: string;
+  title: string;
+  type: string;
+  summary: string;
+  task_count: number;
+  total_tests: number;
+  downloads: BenchmarkDownloadLinks | null;
+};
+
+export type BenchmarkDetail = BenchmarkSummary & {
+  tasks: Array<RequirementSummary & { downloads: BenchmarkDownloadLinks | null }>;
+};
+
 export type SubmissionStep = {
   key: string;
   title: string;

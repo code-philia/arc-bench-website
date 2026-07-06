@@ -45,3 +45,26 @@ class CompetitionSummary(BaseModel):
 class CompetitionDetail(CompetitionSummary):
     downloads: CompetitionTaskDownloadLinks | None = None
     tasks: list[CompetitionTaskSummary]
+
+
+class BenchmarkDownloadLinks(BaseModel):
+    track_bundle: str | None = None
+    task_bundle: str | None = None
+
+
+class BenchmarkSummary(BaseModel):
+    id: str
+    title: str
+    type: str
+    summary: str
+    task_count: int
+    total_tests: int
+    downloads: BenchmarkDownloadLinks | None = None
+
+
+class BenchmarkTaskSummary(RequirementSummary):
+    downloads: BenchmarkDownloadLinks | None = None
+
+
+class BenchmarkDetail(BenchmarkSummary):
+    tasks: list[BenchmarkTaskSummary]

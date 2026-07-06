@@ -22,6 +22,9 @@ const navItems: NavItem[] = [
     icon: <PlayCircleOutlined />,
     matches: [
       "/playground",
+      "/playground/arc-bench/:taskType",
+      "/playground/arc-bench/:taskType/:requirementId",
+      "/playground/arc-bench/:taskType/:requirementId/submissions/:submissionId",
       "/playground/task-bank/:taskType",
       "/playground/task-bank/:taskType/:requirementId",
       "/playground/task-bank/:taskType/:requirementId/submissions/:submissionId",

@@ -44,7 +44,13 @@ export default function PlaygroundRequirementDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const catalog = location.pathname.startsWith("/requirements/") ? "competition" : "playground";
+  const isCompetitionRoute = location.pathname.startsWith("/requirements/");
+  const isBenchmarkRoute = location.pathname.startsWith("/playground/arc-bench/");
+  const catalog: "playground" | "competition" | "benchmark" = isCompetitionRoute
+    ? "competition"
+    : isBenchmarkRoute
+      ? "benchmark"
+      : "playground";
   const [requirement, setRequirement] = useState<RequirementDetail | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState("readme");
@@ -228,6 +234,14 @@ export default function PlaygroundRequirementDetailPage() {
                   <span>Competition</span>
                   <span className="sep">/</span>
                   <Link to="/requirements">Task Bank</Link>
+                  <span className="sep">/</span>
+                  <span className="current">{requirement.display_id} - {requirement.title}</span>
+                </>
+              ) : catalog === "benchmark" ? (
+                <>
+                  <span>Playground</span>
+                  <span className="sep">/</span>
+                  <Link to={`/playground/arc-bench/${taskType}`}>ARC-Bench / {taskTypeLabel(taskType)}</Link>
                   <span className="sep">/</span>
                   <span className="current">{requirement.display_id} - {requirement.title}</span>
                 </>
@@ -464,10 +478,21 @@ export default function PlaygroundRequirementDetailPage() {
                   {submissions.slice(0, 5).map((record) => (
                     <tr
                       key={record.id}
-                      onClick={() => navigate(`/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`)}
+                      onClick={() => navigate(
+                        catalog === "benchmark"
+                          ? `/playground/arc-bench/${taskType}/${requirement.id}/submissions/${record.id}`
+                          : `/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`,
+                      )}
                     >
                       <td>
-                        <Link className="inline-link" to={`/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`}>
+                        <Link
+                          className="inline-link"
+                          to={
+                            catalog === "benchmark"
+                              ? `/playground/arc-bench/${taskType}/${requirement.id}/submissions/${record.id}`
+                              : `/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`
+                          }
+                        >
                           {record.display_name || record.id}
                         </Link>
                         {record.display_name ? <div className="table-sub mono-sub">{record.id}</div> : null}

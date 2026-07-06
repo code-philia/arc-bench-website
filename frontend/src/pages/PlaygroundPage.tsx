@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
-import type { RequirementSummary } from "../lib/types";
+import type { BenchmarkSummary, RequirementSummary } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
 type TaskCategory = "web" | "mobile" | "kernel" | "mixed";
@@ -55,7 +55,9 @@ const taskBankItems: TaskBankItem[] = [
 
 export default function PlaygroundPage() {
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
+  const [benchmarks, setBenchmarks] = useState<BenchmarkSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(true);
   const { start } = useQuickStart();
 
   useEffect(() => {
@@ -66,7 +68,26 @@ export default function PlaygroundPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    api
+      .listBenchmarks()
+      .then(setBenchmarks)
+      .catch(() => setBenchmarks([]))
+      .finally(() => setBenchmarkLoading(false));
+  }, []);
+
   const webTaskCount = useMemo(() => requirements.filter((item) => item.category === "web").length, [requirements]);
+  const benchmarkItems = useMemo(
+    () =>
+      benchmarks.filter((item) => item.type === "web" || item.type === "mobile").map((item) => ({
+        ...item,
+        href: `/playground/arc-bench/${item.type === "android" ? "mobile" : item.type}`,
+        badge: item.type === "web" ? "WEB" : "MOBILE",
+        tone: item.type === "web" ? "web" : "mobile",
+        meta: item.type === "web" ? "Playwright" : "Android / Mobile",
+      })),
+    [benchmarks],
+  );
 
   return (
     <div className="page playground-page">
@@ -160,6 +181,52 @@ export default function PlaygroundPage() {
             </div>
           </aside>
         </div>
+
+        <section className="playground-benchmark-section" aria-label="ARC-Bench">
+          <div className="playground-benchmark-header">
+            <div>
+              <div className="playground-bank-title playground-benchmark-title">ARC-Bench</div>
+              <p className="playground-benchmark-copy">
+                Public benchmark tracks from `arc-bench`, packaged with requirement documents, tests, references, and starter project context.
+              </p>
+            </div>
+          </div>
+          <div className="playground-benchmark-card-grid">
+            {benchmarkLoading ? (
+              <div className="loading-state competition-bank-state">Loading ARC-Bench tracks...</div>
+            ) : benchmarkItems.length === 0 ? (
+              <div className="empty-state competition-bank-state">No ARC-Bench tracks available.</div>
+            ) : (
+              benchmarkItems.map((item) => (
+                <Link key={item.id} to={item.href} className={`playground-benchmark-card ${item.tone}`}>
+                  <div className="playground-benchmark-card-main">
+                    <div className="playground-benchmark-card-repo">
+                      <span className="playground-benchmark-card-namespace">arc-bench</span>
+                      <span className="playground-benchmark-card-slash">/</span>
+                      <span className="playground-benchmark-card-name">{item.title}</span>
+                    </div>
+                    <div className="playground-benchmark-card-tags">
+                      <span className={`playground-bank-badge ${item.tone}`}>{item.badge}</span>
+                      <span className="playground-benchmark-tag">{item.meta}</span>
+                      <span className="playground-benchmark-tag">benchmark</span>
+                    </div>
+                    <p className="playground-benchmark-card-summary">{item.summary}</p>
+                  </div>
+                  <div className="playground-benchmark-card-meta">
+                    <span>{item.task_count} tasks</span>
+                    <span className="playground-benchmark-meta-sep">|</span>
+                    <span>{item.total_tests} tests</span>
+                    <span className="playground-benchmark-meta-sep">|</span>
+                    <span>Browse</span>
+                    <div className="playground-bank-meta">
+                      <RightOutlined />
+                    </div>
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

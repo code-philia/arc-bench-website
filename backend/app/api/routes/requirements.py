@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.requirement import CompetitionDetail, CompetitionSummary, RequirementDetail, RequirementSummary
+from app.schemas.requirement import BenchmarkDetail, BenchmarkSummary, CompetitionDetail, CompetitionSummary, RequirementDetail, RequirementSummary
 from app.services.agent_starter_service import AgentStarterService
 from app.services.demo_agent_service import DemoAgentService
 from app.services.requirement_catalog import RequirementCatalogService
@@ -13,11 +13,12 @@ from app.services.requirement_catalog import RequirementCatalogService
 
 router = APIRouter(prefix="/requirements", tags=["requirements"])
 competition_router = APIRouter(prefix="/competitions", tags=["competitions"])
+benchmark_router = APIRouter(prefix="/benchmarks", tags=["benchmarks"])
 
 
 @router.get("", response_model=list[RequirementSummary])
 def list_requirements(
-    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     db: Session = Depends(get_db),
 ) -> list[RequirementSummary]:
     service = RequirementCatalogService.for_catalog(db, catalog)
@@ -99,10 +100,53 @@ def download_demo_agent() -> Response:
     )
 
 
+@benchmark_router.get("", response_model=list[BenchmarkSummary])
+def list_benchmarks(request: Request, db: Session = Depends(get_db)) -> list[BenchmarkSummary]:
+    service = RequirementCatalogService.for_catalog(db, "benchmark")
+    return service.list_benchmarks(str(request.base_url).rstrip("/"))
+
+
+@benchmark_router.get("/{benchmark_id}", response_model=BenchmarkDetail)
+def get_benchmark(benchmark_id: str, request: Request, db: Session = Depends(get_db)) -> BenchmarkDetail:
+    service = RequirementCatalogService.for_catalog(db, "benchmark")
+    try:
+        return service.get_benchmark_detail(benchmark_id, str(request.base_url).rstrip("/"))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@benchmark_router.get("/{benchmark_id}/download")
+def download_benchmark_track(benchmark_id: str, db: Session = Depends(get_db)) -> Response:
+    service = RequirementCatalogService.for_catalog(db, "benchmark")
+    try:
+        content, filename = service.build_benchmark_track_bundle(benchmark_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@benchmark_router.get("/tasks/{requirement_id}/download")
+def download_benchmark_task(requirement_id: str, db: Session = Depends(get_db)) -> Response:
+    service = RequirementCatalogService.for_catalog(db, "benchmark")
+    try:
+        content, filename = service.build_benchmark_task_bundle(requirement_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/{requirement_id}/starter-agent")
 def download_starter_agent(
     requirement_id: str,
-    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     db: Session = Depends(get_db),
 ) -> Response:
     service = RequirementCatalogService.for_catalog(db, catalog)
@@ -129,7 +173,7 @@ def download_starter_agent(
 def get_requirement(
     requirement_id: str,
     request: Request,
-    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     db: Session = Depends(get_db),
 ) -> RequirementDetail:
     service = RequirementCatalogService.for_catalog(db, catalog)
@@ -143,7 +187,7 @@ def get_requirement(
 def get_document(
     requirement_id: str,
     kind: str = Query(pattern="^(requirements|prerequisites)$"),
-    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     db: Session = Depends(get_db),
 ) -> PlainTextResponse:
     service = RequirementCatalogService.for_catalog(db, catalog)
@@ -158,7 +202,7 @@ def get_asset(
     requirement_id: str,
     asset_kind: str,
     asset_path: str,
-    catalog: str = Query(default="playground", pattern="^(playground|competition)$"),
+    catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     if asset_kind not in {"assets", "references"}:

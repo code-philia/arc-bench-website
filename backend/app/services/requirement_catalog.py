@@ -12,6 +12,10 @@ import yaml
 from app.core.config import get_settings
 from app.models.requirement import Requirement
 from app.schemas.requirement import (
+    BenchmarkDetail,
+    BenchmarkDownloadLinks,
+    BenchmarkSummary,
+    BenchmarkTaskSummary,
     CompetitionDetail,
     CompetitionSummary,
     CompetitionTaskDownloadLinks,
@@ -58,10 +62,10 @@ class RequirementCatalogService:
     @classmethod
     def for_catalog(cls, db: Session, catalog: str) -> "RequirementCatalogService":
         settings = get_settings()
-        if catalog == "competition":
+        if catalog in {"competition", "benchmark"}:
             return cls(
                 db,
-                catalog_name="competition",
+                catalog_name=catalog,
                 requirements_root=settings.requirements_root,
                 tests_root=settings.tests_root,
                 templates_root=settings.templates_root,
@@ -120,7 +124,7 @@ class RequirementCatalogService:
         return rows
 
     def _iter_catalog_sources(self) -> list[tuple[str, Path, Path, Path]]:
-        if self.catalog_name != "competition":
+        if self.catalog_name not in {"competition", "benchmark"}:
             return [("web", self.requirements_root, self.tests_root, self.templates_root)]
 
         competition_root = self.requirements_root.parent.parent
@@ -252,6 +256,53 @@ class RequirementCatalogService:
             tasks=tasks,
         )
 
+    def list_benchmarks(self, base_url: str) -> list[BenchmarkSummary]:
+        rows = self.scan_entries()
+        grouped: dict[str, list[CatalogRequirementEntry]] = {}
+        for row in rows:
+            grouped.setdefault(row.category, []).append(row)
+
+        benchmarks: list[BenchmarkSummary] = []
+        for category, items in sorted(grouped.items(), key=lambda item: self._competition_sort_key(item[0])):
+            benchmarks.append(
+                BenchmarkSummary(
+                    id=category,
+                    title=self._benchmark_title(category),
+                    type=category,
+                    summary=self._benchmark_summary(category, len(items)),
+                    task_count=len(items),
+                    total_tests=sum(item.total_tests for item in items),
+                    downloads=BenchmarkDownloadLinks(
+                        track_bundle=f"{base_url}/api/benchmarks/{category}/download",
+                    ),
+                )
+            )
+        return benchmarks
+
+    def get_benchmark_detail(self, benchmark_id: str, base_url: str) -> BenchmarkDetail:
+        rows = self.scan_entries()
+        display_ids = self._build_display_id_map(rows)
+        benchmark_tasks = [row for row in rows if row.category == benchmark_id]
+        if not benchmark_tasks:
+            raise LookupError(f"Benchmark '{benchmark_id}' not found")
+
+        tasks = [
+            self._to_benchmark_task_summary(row, base_url, display_ids.get(row.id, row.id))
+            for row in benchmark_tasks
+        ]
+        return BenchmarkDetail(
+            id=benchmark_id,
+            title=self._benchmark_title(benchmark_id),
+            type=benchmark_id,
+            summary=self._benchmark_summary(benchmark_id, len(tasks)),
+            task_count=len(tasks),
+            total_tests=sum(task.total_tests for task in tasks),
+            downloads=BenchmarkDownloadLinks(
+                track_bundle=f"{base_url}/api/benchmarks/{benchmark_id}/download",
+            ),
+            tasks=tasks,
+        )
+
     def get_document(self, requirement_id: str, kind: str) -> str:
         requirement = self.get_entry(requirement_id)
         path = requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path
@@ -321,6 +372,61 @@ class RequirementCatalogService:
                 entries.append((requirement_yaml_path, f"public/{requirement.id}/requirements.yaml"))
         return self._build_zip(entries, "arcbench-public-competition.zip")
 
+    def build_benchmark_track_bundle(self, benchmark_id: str) -> tuple[bytes, str]:
+        rows = self.scan_entries()
+        benchmark_tasks = [row for row in rows if row.category == benchmark_id]
+        if not benchmark_tasks:
+            raise LookupError(f"Benchmark '{benchmark_id}' not found")
+
+        entries: list[tuple[Path, str]] = []
+        for requirement in benchmark_tasks:
+            root = f"{benchmark_id}/{requirement.id}"
+            entries.extend(
+                [
+                    (requirement.requirements_path, f"{root}/requirements.md"),
+                    (requirement.tests_path, f"{root}/tests"),
+                ]
+            )
+            if requirement.prerequisites_path.exists():
+                entries.append((requirement.prerequisites_path, f"{root}/prerequisites.md"))
+            requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
+            if requirement_yaml_path.exists():
+                entries.append((requirement_yaml_path, f"{root}/requirements.yaml"))
+            if requirement.assets_path.exists():
+                entries.append((requirement.assets_path, f"{root}/assets"))
+            if requirement.references_path.exists():
+                entries.append((requirement.references_path, f"{root}/reference"))
+
+        readme = self._build_benchmark_bundle_readme(benchmark_id, benchmark_tasks)
+        return self._build_zip_with_virtual_files(
+            entries,
+            [(f"{benchmark_id}/README.md", readme)],
+            f"arcbench-{benchmark_id}-bundle.zip",
+        )
+
+    def build_benchmark_task_bundle(self, requirement_id: str) -> tuple[bytes, str]:
+        requirement = self.get_entry(requirement_id)
+        archive_name = f"arcbench-{requirement.id}-bundle.zip"
+        entries = [
+            (requirement.requirements_path, f"{requirement.id}/requirements.md"),
+            (requirement.tests_path, f"{requirement.id}/tests"),
+        ]
+        if requirement.prerequisites_path.exists():
+            entries.append((requirement.prerequisites_path, f"{requirement.id}/prerequisites.md"))
+        requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
+        if requirement_yaml_path.exists():
+            entries.append((requirement_yaml_path, f"{requirement.id}/requirements.yaml"))
+        if requirement.assets_path.exists():
+            entries.append((requirement.assets_path, f"{requirement.id}/assets"))
+        if requirement.references_path.exists():
+            entries.append((requirement.references_path, f"{requirement.id}/reference"))
+        readme = self._build_benchmark_bundle_readme(requirement.category, [requirement])
+        return self._build_zip_with_virtual_files(
+            entries,
+            [(f"{requirement.id}/README.md", readme)],
+            archive_name,
+        )
+
     def get_entry(self, requirement_id: str, rows: list[CatalogRequirementEntry] | None = None) -> CatalogRequirementEntry:
         entries = rows if rows is not None else self.scan_entries()
         for entry in entries:
@@ -342,6 +448,27 @@ class RequirementCatalogService:
                     archive.write(source, arcname=target)
         return buffer.getvalue(), archive_name
 
+    def _build_zip_with_virtual_files(
+        self,
+        entries: list[tuple[Path, str]],
+        virtual_files: list[tuple[str, str]],
+        archive_name: str,
+    ) -> tuple[bytes, str]:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for source, target in entries:
+                if not source.exists():
+                    continue
+                if source.is_dir():
+                    for path in sorted(source.rglob("*")):
+                        if path.is_file():
+                            archive.write(path, arcname=f"{target}/{path.relative_to(source).as_posix()}")
+                else:
+                    archive.write(source, arcname=target)
+            for target, content in virtual_files:
+                archive.writestr(target, content)
+        return buffer.getvalue(), archive_name
+
     def _to_requirement_summary(self, row: CatalogRequirementEntry, display_id: str) -> RequirementSummary:
         return RequirementSummary(
             id=row.id,
@@ -352,6 +479,26 @@ class RequirementCatalogService:
             test_runner=row.test_runner,
             total_tests=row.total_tests,
             module_count=row.module_count,
+        )
+
+    def _to_benchmark_task_summary(
+        self,
+        row: CatalogRequirementEntry,
+        base_url: str,
+        display_id: str,
+    ) -> BenchmarkTaskSummary:
+        return BenchmarkTaskSummary(
+            id=row.id,
+            display_id=display_id,
+            title=row.title,
+            category=row.category,
+            summary=row.summary,
+            test_runner=row.test_runner,
+            total_tests=row.total_tests,
+            module_count=row.module_count,
+            downloads=BenchmarkDownloadLinks(
+                task_bundle=f"{base_url}/api/benchmarks/tasks/{row.id}/download",
+            ),
         )
 
     def _to_competition_task(
@@ -459,6 +606,51 @@ class RequirementCatalogService:
         if category in {"mobile", "android"}:
             return f"Mobile application tasks across {task_count} benchmark tasks."
         return f"{task_count} benchmark tasks in the {category} track."
+
+    @staticmethod
+    def _benchmark_title(category: str) -> str:
+        if category == "web":
+            return "Web Applications"
+        if category in {"mobile", "android"}:
+            return "Mobile Applications"
+        return f"{category.title()} Applications"
+
+    @staticmethod
+    def _benchmark_summary(category: str, task_count: int) -> str:
+        if category == "web":
+            return f"ARC-Bench web application tasks with executable test suites across {task_count} benchmarks."
+        if category in {"mobile", "android"}:
+            return f"ARC-Bench mobile application tasks across {task_count} benchmarks."
+        return f"ARC-Bench tasks across {task_count} benchmarks in the {category} track."
+
+    @staticmethod
+    def _build_benchmark_bundle_readme(category: str, tasks: list[CatalogRequirementEntry]) -> str:
+        title = RequirementCatalogService._benchmark_title(category)
+        lines = [
+            f"# ARC-Bench / {title}",
+            "",
+            "This archive contains the requirement documents and test suites for this ARC-Bench track.",
+            "",
+            "## Included",
+            "",
+            "- `requirements.md` and `requirements.yaml` for each task",
+            "- `tests/` containing the benchmark test cases",
+            "- `prerequisites.md` when the task provides extra setup notes",
+            "",
+            "## How to run tests",
+            "",
+            "1. Prepare the corresponding project template or generated implementation.",
+            "2. Install the task runtime dependencies required by the target project.",
+            "3. Run the provided test suite inside the benchmark runner environment.",
+            "4. For web tasks, the tests are Playwright-based and expect the target app to be running.",
+            "",
+            "## Tasks",
+            "",
+        ]
+        for item in tasks:
+            lines.append(f"- `{item.id}`: {item.title}")
+        lines.append("")
+        return "\n".join(lines)
 
     @staticmethod
     def _extract_title(markdown: str, fallback: str) -> str:

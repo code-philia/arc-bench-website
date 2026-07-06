@@ -1,8 +1,9 @@
+import { DownloadOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../lib/api";
-import type { RequirementSummary } from "../lib/types";
+import type { BenchmarkDetail, RequirementSummary } from "../lib/types";
 import { QUICK_START_REQUIREMENT_ID, QUICK_START_TASK_TYPE } from "../quickstart/constants";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
@@ -60,13 +61,19 @@ function normalizeTaskType(value: string): PlaygroundTaskType | null {
   return null;
 }
 
+function hasBenchmarkDownload(task: RequirementSummary): task is BenchmarkDetail["tasks"][number] {
+  return "downloads" in task;
+}
+
 export default function PlaygroundTaskListPage() {
   const { taskType: rawTaskType = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const isCompetitionRoute = location.pathname.startsWith("/competitions/");
+  const isBenchmarkRoute = location.pathname.startsWith("/playground/arc-bench/");
   const taskType = normalizeTaskType(isCompetitionRoute ? rawTaskType || "web" : rawTaskType);
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
+  const [benchmark, setBenchmark] = useState<BenchmarkDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const quickStart = useQuickStart();
 
@@ -81,12 +88,30 @@ export default function PlaygroundTaskListPage() {
       return;
     }
 
+    if (isBenchmarkRoute && taskType) {
+      api
+        .getBenchmark(taskType)
+        .then((detail) => {
+          setBenchmark(detail);
+          setRequirements(detail.tasks);
+        })
+        .catch(() => {
+          setBenchmark(null);
+          setRequirements([]);
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
+
     api
       .listRequirements(isCompetitionRoute ? "competition" : "playground")
-      .then(setRequirements)
+      .then((items) => {
+        setBenchmark(null);
+        setRequirements(items);
+      })
       .catch(() => setRequirements([]))
       .finally(() => setLoading(false));
-  }, [isCompetitionRoute, taskType]);
+  }, [isBenchmarkRoute, isCompetitionRoute, taskType]);
 
   const tasks = useMemo(() => {
     if (!taskType) {
@@ -105,6 +130,9 @@ export default function PlaygroundTaskListPage() {
   }, [requirements, taskType]);
 
   const orderedTasks = useMemo(() => {
+    if (isBenchmarkRoute) {
+      return tasks;
+    }
     if (taskType !== QUICK_START_TASK_TYPE) {
       return tasks;
     }
@@ -113,7 +141,7 @@ export default function PlaygroundTaskListPage() {
       return tasks;
     }
     return [priority, ...tasks.filter((task) => task.id !== QUICK_START_REQUIREMENT_ID)];
-  }, [taskType, tasks]);
+  }, [isBenchmarkRoute, taskType, tasks]);
 
   const totalTests = useMemo(() => orderedTasks.reduce((sum, task) => sum + task.total_tests, 0), [orderedTasks]);
 
@@ -147,6 +175,14 @@ export default function PlaygroundTaskListPage() {
                   <span className="sep">/</span>
                   <span className="current">{typeLabel(taskType)}</span>
                 </>
+              ) : isBenchmarkRoute ? (
+                <>
+                  <span>Playground</span>
+                  <span className="sep">/</span>
+                  <span>ARC-Bench</span>
+                  <span className="sep">/</span>
+                  <span className="current">{typeLabel(taskType)}</span>
+                </>
               ) : (
                 <>
                   <span>Playground</span>
@@ -158,8 +194,8 @@ export default function PlaygroundTaskListPage() {
               )}
             </div>
             <div className="competition-type-chip large">{typeChipLabel(taskType)}</div>
-            <h1>{typeLabel(taskType)}</h1>
-            <p>{typeSummaryForSource(taskType, tasks.length, isCompetitionRoute)}</p>
+            <h1>{isBenchmarkRoute ? `ARC-Bench / ${typeLabel(taskType)}` : typeLabel(taskType)}</h1>
+            <p>{isBenchmarkRoute ? (benchmark?.summary ?? typeSummary(taskType, tasks.length)) : typeSummaryForSource(taskType, tasks.length, isCompetitionRoute)}</p>
           </div>
           <div className="competition-detail-side">
             <div className="competition-stat-panel">
@@ -173,9 +209,14 @@ export default function PlaygroundTaskListPage() {
               </div>
               <div className="competition-stat-row">
                 <span>Source</span>
-                <strong>{sourceLabel(isCompetitionRoute)}</strong>
+                <strong>{isBenchmarkRoute ? "arc-bench" : sourceLabel(isCompetitionRoute)}</strong>
               </div>
             </div>
+            {isBenchmarkRoute && benchmark?.downloads?.track_bundle ? (
+              <a className="btn-outline competition-download-btn" href={benchmark.downloads.track_bundle}>
+                Download Bundle
+              </a>
+            ) : null}
           </div>
         </section>
 
@@ -191,6 +232,7 @@ export default function PlaygroundTaskListPage() {
                   <th style={{ width: "120px" }}>Category</th>
                   <th style={{ width: "110px" }}>REQs</th>
                   <th style={{ width: "100px" }}>Tests</th>
+                  {isBenchmarkRoute ? <th style={{ width: "92px" }}>Download</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -198,12 +240,27 @@ export default function PlaygroundTaskListPage() {
                   <tr
                     key={task.id}
                     data-quickstart-id={index === 0 ? "quickstart-task-item" : undefined}
-                    onClick={() => navigate(isCompetitionRoute ? `/requirements/${task.id}` : `/playground/task-bank/${taskType}/${task.id}`)}
+                    onClick={() => navigate(
+                      isCompetitionRoute
+                        ? `/requirements/${task.id}`
+                        : isBenchmarkRoute
+                          ? `/playground/arc-bench/${taskType}/${task.id}`
+                          : `/playground/task-bank/${taskType}/${task.id}`,
+                    )}
                   >
                     <td className="task-id">{task.display_id}</td>
                     <td>
                       <div className="task-name">
-                        <Link className="inline-link" to={isCompetitionRoute ? `/requirements/${task.id}` : `/playground/task-bank/${taskType}/${task.id}`}>
+                        <Link
+                          className="inline-link"
+                          to={
+                            isCompetitionRoute
+                              ? `/requirements/${task.id}`
+                              : isBenchmarkRoute
+                                ? `/playground/arc-bench/${taskType}/${task.id}`
+                                : `/playground/task-bank/${taskType}/${task.id}`
+                          }
+                        >
                           {task.title}
                         </Link>
                         <span className="sub">{task.summary}</span>
@@ -214,6 +271,23 @@ export default function PlaygroundTaskListPage() {
                     </td>
                     <td>{task.module_count}</td>
                     <td>{task.total_tests}</td>
+                    {isBenchmarkRoute ? (
+                      <td onClick={(event) => event.stopPropagation()}>
+                        {hasBenchmarkDownload(task) && task.downloads?.task_bundle ? (
+                          <a
+                            className="benchmark-task-download-button"
+                            href={task.downloads.task_bundle}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Download ${task.title}`}
+                          >
+                            <DownloadOutlined />
+                            <span>ZIP</span>
+                          </a>
+                        ) : (
+                          <span className="benchmark-task-download-button disabled">N/A</span>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
