@@ -167,7 +167,7 @@ children:
       and the confirmation result boundary after a successful booking.
       This node can guide generation of shared UI such as the booking form skeleton, selected-train summary area,
       and booking-success message area.
-      Optional visual reference: ![image](./reference/booking-page.png) ![image](./reference/booking-success.png)
+      Optional visual reference: ![image](./reference/booking-page.png)
     dependencies:
       - REQ-1
       - REQ-2
@@ -230,7 +230,7 @@ children:
           After a booking record has been created successfully, the system must load the newly created booking record
           and display a success page or success panel.
           The page must display the booking number, train summary, passenger summary, and success status
-          rather than only a static success message. Visual reference: ![image](./reference/booking-success.png)
+          rather than only a static success message.
         dependencies:
           - REQ-3.2
         scenarios:
