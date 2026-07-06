@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     runner_memory_limit: str = "4g"
     runner_timeout_seconds: int = 1200
     agent_health_timeout_seconds: int = 90
+    pip_index_url: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    pip_trusted_host: str = "pypi.tuna.tsinghua.edu.cn"
+    pip_extra_index_url: str | None = None
 
     model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False, extra="ignore")
 

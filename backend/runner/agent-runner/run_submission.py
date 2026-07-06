@@ -454,6 +454,51 @@ def resolve_python_agent_entrypoint() -> Path:
     raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
 
 
+def is_arc_agent_submission(entrypoint: Path) -> bool:
+    if not (SUBMISSION_DIR / "agent_workflow.py").is_file():
+        return False
+    if not (SUBMISSION_DIR / "app_types").is_dir():
+        return False
+    try:
+        source = entrypoint.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "ARCWorkflowManager" in source and '"requirement_path"' in source
+
+
+def map_task_category_to_app_type(category: str) -> str:
+    normalized = str(category or "").strip().lower()
+    if normalized in {"android", "mobile", "mobileapp", "mobile_app"}:
+        return "android"
+    return "web"
+
+
+def build_generation_agent_command(entrypoint: Path) -> list[str]:
+    command = ["python3", entrypoint.name]
+    if not is_arc_agent_submission(entrypoint):
+        return command
+
+    spec = read_spec()
+    task_payload = spec.get("task") if isinstance(spec, dict) else {}
+    category = ""
+    if isinstance(task_payload, dict):
+        category = str(task_payload.get("category") or "").strip()
+    app_type = map_task_category_to_app_type(category)
+    command.extend(
+        [
+            str(TASK_DIR),
+            "--output-dir",
+            str(TEMPLATE_DIR),
+            "--app-type",
+            app_type,
+        ]
+    )
+    if app_type == "web":
+        command.extend(["--web-port", str(WEB_APP_PORT)])
+    append_debug_log(f"Detected arc-agent submission, launching with fixed args: {' '.join(command)}")
+    return command
+
+
 def clear_request_file(path: Path) -> None:
     try:
         path.unlink()
@@ -580,7 +625,7 @@ def build_agent_environment() -> dict[str, str]:
 
 def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
     entrypoint = resolve_python_agent_entrypoint()
-    command = ["python3", entrypoint.name]
+    command = build_generation_agent_command(entrypoint)
     append_runner_event("start_agent", "Launching generation agent")
     return run_command(
         command,

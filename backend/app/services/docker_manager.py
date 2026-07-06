@@ -104,7 +104,13 @@ class DockerManager:
             "VISUAL_BASE_URL": builtin_visual_base_url,
             "VISUAL_MODEL": self.settings.builtin_visual_model or "",
             "ARC_DEBUG": str(self.settings.builtin_debug_mode),
+            "PIP_INDEX_URL": self.settings.pip_index_url,
+            "PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
+            "ARCBENCH_PIP_INDEX_URL": self.settings.pip_index_url,
         }
+        if self.settings.pip_extra_index_url:
+            environment["PIP_EXTRA_INDEX_URL"] = self.settings.pip_extra_index_url
+            environment["ARCBENCH_PIP_EXTRA_INDEX_URL"] = self.settings.pip_extra_index_url
         if github_email and github_email.strip():
             environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
         if github_username and github_username.strip():
