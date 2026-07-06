@@ -31,6 +31,10 @@ TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
 PAUSE_REQUEST_PATH = ARTIFACTS_DIR / "pause.request.json"
 RESUME_REQUEST_PATH = ARTIFACTS_DIR / "resume.request.json"
 CHECKPOINT_PATH = ARTIFACTS_DIR / "checkpoint.json"
+PIP_CACHE_DIR = Path("/tmp/arcbench/pip-cache")
+PIP_INSTALL_ATTEMPTS = 3
+PIP_DEFAULT_TIMEOUT_SECONDS = 120
+PIP_RESUME_RETRIES = 8
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
@@ -484,14 +488,70 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
         append_debug_log("No submission requirements.txt found, skipping dependency install")
         return
     append_runner_event("start_agent", "Installing agent dependencies")
-    run_command(
-        ["python3", "-m", "pip", "install", "--no-cache-dir", "-r", "requirements.txt"],
-        cwd=SUBMISSION_DIR,
-        stdout_file=stdout_file,
-        stderr_file=stderr_file,
-        check=True,
-        label="agent-pip-install",
-    )
+    PIP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pip_env = {
+        **os.environ,
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PIP_NO_INPUT": "1",
+        "PIP_ROOT_USER_ACTION": "ignore",
+        "PIP_DEFAULT_TIMEOUT": str(PIP_DEFAULT_TIMEOUT_SECONDS),
+        "PIP_RESUME_RETRIES": str(PIP_RESUME_RETRIES),
+        "PIP_CACHE_DIR": str(PIP_CACHE_DIR),
+    }
+    pip_index_url = os.environ.get("ARCBENCH_PIP_INDEX_URL", "").strip()
+    pip_extra_index_url = os.environ.get("ARCBENCH_PIP_EXTRA_INDEX_URL", "").strip()
+    if pip_index_url:
+        pip_env["PIP_INDEX_URL"] = pip_index_url
+    if pip_extra_index_url:
+        pip_env["PIP_EXTRA_INDEX_URL"] = pip_extra_index_url
+
+    last_error: subprocess.CalledProcessError | None = None
+    for attempt in range(1, PIP_INSTALL_ATTEMPTS + 1):
+        append_debug_log(
+            f"Starting pip install attempt {attempt}/{PIP_INSTALL_ATTEMPTS} with cache_dir={PIP_CACHE_DIR}"
+        )
+        try:
+            run_command(
+                [
+                    "python3",
+                    "-m",
+                    "pip",
+                    "install",
+                    "--retries",
+                    "10",
+                    "--timeout",
+                    str(PIP_DEFAULT_TIMEOUT_SECONDS),
+                    "--resume-retries",
+                    str(PIP_RESUME_RETRIES),
+                    "--prefer-binary",
+                    "-r",
+                    "requirements.txt",
+                ],
+                cwd=SUBMISSION_DIR,
+                stdout_file=stdout_file,
+                stderr_file=stderr_file,
+                check=True,
+                label="agent-pip-install",
+                env=pip_env,
+            )
+            last_error = None
+            break
+        except subprocess.CalledProcessError as error:
+            last_error = error
+            if attempt >= PIP_INSTALL_ATTEMPTS:
+                break
+            append_runner_event(
+                "start_agent",
+                f"Agent dependency install failed on attempt {attempt}, retrying",
+                status="warning",
+            )
+            append_debug_log(
+                f"pip install attempt {attempt} failed with code={error.returncode}; retrying after backoff"
+            )
+            time.sleep(min(5 * attempt, 15))
+
+    if last_error is not None:
+        raise last_error
     append_runner_event("start_agent", "Agent dependencies installed", status="success")
 
 
