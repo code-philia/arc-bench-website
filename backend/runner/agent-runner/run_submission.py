@@ -228,6 +228,7 @@ def reset_traceability_storage() -> None:
 
 
 def initialize_traceability_db() -> None:
+    TRACEABILITY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     reset_traceability_storage()
     append_debug_log(f"Initializing traceability database at {TRACEABILITY_DB_PATH}")
     connection = sqlite3.connect(TRACEABILITY_DB_PATH)
