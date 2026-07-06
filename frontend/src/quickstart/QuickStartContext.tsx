@@ -131,7 +131,6 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
       ...current,
       selectedNodeId: current.selectedNodeId ?? current.currentNodeId ?? "ROOT",
       currentNodeId: current.currentNodeId ?? current.selectedNodeId ?? "ROOT",
-      detailExpanded: true,
     }));
   }, []);
 

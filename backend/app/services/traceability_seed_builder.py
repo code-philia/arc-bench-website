@@ -1,5 +1,7 @@
 import json
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -126,10 +128,9 @@ class TraceabilitySeedBuilder:
             connection.close()
 
     def write_snapshot_file_from_database(self, output_path: Path, db_path: Path) -> None:
-        connection = sqlite3.connect(db_path)
+        connection = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
         connection.row_factory = sqlite3.Row
         try:
-            ensure_traceability_schema(connection)
             snapshot = self._build_snapshot_from_connection(connection)
         finally:
             connection.close()
@@ -393,9 +394,22 @@ class TraceabilitySeedBuilder:
     @staticmethod
     def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        tmp_path.replace(path)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(path.parent),
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            text=True,
+        )
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                output.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+            os.replace(tmp_path, path)
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     @staticmethod
     def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:

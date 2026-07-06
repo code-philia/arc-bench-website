@@ -317,6 +317,42 @@ function findNewestCommitForNode(
   return null;
 }
 
+function parseInterfaceDisplayContent(content: string) {
+  const fallback = {
+    title: "",
+    description: content.trim(),
+  };
+  const normalized = content.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(normalized) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") {
+      return fallback;
+    }
+    const title = String(
+      parsed.name
+      ?? parsed.title
+      ?? parsed.interface_name
+      ?? parsed.interfaceId
+      ?? "",
+    ).trim();
+    const description = String(
+      parsed.description
+      ?? parsed.summary
+      ?? parsed.content
+      ?? "",
+    ).trim();
+    return {
+      title,
+      description,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function TraceabilityPanel({
   traceability,
   nodeId,
@@ -392,6 +428,7 @@ function TraceabilityPanel({
         <div className="traceability-card-list">
           {traceability.interfaces.map((item) => {
             const isCardSelected = selectedItemKind === "interface" && selectedItemId === item.interface_id;
+            const displayContent = parseInterfaceDisplayContent(item.content);
             return (
             <article
               key={item.interface_id}
@@ -415,6 +452,12 @@ function TraceabilityPanel({
                 <div>
                   <div className="traceability-card-id">{item.interface_id}</div>
                   <div className="traceability-card-path">{item.file_path}:{formatLineNumber(item.first_line)}</div>
+                  {displayContent.title ? (
+                    <div className="traceability-card-title">{displayContent.title}</div>
+                  ) : null}
+                  {displayContent.description ? (
+                    <div className="traceability-card-content">{displayContent.description}</div>
+                  ) : null}
                 </div>
                 <div className="traceability-chip-row">
                   <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
@@ -423,7 +466,6 @@ function TraceabilityPanel({
                   </span>
                 </div>
               </div>
-              <div className="traceability-card-content">{item.content}</div>
               <div className="traceability-meta-grid">
                 <div>
                   <span className="traceability-meta-label">Req IDs</span>
@@ -1250,7 +1292,7 @@ function CommitHistoryPanel({
                 commit.short_oid,
                 commit.node_id,
                 formatCommitDateTime(commit.committed_at),
-              ].filter(Boolean).join(" 路 ")}</span>
+              ].filter(Boolean).join(" ")}</span>
             </button>
           );
         })}
@@ -1313,7 +1355,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [stdioTab, setStdioTab] = useState<"stdout" | "stderr">("stdout");
   const [sidebarTab, setSidebarTab] = useState<"status" | "traceability">("status");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
-  const [detailExpanded, setDetailExpanded] = useState(true);
+  const [detailExpanded, setDetailExpanded] = useState(false);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [pulseNodeId, setPulseNodeId] = useState<string | null>(null);
   const [sidebarMinimized, setSidebarMinimized] = useState(false);
@@ -1362,7 +1404,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [submissionTaskAssets, setSubmissionTaskAssets] = useState<SubmissionTaskAssets | null>(null);
   const [traceabilityOverlayVisible, setTraceabilityOverlayVisible] = useState(false);
   const [editableNodeId, setEditableNodeId] = useState<string | null>("ROOT");
-  const [editableDetailExpanded, setEditableDetailExpanded] = useState(true);
+  const [editableDetailExpanded, setEditableDetailExpanded] = useState(false);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
   const [editableReloadToken, setEditableReloadToken] = useState(0);
   const executionPaused = submission?.status === "PAUSED";
@@ -1782,14 +1824,11 @@ export default function PlaygroundSubmissionDetailPage() {
     visualEventCountRef.current = events.length;
     if (useQuickStartSubmission) {
       quickStart.setSelectedNode(newest.node_id);
-      quickStart.setDetailExpanded(true);
       setSelectedNodeId(newest.node_id);
-      setDetailExpanded(true);
       setFocusNodeId(newest.node_id);
       setPulseNodeId(newest.node_id);
     } else {
       setSelectedNodeId(newest.node_id);
-      setDetailExpanded(true);
       setFocusNodeId(newest.node_id);
       setPulseNodeId(newest.node_id);
     }
@@ -1918,10 +1957,8 @@ export default function PlaygroundSubmissionDetailPage() {
       setSelectedNodeId(commit.node_id);
       setFocusNodeId(commit.node_id);
       setPulseNodeId(commit.node_id);
-      setDetailExpanded(true);
       if (useQuickStartSubmission) {
         quickStart.setSelectedNode(commit.node_id);
-        quickStart.setDetailExpanded(true);
       }
     }
     if (activeTab === "diff") {
@@ -1978,7 +2015,7 @@ export default function PlaygroundSubmissionDetailPage() {
       editableTreeDirtyRef.current = false;
       setEditableTree(null);
       setEditableNodeId("ROOT");
-      setEditableDetailExpanded(true);
+      setEditableDetailExpanded(false);
     }
   };
 
@@ -2009,14 +2046,11 @@ export default function PlaygroundSubmissionDetailPage() {
     setSelectedCommitOid(commit.oid);
     setSelectedNodeId(targetNodeId);
     setEditableNodeId(targetNodeId);
-    setDetailExpanded(true);
-    setEditableDetailExpanded(true);
     setEditableReloadToken((current) => current + 1);
     setFocusNodeId(targetNodeId);
     setPulseNodeId(null);
     if (useQuickStartSubmission) {
       quickStart.setSelectedNode(targetNodeId);
-      quickStart.setDetailExpanded(true);
     }
   };
 
@@ -2244,7 +2278,7 @@ export default function PlaygroundSubmissionDetailPage() {
                   onClick={handleParseTraceability}
                   disabled={traceabilityLoading || (!activeSelectedNodeId && !traceabilityOverlayVisible)}
                 >
-                  Parse
+                  Pause
                 </button>
               </div>
 
@@ -2391,13 +2425,10 @@ export default function PlaygroundSubmissionDetailPage() {
                   onSelectNode={(nodeId) => {
                     if (submission?.status === "PAUSED") {
                       setEditableNodeId(nodeId);
-                      setEditableDetailExpanded(Boolean(nodeId));
                     } else {
                       setSelectedNodeId(nodeId);
-                      setDetailExpanded(Boolean(nodeId));
                       if (useQuickStartSubmission) {
                         quickStart.setSelectedNode(nodeId);
-                        quickStart.setDetailExpanded(Boolean(nodeId));
                       }
                     }
                   }}
@@ -2441,15 +2472,12 @@ export default function PlaygroundSubmissionDetailPage() {
                     const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
                     if (targetNodeId) {
                       setSelectedNodeId(targetNodeId);
-                      setDetailExpanded(true);
                       setFocusNodeId(targetNodeId);
                       if (submission?.status === "PAUSED") {
                         setEditableNodeId(targetNodeId);
-                        setEditableDetailExpanded(true);
                       }
                       if (useQuickStartSubmission) {
                         quickStart.setSelectedNode(targetNodeId);
-                        quickStart.setDetailExpanded(true);
                       }
                     }
                     setSelectedTraceabilityKind(kind);

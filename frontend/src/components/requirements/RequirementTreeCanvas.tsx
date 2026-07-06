@@ -140,7 +140,7 @@ const HORIZONTAL_GAP = 68;
 const VERTICAL_GAP = 45;
 const TRACEABILITY_NODE_WIDTH = 188;
 const TRACEABILITY_COLUMN_GAP = 56;
-const TRACEABILITY_ROW_GAP = 20;
+const TRACEABILITY_ROW_GAP = 12;
 const TRACEABILITY_OFFSET_X = 84;
 const FLOW_MARGIN_X = 32;
 const TRACEABILITY_TYPE_COLORS: Record<string, string> = {
@@ -473,59 +473,24 @@ function buildFlowFromTree(
       const traceEdges: Edge[] = [];
       const relationEdges: Edge[] = [];
       const desiredRequirementCenters = new Map<string, number>();
-      const placedRangesByColumn: Record<string, Array<[number, number]>> = {};
-      const traceBoundsByRequirement = new Map<string, { top: number; bottom: number }>();
       const localInterfaceNodeIdByInterfaceId = new Map<string, string>();
-      [...INTERFACE_TYPES, ...TEST_TYPES].forEach((key) => { placedRangesByColumn[key] = []; });
-
-      const placeBlockNear = (column: string, desiredStartY: number, blockHeight: number): number => {
-        const ranges = placedRangesByColumn[column];
-        const padding = 8;
-        const minStart = FLOW_MARGIN_Y;
-        let bestStart = Math.max(desiredStartY, minStart);
-        const collides = (start: number): boolean => {
-          const end = start + blockHeight;
-          return ranges.some(([rStart, rEnd]) => start < rEnd + padding && end + padding > rStart);
-        };
-        if (collides(bestStart)) {
-          const candidates = new Set<number>([bestStart, minStart]);
-          for (const [rStart, rEnd] of ranges) {
-            candidates.add(rEnd + padding);
-            candidates.add(Math.max(minStart, rStart - padding - blockHeight));
-          }
-          const sortedCandidates = [...candidates].sort((a, b) => {
-            const distanceDelta = Math.abs(a - desiredStartY) - Math.abs(b - desiredStartY);
-            if (distanceDelta !== 0) {
-              return distanceDelta;
-            }
-            return a - b;
-          });
-          for (const candidate of sortedCandidates) {
-            if (candidate >= minStart && !collides(candidate)) {
-              bestStart = candidate;
-              break;
-            }
-          }
-          if (collides(bestStart)) {
-            const maxEnd = ranges.reduce((maxValue, [, rEnd]) => Math.max(maxValue, rEnd), minStart);
-            bestStart = Math.max(maxEnd + padding, minStart);
-          }
-        }
-        ranges.push([bestStart, bestStart + blockHeight]);
-        ranges.sort((a, b) => a[0] - b[0]);
-        return bestStart;
-      };
-
-      const updateRequirementTraceBounds = (requirementId: string, top: number, height: number) => {
-        const current = traceBoundsByRequirement.get(requirementId);
-        const bottom = top + height;
-        if (!current) {
-          traceBoundsByRequirement.set(requirementId, { top, bottom });
-          return;
-        }
-        current.top = Math.min(current.top, top);
-        current.bottom = Math.max(current.bottom, bottom);
-      };
+      const traceabilityBlocks: Array<{
+        anchorNodeId: string;
+        anchorCenterY: number;
+        blockHeight: number;
+        desiredStartY: number;
+        shouldRender: boolean;
+        isFocusedRequirement: boolean;
+        items: Array<{
+          kind: "interface" | "test";
+          column: string;
+          nodeId: string;
+          yOffset: number;
+          height: number;
+          interfaceItem?: SubmissionTraceabilityInterface;
+          testItem?: SubmissionTraceabilityTest;
+        }>;
+      }> = [];
 
       for (const anchorNodeId of anchorNodeIds) {
         const anchorCenterY = anchorCenters.get(anchorNodeId) ?? baseRequirementCenters.get(anchorNodeId) ?? FLOW_MARGIN_Y;
@@ -541,177 +506,316 @@ function buildFlowFromTree(
           interfacesByType[t].push(item);
         });
 
-        for (const ifaceType of INTERFACE_TYPES) {
-          const typeInterfaces = interfacesByType[ifaceType];
-          if (typeInterfaces.length === 0) continue;
-          const colX = interfaceColumnX[ifaceType];
-          const heights = typeInterfaces.map((item) => {
-            const nodeId = `traceability-interface:${item.interface_id}`;
-            return measuredTraceabilityHeights[nodeId]
-              ?? estimateTraceabilityNodeHeight(
-                item.interface_id,
-                fileBasename(item.file_path),
-                formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
-              );
-          });
-          const blockHeight = heights.reduce((sum, height) => sum + height, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
-          const desiredStartY = anchorCenterY - blockHeight / 2;
-          const startY = placeBlockNear(ifaceType, desiredStartY, blockHeight);
-          const positions: number[] = [];
-          let cursor = startY;
-          for (const height of heights) {
-            positions.push(cursor);
-            cursor += height + TRACEABILITY_ROW_GAP;
-          }
-          heights.forEach((height, index) => {
-            updateRequirementTraceBounds(anchorNodeId, positions[index] ?? anchorCenterY, height);
-          });
-          if (shouldRender) {
-            typeInterfaces.forEach((item, index) => {
-              const nodeId = `traceability-interface:${item.interface_id}`;
-              localInterfaceNodeIdByInterfaceId.set(item.interface_id, nodeId);
-              const subtitle = formatInterfaceMeta(item);
-              traceNodes.push({
-                id: nodeId,
-                type: "traceabilityNode",
-                sourcePosition: Position.Right,
-                targetPosition: Position.Left,
-                position: { x: colX, y: positions[index] ?? anchorCenterY },
-                data: {
-                  kind: "interface",
-                  label: item.interface_id,
-                  title: fileBasename(item.file_path),
-                  subtitle,
-                  requirementNodeId: anchorNodeId,
-                  traceabilityId: item.interface_id,
-                  filePath: item.file_path,
-                  firstLine: item.first_line,
-                  itemType: item.type,
-                  dimmed: hasExplicitRequirementSelection
-                    ? Boolean(focusedRequirementId) && !isFocusedRequirement
-                    : Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "interface" && selectedTraceabilityId !== item.interface_id),
-                  onMeasuredHeightChange,
-                  selected: selectedTraceabilityKind === "interface" && selectedTraceabilityId === item.interface_id,
-                  visualState: "default",
-                  pulse: false,
-                  dependencySourcesVisible: false,
-                  dependencyTargetsVisible: false,
-                },
-                draggable: false,
-                selectable: false,
-                zIndex: 4,
-              });
-              if (isFocusedRequirement && topLevelInterfaceType === ifaceType) {
-                traceEdges.push({
-                  id: `traceability-link:${anchorNodeId}:${nodeId}`,
-                  source: anchorNodeId,
-                  target: nodeId,
-                  sourceHandle: "traceability-source",
-                  targetHandle: "traceability-target",
-                  type: "traceabilityEdge",
-                  animated: false,
-                  zIndex: 3,
-                  style: {
-                    stroke: TRACEABILITY_EDGE_COLOR,
-                    strokeWidth: 1.55,
-                  },
-                });
-              }
-            });
-          }
-        }
-
         const testsByType: Record<string, typeof nodeTests> = {};
         TEST_TYPES.forEach((t) => { testsByType[t] = []; });
         nodeTests.forEach((item) => {
           const t = normalizeTestType(item.type);
           testsByType[t].push(item);
         });
+        const columnTraceabilityItems: Record<string, Array<{
+          kind: "interface" | "test";
+          column: string;
+          nodeId: string;
+          height: number;
+          interfaceItem?: SubmissionTraceabilityInterface;
+          testItem?: SubmissionTraceabilityTest;
+        }>> = {};
+        [...INTERFACE_TYPES, ...TEST_TYPES].forEach((column) => {
+          columnTraceabilityItems[column] = [];
+        });
+
+        for (const ifaceType of INTERFACE_TYPES) {
+          for (const item of interfacesByType[ifaceType]) {
+            const nodeId = `traceability-interface:${item.interface_id}`;
+            const height = measuredTraceabilityHeights[nodeId]
+              ?? estimateTraceabilityNodeHeight(
+                item.interface_id,
+                fileBasename(item.file_path),
+                formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
+              );
+            columnTraceabilityItems[ifaceType].push({
+              kind: "interface",
+              column: ifaceType,
+              nodeId,
+              height,
+              interfaceItem: item,
+            });
+          }
+        }
 
         for (const testType of TEST_TYPES) {
-          const typeTests = testsByType[testType];
-          if (typeTests.length === 0) continue;
-          const colX = testColumnX[testType];
-          const heights = typeTests.map((item) => {
+          for (const item of testsByType[testType]) {
             const nodeId = `traceability-test:${item.test_id}`;
-            return measuredTraceabilityHeights[nodeId]
+            const height = measuredTraceabilityHeights[nodeId]
               ?? estimateTraceabilityNodeHeight(
                 item.test_id,
                 fileBasename(item.file_path),
                 formatTraceabilitySubtitle(item.file_path, item.first_line, item.type),
               );
-          });
-          const blockHeight = heights.reduce((sum, height) => sum + height, 0) + TRACEABILITY_ROW_GAP * Math.max(0, heights.length - 1);
-          const desiredStartY = anchorCenterY - blockHeight / 2;
-          const startY = placeBlockNear(testType, desiredStartY, blockHeight);
-          const positions: number[] = [];
-          let cursor = startY;
-          for (const height of heights) {
-            positions.push(cursor);
-            cursor += height + TRACEABILITY_ROW_GAP;
-          }
-          heights.forEach((height, index) => {
-            updateRequirementTraceBounds(anchorNodeId, positions[index] ?? anchorCenterY, height);
-          });
-          if (shouldRender) {
-            typeTests.forEach((item, index) => {
-              const nodeId = `traceability-test:${item.test_id}`;
-              const subtitle = formatTestMeta(item);
-              traceNodes.push({
-                id: nodeId,
-                type: "traceabilityNode",
-                sourcePosition: Position.Right,
-                targetPosition: Position.Left,
-                position: { x: colX, y: positions[index] ?? anchorCenterY },
-                data: {
-                  kind: "test",
-                  label: item.test_id,
-                  title: fileBasename(item.file_path),
-                  subtitle,
-                  requirementNodeId: anchorNodeId,
-                  traceabilityId: item.test_id,
-                  filePath: item.file_path,
-                  firstLine: item.first_line,
-                  itemType: item.type,
-                  testStatus: item.status,
-                  dimmed: hasExplicitRequirementSelection
-                    ? Boolean(focusedRequirementId) && !isFocusedRequirement
-                    : Boolean(focusedRequirementId) && (!isFocusedRequirement || selectedTraceabilityKind === "test" && selectedTraceabilityId !== item.test_id),
-                  onMeasuredHeightChange,
-                  selected: selectedTraceabilityKind === "test" && selectedTraceabilityId === item.test_id,
-                  visualState: "default",
-                  pulse: false,
-                  dependencySourcesVisible: false,
-                  dependencyTargetsVisible: false,
-                },
-                draggable: false,
-                selectable: false,
-                zIndex: 4,
-              });
-              if (isFocusedRequirement) {
-                traceEdges.push({
-                  id: `traceability-link:${anchorNodeId}:${nodeId}`,
-                  source: anchorNodeId,
-                  target: nodeId,
-                  sourceHandle: "traceability-source",
-                  targetHandle: "traceability-target",
-                  type: "traceabilityEdge",
-                  animated: false,
-                  zIndex: 3,
-                  style: {
-                    stroke: TRACEABILITY_EDGE_COLOR,
-                    strokeWidth: TRACEABILITY_EDGE_STROKE_WIDTH,
-                    strokeDasharray: TRACEABILITY_EDGE_DASHARRAY,
-                  },
-                });
-              }
+            columnTraceabilityItems[testType].push({
+              kind: "test",
+              column: testType,
+              nodeId,
+              height,
+              testItem: item,
             });
+          }
+        }
+
+        const orderedTraceabilityItems: Array<{
+          kind: "interface" | "test";
+          column: string;
+          nodeId: string;
+          yOffset: number;
+          height: number;
+          interfaceItem?: SubmissionTraceabilityInterface;
+          testItem?: SubmissionTraceabilityTest;
+        }> = [];
+        const activeColumns = [...INTERFACE_TYPES, ...TEST_TYPES].filter(
+          (column) => (columnTraceabilityItems[column] ?? []).length > 0,
+        );
+        let rowCursor = 0;
+        const maxRows = activeColumns.reduce(
+          (maxValue, column) => Math.max(maxValue, columnTraceabilityItems[column]?.length ?? 0),
+          0,
+        );
+
+        for (let rowIndex = 0; rowIndex < maxRows; rowIndex += 1) {
+          const rowItems = activeColumns
+            .map((column) => columnTraceabilityItems[column]?.[rowIndex] ?? null)
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+          if (rowItems.length === 0) {
+            continue;
+          }
+          const rowHeight = rowItems.reduce((maxValue, item) => Math.max(maxValue, item.height), 0);
+          rowItems.forEach((item) => {
+            orderedTraceabilityItems.push({
+              ...item,
+              yOffset: rowCursor + Math.max(0, (rowHeight - item.height) / 2),
+            });
+          });
+          rowCursor += rowHeight + TRACEABILITY_ROW_GAP;
+        }
+
+        if (orderedTraceabilityItems.length === 0) {
+          continue;
+        }
+
+        const blockHeight = rowCursor - TRACEABILITY_ROW_GAP;
+        traceabilityBlocks.push({
+          anchorNodeId,
+          anchorCenterY,
+          blockHeight,
+          desiredStartY: anchorCenterY - blockHeight / 2,
+          shouldRender,
+          isFocusedRequirement,
+          items: orderedTraceabilityItems,
+        });
+      }
+
+      const TRACEABILITY_BLOCK_PADDING = 6;
+      const sortedBlocks = [...traceabilityBlocks].sort((left, right) => left.desiredStartY - right.desiredStartY);
+      const starts = sortedBlocks.map((block) => block.desiredStartY);
+
+      const requiredSeparation = (
+        upperBlock: typeof sortedBlocks[number],
+        lowerBlock: typeof sortedBlocks[number],
+      ): number => {
+        let separation = 0;
+        let hasSharedColumn = false;
+        for (const upperItem of upperBlock.items) {
+          for (const lowerItem of lowerBlock.items) {
+            if (upperItem.column !== lowerItem.column) {
+              continue;
+            }
+            hasSharedColumn = true;
+            separation = Math.max(
+              separation,
+              upperItem.yOffset + upperItem.height + TRACEABILITY_BLOCK_PADDING - lowerItem.yOffset,
+            );
+          }
+        }
+        return hasSharedColumn ? Math.max(0, separation) : 0;
+      };
+
+      const maxIterations = Math.max(4, sortedBlocks.length * 6);
+      for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+        let changed = false;
+
+        for (let index = 0; index < sortedBlocks.length - 1; index += 1) {
+          const separation = requiredSeparation(sortedBlocks[index], sortedBlocks[index + 1]);
+          if (separation <= 0) {
+            continue;
+          }
+          const gap = starts[index + 1] - starts[index];
+          if (gap >= separation) {
+            continue;
+          }
+          const needed = separation - gap;
+          let moveUpper = needed / 2;
+          let moveLower = needed - moveUpper;
+          const maxUpperShift = Math.max(0, starts[index] - FLOW_MARGIN_Y);
+          if (moveUpper > maxUpperShift) {
+            const remainder = moveUpper - maxUpperShift;
+            moveUpper = maxUpperShift;
+            moveLower += remainder;
+          }
+          if (moveUpper > 0) {
+            starts[index] -= moveUpper;
+          }
+          if (moveLower > 0) {
+            starts[index + 1] += moveLower;
+          }
+          changed = true;
+        }
+
+        for (let index = 0; index < sortedBlocks.length; index += 1) {
+          let lowerBound = FLOW_MARGIN_Y;
+          if (index > 0) {
+            lowerBound = Math.max(
+              lowerBound,
+              starts[index - 1] + requiredSeparation(sortedBlocks[index - 1], sortedBlocks[index]),
+            );
+          }
+          let upperBound = Number.POSITIVE_INFINITY;
+          if (index < sortedBlocks.length - 1) {
+            upperBound = starts[index + 1] - requiredSeparation(sortedBlocks[index], sortedBlocks[index + 1]);
+          }
+          const target = Math.min(Math.max(sortedBlocks[index].desiredStartY, lowerBound), upperBound);
+          if (Number.isFinite(target) && Math.abs(target - starts[index]) > 0.25) {
+            starts[index] = target;
+            changed = true;
+          }
+        }
+
+        if (!changed) {
+          break;
+        }
+      }
+
+      if (starts.length > 0) {
+        const minStart = Math.min(...starts);
+        if (minStart > FLOW_MARGIN_Y) {
+          const upwardShift = minStart - FLOW_MARGIN_Y;
+          for (let index = 0; index < starts.length; index += 1) {
+            starts[index] -= upwardShift;
           }
         }
       }
 
-      traceBoundsByRequirement.forEach((bounds, requirementId) => {
-        desiredRequirementCenters.set(requirementId, (bounds.top + bounds.bottom) / 2);
+      sortedBlocks.forEach((block, blockIndex) => {
+        const startY = starts[blockIndex];
+        desiredRequirementCenters.set(block.anchorNodeId, block.anchorCenterY);
+        if (!block.shouldRender) {
+          return;
+        }
+        block.items.forEach((entry) => {
+          const y = startY + entry.yOffset;
+          if (entry.kind === "interface" && entry.interfaceItem) {
+            const item = entry.interfaceItem;
+            const ifaceType = entry.column;
+            localInterfaceNodeIdByInterfaceId.set(item.interface_id, entry.nodeId);
+            traceNodes.push({
+              id: entry.nodeId,
+              type: "traceabilityNode",
+              sourcePosition: Position.Right,
+              targetPosition: Position.Left,
+              position: { x: interfaceColumnX[ifaceType], y },
+              data: {
+                kind: "interface",
+                label: item.interface_id,
+                title: fileBasename(item.file_path),
+                subtitle: formatInterfaceMeta(item),
+                requirementNodeId: block.anchorNodeId,
+                traceabilityId: item.interface_id,
+                filePath: item.file_path,
+                firstLine: item.first_line,
+                itemType: item.type,
+                dimmed: hasExplicitRequirementSelection
+                  ? Boolean(focusedRequirementId) && !block.isFocusedRequirement
+                  : Boolean(focusedRequirementId) && (!block.isFocusedRequirement || selectedTraceabilityKind === "interface" && selectedTraceabilityId !== item.interface_id),
+                onMeasuredHeightChange,
+                selected: selectedTraceabilityKind === "interface" && selectedTraceabilityId === item.interface_id,
+                visualState: "default",
+                pulse: false,
+                dependencySourcesVisible: false,
+                dependencyTargetsVisible: false,
+              },
+              draggable: false,
+              selectable: false,
+              zIndex: 4,
+            });
+            if (block.isFocusedRequirement && topLevelInterfaceType === ifaceType) {
+              traceEdges.push({
+                id: `traceability-link:${block.anchorNodeId}:${entry.nodeId}`,
+                source: block.anchorNodeId,
+                target: entry.nodeId,
+                sourceHandle: "traceability-source",
+                targetHandle: "traceability-target",
+                type: "traceabilityEdge",
+                animated: false,
+                zIndex: 3,
+                style: {
+                  stroke: TRACEABILITY_EDGE_COLOR,
+                  strokeWidth: 1.55,
+                },
+              });
+            }
+            return;
+          }
+          if (entry.kind === "test" && entry.testItem) {
+            const item = entry.testItem;
+            const testType = entry.column;
+            traceNodes.push({
+              id: entry.nodeId,
+              type: "traceabilityNode",
+              sourcePosition: Position.Right,
+              targetPosition: Position.Left,
+              position: { x: testColumnX[testType], y },
+              data: {
+                kind: "test",
+                label: item.test_id,
+                title: fileBasename(item.file_path),
+                subtitle: formatTestMeta(item),
+                requirementNodeId: block.anchorNodeId,
+                traceabilityId: item.test_id,
+                filePath: item.file_path,
+                firstLine: item.first_line,
+                itemType: item.type,
+                testStatus: item.status,
+                dimmed: hasExplicitRequirementSelection
+                  ? Boolean(focusedRequirementId) && !block.isFocusedRequirement
+                  : Boolean(focusedRequirementId) && (!block.isFocusedRequirement || selectedTraceabilityKind === "test" && selectedTraceabilityId !== item.test_id),
+                onMeasuredHeightChange,
+                selected: selectedTraceabilityKind === "test" && selectedTraceabilityId === item.test_id,
+                visualState: "default",
+                pulse: false,
+                dependencySourcesVisible: false,
+                dependencyTargetsVisible: false,
+              },
+              draggable: false,
+              selectable: false,
+              zIndex: 4,
+            });
+            if (block.isFocusedRequirement) {
+              traceEdges.push({
+                id: `traceability-link:${block.anchorNodeId}:${entry.nodeId}`,
+                source: block.anchorNodeId,
+                target: entry.nodeId,
+                sourceHandle: "traceability-source",
+                targetHandle: "traceability-target",
+                type: "traceabilityEdge",
+                animated: false,
+                zIndex: 3,
+                style: {
+                  stroke: TRACEABILITY_EDGE_COLOR,
+                  strokeWidth: TRACEABILITY_EDGE_STROKE_WIDTH,
+                  strokeDasharray: TRACEABILITY_EDGE_DASHARRAY,
+                },
+              });
+            }
+          }
+        });
       });
 
       const relationEdgeIds = new Set<string>();
@@ -751,9 +855,7 @@ function buildFlowFromTree(
       return { nodes: traceNodes, edges: traceEdges, relationEdges, desiredRequirementCenters };
     };
 
-    const initialTraceabilityLayout = computeTraceabilityLayout(baseRequirementCenters);
-    requirementCenters = alignRequirementCenters(positionedNodes, baseRequirementCenters, initialTraceabilityLayout.desiredRequirementCenters);
-    traceabilityLayout = computeTraceabilityLayout(requirementCenters);
+    traceabilityLayout = computeTraceabilityLayout(baseRequirementCenters);
   }
   const nodes: Node<FlowNodeData>[] = positionedNodes.map((positioned) => {
     const node = positioned.data;
@@ -1048,11 +1150,11 @@ function RequirementStateLegend() {
       <div className="task-flow-legend-list">
         <div className="task-flow-legend-item">
           <span className="task-flow-legend-swatch design" />
-          <span>Design Done</span>
+          <span>Design</span>
         </div>
         <div className="task-flow-legend-item">
           <span className="task-flow-legend-swatch implement" />
-          <span>Implementation Done</span>
+          <span>Implement</span>
         </div>
         <div className="task-flow-legend-item">
           <span className="task-flow-legend-swatch test-passed" />
