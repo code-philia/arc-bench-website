@@ -176,7 +176,7 @@ class ExecutionService:
                 if not snapshot_updated:
                     debug_log.append(
                         "backend",
-                        "Traceability refresh was requested, but snapshot rebuild from traceability.db did not succeed",
+                        "Traceability refresh was requested, but traceability.snapshot.json is not available yet",
                     )
             if any(refresh_flags.values()):
                 SubmissionEventStream.publish(

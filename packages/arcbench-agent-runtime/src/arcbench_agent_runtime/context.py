@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_RUNNER_EVENTS_PATH = "/workspace/artifacts/runner-events.jsonl"
-DEFAULT_TRACEABILITY_DB_PATH = "/workspace/artifacts/traceability.db"
+DEFAULT_TRACEABILITY_DB_PATH = "/tmp/arcbench/traceability.db"
 DEFAULT_TRACEABILITY_SNAPSHOT_PATH = "/workspace/artifacts/traceability.snapshot.json"
 DEFAULT_DEMO_TEST_STATUS_PATH = "/workspace/artifacts/demo-test-statuses.json"
 DEFAULT_PROJECT_DIR = "/workspace/template"

@@ -26,7 +26,6 @@ STDOUT_PATH = ARTIFACTS_DIR / "stdout.log"
 STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
-TRACEABILITY_DB_PATH = ARTIFACTS_DIR / "traceability.db"
 TRACEABILITY_SNAPSHOT_PATH = ARTIFACTS_DIR / "traceability.snapshot.json"
 TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
 PAUSE_REQUEST_PATH = ARTIFACTS_DIR / "pause.request.json"
@@ -35,6 +34,22 @@ CHECKPOINT_PATH = ARTIFACTS_DIR / "checkpoint.json"
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
+
+
+def resolve_traceability_db_path() -> Path:
+    spec_path = SPEC_PATH
+    if spec_path.is_file():
+        try:
+            payload = json.loads(spec_path.read_text(encoding="utf-8"))
+            configured = str(payload.get("traceability_db_path") or "").strip()
+            if configured:
+                return Path(configured)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return Path("/tmp/arcbench/traceability.db")
+
+
+TRACEABILITY_DB_PATH = resolve_traceability_db_path()
 
 
 def append_debug_log(message: str) -> None:
@@ -201,10 +216,9 @@ def reset_traceability_storage() -> None:
     for path in (
         TRACEABILITY_DB_PATH,
         TRACEABILITY_SNAPSHOT_PATH,
+        TRACEABILITY_DB_PATH.with_suffix(".db-journal"),
         TRACEABILITY_DB_PATH.with_suffix(".db-wal"),
         TRACEABILITY_DB_PATH.with_suffix(".db-shm"),
-        ARTIFACTS_DIR / "traceability.db-wal",
-        ARTIFACTS_DIR / "traceability.db-shm",
     ):
         try:
             path.unlink()

@@ -20,7 +20,6 @@ class DemoAgentService:
         return self.bundle_path.read_bytes(), self.bundle_path.name
 
     def _build_bundle_from_directory(self, source_root: Path) -> bytes:
-        buffer = bytearray()
         from io import BytesIO
 
         memory_file = BytesIO()
@@ -29,5 +28,20 @@ class DemoAgentService:
                 relative_path = path.relative_to(source_root)
                 if path.is_dir():
                     continue
+                if self._should_skip_path(relative_path):
+                    continue
                 archive.write(path, arcname=relative_path.as_posix())
         return memory_file.getvalue()
+
+    @staticmethod
+    def _should_skip_path(relative_path: Path) -> bool:
+        parts = relative_path.parts
+        if not parts:
+            return False
+        if parts[0] == ".tmp":
+            return True
+        if "__pycache__" in parts:
+            return True
+        if relative_path.suffix == ".pyc":
+            return True
+        return False

@@ -220,14 +220,11 @@ class SubmissionArtifactService:
         if workspace_path is None:
             return None
         snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
-        db_path = workspace_path / "artifacts" / "traceability.db"
-        self._refresh_traceability_snapshot_from_db(snapshot_path, db_path)
         return snapshot_path if snapshot_path.is_file() else None
 
     def refresh_traceability_snapshot_for_workspace(self, workspace_path: Path, *, force: bool = False) -> bool:
         snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
-        db_path = workspace_path / "artifacts" / "traceability.db"
-        return self._refresh_traceability_snapshot_from_db(snapshot_path, db_path, force=force)
+        return snapshot_path.is_file()
 
     def _get_project_root(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
