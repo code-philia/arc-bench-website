@@ -376,7 +376,7 @@ def get_submission_commit_history(
 def get_submission_source(
     submission_id: str,
     file_path: str = "",
-    first_line: int | None = None,
+    first_line: str | None = None,
     kind: str = "file",
     commit_oid: str | None = None,
     db: Session = Depends(get_db),

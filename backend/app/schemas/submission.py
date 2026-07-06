@@ -98,7 +98,7 @@ class SubmissionTraceabilityInterface(BaseModel):
     type: str
     content: str
     file_path: str
-    first_line: int | None = None
+    first_line: str | None = None
     implemented: bool
     callers: list[str] = Field(default_factory=list)
     callees: list[str] = Field(default_factory=list)
@@ -110,7 +110,7 @@ class SubmissionTraceabilityTest(BaseModel):
     scenario_id: str | None = None
     type: str
     file_path: str
-    first_line: int | None = None
+    first_line: str | None = None
     status: str | None = None
 
 

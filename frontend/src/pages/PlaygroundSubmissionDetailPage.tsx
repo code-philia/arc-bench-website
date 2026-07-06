@@ -66,6 +66,23 @@ function formatLineNumber(value: number | null) {
   return value && value > 0 ? value : 1;
 }
 
+function parsePositiveLineNumber(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const normalized = String(value).trim();
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  return parsed > 0 ? parsed : null;
+}
+
+function formatTraceabilitySourceLocation(filePath: string, firstLine: string | null) {
+  const lineNumber = parsePositiveLineNumber(firstLine);
+  return lineNumber ? `${filePath}:${lineNumber}` : filePath;
+}
+
 function codeLines(content: string) {
   return content.replace(/\r\n/g, "\n").split("\n");
 }
@@ -372,7 +389,7 @@ function TraceabilityPanel({
   selectedItemId: string | null;
   selectedItemKind: "interface" | "test" | null;
   onSelectItem: (kind: "interface" | "test", id: string) => void;
-  onOpenSource: (payload: { filePath: string; firstLine?: number | null }) => void;
+  onOpenSource: (payload: { filePath: string; firstLine?: string | null }) => void;
 }) {
   const selectedCardRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -451,7 +468,7 @@ function TraceabilityPanel({
               <div className="traceability-card-top">
                 <div>
                   <div className="traceability-card-id">{item.interface_id}</div>
-                  <div className="traceability-card-path">{item.file_path}:{formatLineNumber(item.first_line)}</div>
+                  <div className="traceability-card-path">{formatTraceabilitySourceLocation(item.file_path, item.first_line)}</div>
                   {displayContent.title ? (
                     <div className="traceability-card-title">{displayContent.title}</div>
                   ) : null}
@@ -516,7 +533,7 @@ function TraceabilityPanel({
               <div className="traceability-card-top">
                 <div>
                   <div className="traceability-card-id">{item.test_id}</div>
-                  <div className="traceability-card-path">{item.file_path}:{formatLineNumber(item.first_line)}</div>
+                  <div className="traceability-card-path">{formatTraceabilitySourceLocation(item.file_path, item.first_line)}</div>
                 </div>
                 <div className="traceability-chip-row">
                   <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
@@ -1074,7 +1091,7 @@ function SubmissionFilePanel({
                       display: "grid",
                       gridTemplateColumns: "56px minmax(0, 1fr)",
                       gap: "12px",
-                      background: isHighlighted ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
+                      background: isHighlighted ? "rgba(250, 204, 21, 0.18)" : "transparent",
                       borderRadius: 0,
                       padding: "0 6px",
                       margin: "0 -6px",
@@ -1883,7 +1900,7 @@ export default function PlaygroundSubmissionDetailPage() {
     };
   }, [activeSelectedNodeId, submission, submissionId]);
 
-  const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: number | null }) => {
+  const openSource = async ({ filePath, firstLine }: { filePath: string; firstLine?: string | null }) => {
     if (!submissionId) {
       return;
     }

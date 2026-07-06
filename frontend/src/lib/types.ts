@@ -104,7 +104,7 @@ export type SubmissionTraceabilityInterface = {
   type: string;
   content: string;
   file_path: string;
-  first_line: number | null;
+  first_line: string | null;
   implemented: boolean;
   callers: string[];
   callees: string[];
@@ -116,7 +116,7 @@ export type SubmissionTraceabilityTest = {
   scenario_id: string | null;
   type: string;
   file_path: string;
-  first_line: number | null;
+  first_line: string | null;
   status: "passed" | "failed" | null;
 };
 

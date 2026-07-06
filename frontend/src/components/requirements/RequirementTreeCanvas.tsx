@@ -64,7 +64,7 @@ type FlowNodeData = {
   requirementNodeId?: string;
   traceabilityId?: string;
   filePath?: string;
-  firstLine?: number | null;
+  firstLine?: string | null;
   thumbnailSrc?: string | null;
   onMeasuredHeightChange?: (nodeId: string, height: number) => void;
   type?: RequirementNode["type"];
@@ -130,7 +130,7 @@ type RequirementTreeCanvasProps = {
     id: string;
     requirementNodeId: string | null;
     filePath: string;
-    firstLine: number | null;
+    firstLine: string | null;
   }) => void;
 };
 
@@ -202,8 +202,20 @@ function fileBasename(filePath: string): string {
   return segments[segments.length - 1] || filePath;
 }
 
-function formatTraceabilitySubtitle(filePath: string, lineNumber: number | null, badge: string): string {
-  const safeLine = lineNumber && lineNumber > 0 ? lineNumber : 1;
+function parsePositiveLineNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const normalized = String(value).trim();
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function formatTraceabilitySubtitle(filePath: string, lineNumber: string | null, badge: string): string {
+  const safeLine = parsePositiveLineNumber(lineNumber) ?? 1;
   return `${badge} · ${fileBasename(filePath)}:${safeLine}`;
 }
 

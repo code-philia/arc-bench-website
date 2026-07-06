@@ -103,7 +103,7 @@ class SubmissionArtifactService:
                     "type": str(row.get("type") or ""),
                     "content": str(row.get("content") or ""),
                     "file_path": str(row.get("file_path") or ""),
-                    "first_line": self._parse_positive_int(row.get("first_line")),
+                    "first_line": self._normalize_first_line_reference(row.get("first_line")),
                     "implemented": bool(row.get("implemented")),
                     "callers": self._parse_json_list(row.get("callers")),
                     "callees": self._parse_json_list(row.get("callees")),
@@ -124,7 +124,7 @@ class SubmissionArtifactService:
                     "scenario_id": None,
                     "type": str(row.get("type") or ""),
                     "file_path": str(row.get("file_path") or ""),
-                    "first_line": self._parse_positive_int(row.get("first_line")),
+                    "first_line": self._normalize_first_line_reference(row.get("first_line")),
                     "status": self._resolve_test_status(
                         test_status_by_id.get(test_id),
                         row.get("passed"),
@@ -139,7 +139,7 @@ class SubmissionArtifactService:
         submission: Submission,
         *,
         file_path: str,
-        first_line: int | None,
+        first_line: str | int | None,
         kind: str,
         commit_oid: str | None = None,
     ) -> dict[str, str | int]:
@@ -167,7 +167,7 @@ class SubmissionArtifactService:
 
         content = target_path.read_text(encoding="utf-8", errors="replace")
         language = LANGUAGE_BY_SUFFIX.get(target_path.suffix.lower(), "text")
-        highlight_line = first_line if first_line and first_line > 0 else 1
+        highlight_line = self._resolve_source_highlight_line(content, first_line)
 
         return {
             "kind": "file",
@@ -485,6 +485,40 @@ class SubmissionArtifactService:
         except (TypeError, ValueError):
             return None
         return parsed if parsed > 0 else None
+
+    @classmethod
+    def _normalize_first_line_reference(cls, raw_value: object) -> str | None:
+        if raw_value is None:
+            return None
+        normalized = str(raw_value).strip()
+        if not normalized:
+            return None
+        parsed_int = cls._parse_positive_int(normalized)
+        return str(parsed_int) if parsed_int is not None else normalized
+
+    @classmethod
+    def _resolve_source_highlight_line(cls, content: str, first_line: str | int | None) -> int:
+        lines = content.replace("\r\n", "\n").split("\n")
+        parsed_line_number = cls._parse_positive_int(first_line)
+        if parsed_line_number is not None:
+            return min(parsed_line_number, max(len(lines), 1))
+
+        normalized_matcher = cls._normalize_first_line_matcher(first_line)
+        if normalized_matcher:
+            for index, line in enumerate(lines, start=1):
+                if line.strip() == normalized_matcher:
+                    return index
+        return 1
+
+    @staticmethod
+    def _normalize_first_line_matcher(raw_value: object) -> str | None:
+        if raw_value is None:
+            return None
+        normalized = str(raw_value).replace("\r\n", "\n").strip()
+        if not normalized:
+            return None
+        first_non_empty_line = next((line.strip() for line in normalized.split("\n") if line.strip()), "")
+        return first_non_empty_line or None
 
     @staticmethod
     def _normalize_demo_test_status(raw_value: object) -> str | None:

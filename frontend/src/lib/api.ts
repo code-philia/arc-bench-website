@@ -187,14 +187,17 @@ export const api = {
   },
   getSubmissionSource(
     submissionId: string,
-    payload: { filePath: string; firstLine?: number | null; kind?: "file" | "diff"; commitOid?: string | null },
+    payload: { filePath: string; firstLine?: string | number | null; kind?: "file" | "diff"; commitOid?: string | null },
   ) {
     const params = new URLSearchParams({
       file_path: payload.filePath,
       kind: payload.kind ?? "file",
     });
-    if (payload.firstLine && payload.firstLine > 0) {
-      params.set("first_line", String(payload.firstLine));
+    if (payload.firstLine !== undefined && payload.firstLine !== null) {
+      const normalizedFirstLine = String(payload.firstLine).trim();
+      if (normalizedFirstLine) {
+        params.set("first_line", normalizedFirstLine);
+      }
     }
     if (payload.commitOid && payload.commitOid.trim()) {
       params.set("commit_oid", payload.commitOid.trim());
