@@ -1,8 +1,10 @@
-# A simulation of chinese railway ticket booking system
+# Train Ticket Booking System
 A train ticket booking system that provides user authentication, ticket search and booking, order management, and travel information services.
 
 ## REQ-1 System Home
-The default landing page after the system starts. The top area shows "assets/logo.png" on the left, and "Login", "Register", and a "My 12306" dropdown entry on the right. The navigation bar contains "Home", a "Booking" dropdown entry, and a "Travel guides" dropdown entry. The page also displays a banner carousel with "assets/banner1.jpg", "assets/banner2.jpg", and "assets/banner3.jpg", an empty search box area, and an empty "Quick Guide" area. ![image](./reference/homepage.png)
+The default landing page after the system starts. The top area shows "assets/logo.png" on the left, and "Login", "Register", and a "My 12306" dropdown entry on the right. The navigation bar contains "Home", a "Booking" dropdown entry, and a "Travel guides" dropdown entry. The page also displays a banner carousel with "assets/banner1.jpg", "assets/banner2.jpg", and "assets/banner3.jpg", a ticket search area, and a "Quick Guide" section. ![image](./reference/homepage.png)
+
+**Dependencies:** None
 
 ### REQ-1.1 Open system home page
 Display the home page with the top logo, authentication links, navigation bar, three banner images, the search area, and the "Quick Guide" area.
@@ -23,7 +25,7 @@ Display the "Quick Guide" area on the home page as a dedicated section for quick
 **Scenarios:**
 - Show the quick guide section on the home page
   - **GIVEN:** The user is on the home page.
-  - **WHEN:** Observe the content below the banner area.
+  - **WHEN:** Review the content below the banner area.
   - **THEN:** The page shows a visible "Quick Guide" section reserved for quick links.
 
 ## REQ-2 User Authentication
@@ -55,7 +57,7 @@ Display the registration form with a dropdown labeled "Nationality" showing the 
 **Scenarios:**
 - Display the registration form layout
   - **GIVEN:** The user is on the registration page.
-  - **WHEN:** Observe the form content.
+  - **WHEN:** Review the registration form content.
   - **THEN:** The page shows the labeled fields "Nationality", "Name", "Passport number", "Passport expiration date", "Date of birth", "Gender", "Username", "Password", "Confirm Password", and "Email address", the agreement checkbox text, and the "Register" button.
 
 #### REQ-2.1.3 Submit valid registration information
@@ -159,7 +161,7 @@ Display the login form with an input field whose placeholder is "Email/Username/
 **Scenarios:**
 - Display the login form layout
   - **GIVEN:** The user is on the login page.
-  - **WHEN:** Observe the page.
+  - **WHEN:** Review the login form.
   - **THEN:** The page shows the "Email/Username/Mobile number" input, the password input with the placeholder "Password", and the "LOGIN" button.
 
 #### REQ-2.2.3 Submit valid login credentials
@@ -257,7 +259,7 @@ Display a two-step forgot password flow. The first step shows a form with an inp
 **Scenarios:**
 - Display the forgot password forms
   - **GIVEN:** The user is on the forgot password page.
-  - **WHEN:** Observe the first step and continue to the second step after the identity check.
+  - **WHEN:** Review the first-step identity form and continue to the second step after the identity check.
   - **THEN:** The first step shows the "Email: " field, the "ID number: " field, and the "submit" button, and the second step shows the "New password: " field, the "Confirm new password: " field, and the "submit" button.
 
 #### REQ-2.4.3 Submit valid password reset information
@@ -349,7 +351,7 @@ Display a ticket search module on the home page with input placeholders "From", 
 **Scenarios:**
 - Display the quick search module on the home page
   - **GIVEN:** The user is on the home page.
-  - **WHEN:** Observe the search area.
+  - **WHEN:** Review the search area.
   - **THEN:** The page shows inputs with the placeholders "From", "To", and "Date", and a "Search" button.
 
 #### REQ-3.1.2 Choose location by typing
@@ -384,6 +386,7 @@ Allow the user to click the departure date input, open a date picker, choose one
   - **GIVEN:** The user is on the home page search module.
   - **WHEN:** Click the date input field and click a valid date from the current day through the next two weeks.
   - **THEN:** The date picker opens, the selected date is accepted, and the date input field shows the selected date.
+
 - Prevent selection of an expired date
   - **GIVEN:** The user is on the home page search module with the date picker open.
   - **WHEN:** Try to click a date earlier than the current day or outside the next two weeks.
@@ -446,7 +449,7 @@ Display each train row with one or more price lines in the "Price" column, where
 **Scenarios:**
 - Show ticket prices and booking actions in each result row
   - **GIVEN:** The user is on a populated ticket search results page.
-  - **WHEN:** Observe the train result rows.
+  - **WHEN:** Review the train result rows.
   - **THEN:** Each result row shows one or more seat price lines in the "Price" column, and each price line is followed by a "Book" button.
 
 #### REQ-3.2.3 Show empty search results gracefully
@@ -587,7 +590,7 @@ Provide transfer plans when there is no direct train and allow the user to view,
 **Dependencies:** REQ-3.2
 
 #### REQ-3.3.1 Show transfer plans when no direct train exists
-When no direct train matches the search, calculate transfer plans by finding a transfer station that has train services from the departure place and to the destination, enforce the time connection requirement, calculate the total travel time as the sum of the two train segments and the transfer waiting time, sort the qualified plans by total travel time, and display the first 10 plans.
+When no direct train matches the search, calculate valid transfer plans that satisfy the connection-time requirement, sort the qualified plans by total travel time, and display the first 10 plans.
 
 **Dependencies:** REQ-3.2.1
 
@@ -595,7 +598,7 @@ When no direct train matches the search, calculate transfer plans by finding a t
 - Display transfer plans after a no-direct-train search
   - **GIVEN:** The user is on the ticket search results page and there is no direct train for the current search.
   - **WHEN:** The page calculates available transfer plans.
-  - **THEN:** The page shows up to 10 qualified transfer plans sorted by total travel time.
+  - **THEN:** The page lists up to 10 qualified transfer plans, sorted by total travel time.
 
 #### REQ-3.3.2 View transfer plan details
 Display each transfer plan as two train segments, one from the departure place to the transfer station and one from the transfer station to the destination, with the train number, departure time, arrival time, travel time, price, transfer waiting time, and a "Book" button.
@@ -605,7 +608,7 @@ Display each transfer plan as two train segments, one from the departure place t
 **Scenarios:**
 - Display detailed information for each transfer plan
   - **GIVEN:** The user is viewing transfer plans on the ticket search results page.
-  - **WHEN:** Observe one transfer plan.
+  - **WHEN:** Review one transfer plan.
   - **THEN:** The plan shows the first train segment, the second train segment, the transfer waiting time, and a "Book" button.
 
 #### REQ-3.3.3 Sort transfer plans by departure time
@@ -663,7 +666,7 @@ When the user clicks the top "My 12306" entry without being logged in, check the
   - **THEN:** Navigate to the login page.
 
 #### REQ-4.1.2 Open personal center home page
-After login, open the personal center home page from the top "My 12306" entry. The left side shows the items "Personal Center", "Order center", "Personal", and "Information management". The default right-side content shows the icon "assets/noticepic.png", the user name, and a notice box containing "Welcome to 12306.cn.", "If your password is also used in other websites, it is recommended that you modify the password of this website.", "Please verify your e-mail address to receive service e-mails from 12306.", and "Please click “ticket booking” to book your tickets.". ![image](./reference/user-center.png)
+After login, open the personal center home page from the top "My 12306" entry. The page shows the left-side menu items "Personal Center", "Order center", "Personal", and "Information management", and a default notice panel containing the icon "assets/noticepic.png", the user name, and the notice text shown in the reference. ![image](./reference/user-center.png)
 
 **Dependencies:** REQ-2.2.3
 
@@ -708,7 +711,7 @@ When the "Uncompleted orders" tab has no order, show "assets/empty.png" and the 
 **Scenarios:**
 - Display the empty state in uncompleted orders
   - **GIVEN:** The user is on the "Uncompleted orders" tab and there is no uncompleted order.
-  - **WHEN:** Observe the tab content.
+  - **WHEN:** Review the tab content.
   - **THEN:** The page shows "assets/empty.png" and the text "You don't have uncompleted orders.".
 
 #### REQ-4.2.3 Open default ticket search from empty uncompleted orders state
@@ -730,7 +733,7 @@ Display a table in "Uncompleted orders" where each row represents one passenger 
 **Scenarios:**
 - Display uncompleted orders in a table
   - **GIVEN:** The user is on the "Uncompleted orders" tab and there is at least one uncompleted order.
-  - **WHEN:** Observe the order table.
+  - **WHEN:** Review the order table.
   - **THEN:** The page shows the columns "Train Information", "Passenger Information", "Seat Information", "Price", "Status", and "Total Price", and each order group is followed by a "Pay" button.
 
 #### REQ-4.2.5 Open payment page from uncompleted orders
@@ -752,7 +755,7 @@ When the "Upcoming trips" tab has no order, show "assets/empty.png" and the text
 **Scenarios:**
 - Display the empty state in upcoming trips
   - **GIVEN:** The user is on the "Upcoming trips" tab and there is no upcoming trip.
-  - **WHEN:** Observe the tab content.
+  - **WHEN:** Review the tab content.
   - **THEN:** The page shows "assets/empty.png" and the text "You don't have any bookings or we can't access your bookings at this time.".
 
 #### REQ-4.2.7 Open default ticket search from empty upcoming trips state
@@ -787,6 +790,7 @@ Provide a search input in the "Upcoming trips" tab with the placeholder "Order n
   - **GIVEN:** The user is on the "Upcoming trips" tab with valid date filter settings.
   - **WHEN:** Enter a valid value in the input with the placeholder "Order number/train number/name" and click the "Search" button.
   - **THEN:** The page shows the upcoming orders that match both the date filter and the keyword.
+
 - Reject an invalid upcoming trips search condition
   - **GIVEN:** The user is on the "Upcoming trips" tab.
   - **WHEN:** Enter an invalid search condition and click the "Search" button.
@@ -800,7 +804,7 @@ Display the "Upcoming trips" orders in a table with the columns "Train Informati
 **Scenarios:**
 - Display upcoming trips in a table
   - **GIVEN:** The user is on the "Upcoming trips" tab and there is at least one upcoming order.
-  - **WHEN:** Observe the order table.
+  - **WHEN:** Review the order table.
   - **THEN:** The page shows the columns "Train Information", "Passenger Information", "Seat Information", "Price", "Status", and "Total Price" for the upcoming trips.
 
 #### REQ-4.2.11 Refund an upcoming trip
@@ -833,7 +837,7 @@ When the "History orders" tab has no order, show "assets/empty.png" and the text
 **Scenarios:**
 - Display the empty state in history orders
   - **GIVEN:** The user is on the "History orders" tab and there is no historical order.
-  - **WHEN:** Observe the tab content.
+  - **WHEN:** Review the tab content.
   - **THEN:** The page shows "assets/empty.png" and the text "You don't have any bookings or we can't access your bookings at this time.".
 
 #### REQ-4.2.14 Open default ticket search from empty history orders state
@@ -868,6 +872,7 @@ Provide a search input in the "History orders" tab with the placeholder "Order n
   - **GIVEN:** The user is on the "History orders" tab with a valid date range selected.
   - **WHEN:** Enter a valid value in the input with the placeholder "Order number/train number/name" and click the "Search" button.
   - **THEN:** The page shows the history orders that match both the selected date range and the keyword.
+
 - Reject an invalid history orders search condition
   - **GIVEN:** The user is on the "History orders" tab.
   - **WHEN:** Enter an invalid search condition and click the "Search" button.
@@ -881,7 +886,7 @@ Display the "History orders" table with the columns "Train Information", "Passen
 **Scenarios:**
 - Display historical orders in a table
   - **GIVEN:** The user is on the "History orders" tab and there is at least one historical order.
-  - **WHEN:** Observe the order table.
+  - **WHEN:** Review the order table.
   - **THEN:** The page shows the columns "Train Information", "Passenger Information", "Seat Information", "Price", "Status", and "Total Price" for the history orders.
 
 ### REQ-4.3 Personal Information
@@ -910,6 +915,7 @@ Allow the user to click the "Edit" button in the "Essential information" section
   - **GIVEN:** The user is on the "User information" page.
   - **WHEN:** Click the "Edit" button in the "Essential information" section, update the editable fields, and click the "Save" button.
   - **THEN:** The section returns to display mode and shows the saved values for the editable fields.
+
 - Reject an invalid password in the essential information section
   - **GIVEN:** The user is on the "User information" page with the "Essential information" section in edit mode.
   - **WHEN:** Enter an invalid new password and click the "Save" button.
@@ -949,7 +955,7 @@ Open the "Account security" page and show the entries "Login password" and "Secu
   - **THEN:** The page shows the entries "Login password" and "Security mailbox".
 
 #### REQ-4.3.6 Edit login password from account security page
-Allow the user to click the "Edit" button in the "Login password" section, open a password change form with the fields "Current password: ", "New password: ", and "Confirm your password: ", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in all password fields.", reject an incorrect current password with "Incorrect current password.", reject mismatched new passwords with "New passwords do not match.", and persist the new password and show a successful password change message after valid submission. ![image](./reference/edit-password.png)
+Open the password change form from the "Login password" section with the fields "Current password: ", "New password: ", and "Confirm your password: ", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in all password fields.", reject an incorrect current password with "Incorrect current password.", reject mismatched new passwords with "New passwords do not match.", and persist the new password and show a successful password change message after valid submission. ![image](./reference/edit-password.png)
 
 **Dependencies:** REQ-4.3.5
 
@@ -958,21 +964,24 @@ Allow the user to click the "Edit" button in the "Login password" section, open 
   - **GIVEN:** The user is on the password change form with the correct current password entered and matching valid values entered in "New password: " and "Confirm your password: ".
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The system persists the new password and shows a successful password change message.
+
 - Reject a password change with missing fields
   - **GIVEN:** The user is on the password change form with one or more password fields left empty.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Please fill in all password fields.".
+
 - Reject a password change with an incorrect current password
   - **GIVEN:** The user is on the password change form with an incorrect value entered in "Current password: ".
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Incorrect current password.".
+
 - Reject a password change with mismatched new passwords
   - **GIVEN:** The user is on the password change form with different values entered in "New password: " and "Confirm your password: ".
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "New passwords do not match.".
 
 #### REQ-4.3.7 Edit security mailbox
-Allow the user to click the "Edit" button in the "Security mailbox" section, open a form showing "Current email address: ", a "New e-mail: " input with the placeholder "Please enter a new email address.", a "Confirm your password: " input with the placeholder "Correct password input to modify personal information.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new email and password.", reject an incorrect password with "Incorrect password.", reject an invalid email address with "Invalid email address format.", and persist the new email address and show a successful update message after valid submission. ![image](./reference/edit-email.png)
+Open the security mailbox form from the "Security mailbox" section. The form shows "Current email address: ", a "New e-mail: " input with the placeholder "Please enter a new email address.", a "Confirm your password: " input with the placeholder "Correct password input to modify personal information.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new email and password.", reject an incorrect password with "Incorrect password.", reject an invalid email address with "Invalid email address format.", and persist the new email address and show a successful update message after valid submission. ![image](./reference/edit-email.png)
 
 **Dependencies:** REQ-4.3.5
 
@@ -981,21 +990,24 @@ Allow the user to click the "Edit" button in the "Security mailbox" section, ope
   - **GIVEN:** The user is on the security mailbox form with a valid new email address and the correct password entered.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The system persists the new email address and shows a successful security mailbox update message.
+
 - Reject a security mailbox update with missing fields
   - **GIVEN:** The user is on the security mailbox form with the new email field empty, the password field empty, or both.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Please fill in the new email and password.".
+
 - Reject a security mailbox update with an incorrect password
   - **GIVEN:** The user is on the security mailbox form with an incorrect password entered.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Incorrect password.".
+
 - Reject a security mailbox update with an invalid email address
   - **GIVEN:** The user is on the security mailbox form with an invalid value entered in "New e-mail: ".
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Invalid email address format.".
 
 #### REQ-4.3.8 Verify mobile number
-Open the "Verify mobile number" page and show the current mobile number under "old mobile number: " with the area code in parentheses and the middle four digits hidden, a region-code dropdown and input under "new mobile number: " with the default region code "(+86)" and the placeholder "new mobile number.", an input under "Confirm your password: " with the placeholder "Please enter the login password.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new mobile number and password.", reject an incorrect password with "Incorrect password.", reject an invalid mobile number with "Invalid mobile number format.", and persist the new mobile number and show a successful update message after valid submission. ![image](./reference/verify-mobile.png)
+Open the "Verify mobile number" page. The page shows the current mobile number under "old mobile number: " with the area code in parentheses and the middle four digits hidden, a region-code dropdown and input under "new mobile number: " with the default region code "(+86)" and the placeholder "new mobile number.", an input under "Confirm your password: " with the placeholder "Please enter the login password.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new mobile number and password.", reject an incorrect password with "Incorrect password.", reject an invalid mobile number with "Invalid mobile number format.", and persist the new mobile number and show a successful update message after valid submission. ![image](./reference/verify-mobile.png)
 
 **Dependencies:** REQ-4.1.2
 
@@ -1004,14 +1016,17 @@ Open the "Verify mobile number" page and show the current mobile number under "o
   - **GIVEN:** The user is on the "Verify mobile number" page with a valid new mobile number and the correct password entered.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The system persists the new mobile number and shows a successful mobile number update message.
+
 - Reject a mobile number update with missing fields
   - **GIVEN:** The user is on the "Verify mobile number" page with the new mobile number field empty, the password field empty, or both.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Please fill in the new mobile number and password.".
+
 - Reject a mobile number update with an incorrect password
   - **GIVEN:** The user is on the "Verify mobile number" page with an incorrect password entered.
   - **WHEN:** Click the "Determine" button.
   - **THEN:** The page shows "Incorrect password.".
+
 - Reject a mobile number update with an invalid mobile number
   - **GIVEN:** The user is on the "Verify mobile number" page with an invalid new mobile number entered.
   - **WHEN:** Click the "Determine" button.
@@ -1109,6 +1124,7 @@ Allow the user to click the "Delete" button in the "Operation" column for one pa
   - **GIVEN:** The user is on the "My Passengers" page and there is at least one deletable passenger row.
   - **WHEN:** Click the "Delete" button for one passenger row and then click the "Confirm" button in the dialog.
   - **THEN:** The passenger is deleted and the page shows a successful delete message.
+
 - Cancel deletion of one passenger
   - **GIVEN:** The user is on the "My Passengers" page with the delete confirmation dialog open.
   - **WHEN:** Click the "Cancel" button in the dialog.
@@ -1124,6 +1140,7 @@ Allow the user to select multiple passenger rows through row checkboxes and the 
   - **GIVEN:** The user is on the "My Passengers" page with at least two deletable passenger rows selected.
   - **WHEN:** Click the "Batch deletion" button and then click the "Confirm" button in the dialog.
   - **THEN:** The selected passengers are deleted and the page shows a successful delete message.
+
 - Cancel batch deletion of selected passengers
   - **GIVEN:** The user is on the "My Passengers" page with the batch deletion confirmation dialog open.
   - **WHEN:** Click the "Cancel" button in the dialog.
@@ -1234,11 +1251,11 @@ Display the booking information section with the title "Train Information:" and 
 **Scenarios:**
 - Display the booking information section for the selected train
   - **GIVEN:** The user is on the booking form page.
-  - **WHEN:** Observe the "Train Information:" section.
+  - **WHEN:** Review the "Train Information:" section.
   - **THEN:** The section shows the selected train details, the seat types, the prices, and the current remaining ticket information.
 
 #### REQ-5.2.3 Select passengers for booking
-Display the passenger section with the title "Passenger Information:" and the user's frequent passengers. When the user selects one or more passengers, add one row per selected passenger to the table. The table columns are "Ticket class", "Ticket type", "Name", "ID type", "ID number", "Nationality", and "Operation". The "Ticket class" dropdown contains "Business-class seat", "First-class seat", "Second-class seat", and "Standing ticket". The "Ticket type" dropdown contains "Adult" and "Child". The "Operation" column contains a "Delete" button.
+Display the passenger section with the title "Passenger Information:" and the user's frequent passengers. When the user selects one or more passengers, add one booking row per selected passenger. The table columns are "Ticket class", "Ticket type", "Name", "ID type", "ID number", "Nationality", and "Operation". The "Ticket class" dropdown contains "Business-class seat", "First-class seat", "Second-class seat", and "Standing ticket". The "Ticket type" dropdown contains "Adult" and "Child". The "Operation" column contains a "Delete" button.
 
 **Dependencies:** REQ-5.2.1, REQ-4.4.1
 
@@ -1307,6 +1324,7 @@ After the user submits booking information, open a confirmation dialog with the 
   - **GIVEN:** The user has successfully submitted valid booking information.
   - **WHEN:** Click the "Confirm" button in the confirmation dialog.
   - **THEN:** The order information is confirmed and the system shows a successful order submission message.
+
 - Return to edit from the confirmation dialog
   - **GIVEN:** The user is viewing the confirmation dialog after a valid booking submission.
   - **WHEN:** Click the "Edit" button.
@@ -1399,6 +1417,7 @@ Allow the user to click the "Cancel" button for one unpaid order in the "Uncompl
   - **GIVEN:** The user is on the "Uncompleted orders" tab with at least one unpaid order.
   - **WHEN:** Click the "Cancel" button for one order and then click the "Confirm" button in the dialog.
   - **THEN:** The order is cancelled, the locked seats are released, and the page shows a successful cancellation message.
+
 - Cancel the cancellation action from the order center dialog
   - **GIVEN:** The user is on the "Uncompleted orders" tab with the cancellation confirmation dialog open.
   - **WHEN:** Click the "Cancel" button in the dialog.

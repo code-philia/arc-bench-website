@@ -1,9 +1,7 @@
 # PrestaShop E-commerce Website
-PrestaShop e-commerce platform front-end store requirements document.
-This document defines a complete B2C e-commerce website front-end interface.
-Core functional modules include: product browsing, shopping cart, checkout flow, user authentication, account management, etc.
+PrestaShop B2C e-commerce website requirements covering storefront browsing, shopping cart, checkout, user authentication, and account management.
 
-## ROOT.1 Visit Homepage
+## REQ-0 Visit Homepage
 Visit the homepage of the website.
 
 **Dependencies:** None
@@ -25,12 +23,12 @@ Navigation bar uses responsive design, collapses to hamburger menu on mobile.
 ### REQ-1.1 View Global Navigation
 View the global navigation bar.
 
-**Dependencies:** ROOT.1
+**Dependencies:** REQ-0
 
 **Scenarios:**
 - View Global Navigation
   - **GIVEN:** User is on a store page and can see the website header.
-  - **WHEN:** Observe the navigation area
+  - **WHEN:** Review the navigation area
   - **THEN:** Display Logo, category menu, search box, language selector, user entry, cart icon
 
 ### REQ-1.2 Logo Click Returns Home
@@ -114,7 +112,7 @@ View the number of items in the cart.
 **Scenarios:**
 - View Cart Count
   - **GIVEN:** User can see the cart icon in the header.
-  - **WHEN:** Observe the cart icon
+  - **WHEN:** Review the cart icon
   - **THEN:** Display number of items in cart
 
 #### REQ-1.6.2 Click to Enter Cart
@@ -137,7 +135,7 @@ Homepage content display, including carousel ads, popular products, promotions, 
 ### REQ-2.1 Browse Homepage
 Browse the homepage.
 
-**Dependencies:** ROOT.1
+**Dependencies:** REQ-0
 
 **Scenarios:**
 - Browse Homepage
@@ -192,10 +190,10 @@ Popular products grid on homepage, containing product cards, quick view, and wis
 - Popular Products Section
   - **GIVEN:** User can see the Popular Products section on the homepage.
   - **WHEN:** Click a popular product
-  - **THEN:** Navigate to product detail page (temp).
+  - **THEN:** Navigate to the product detail page.
 
 ## REQ-3 Category Page
-Product listing page for displaying category products, search results, brand products, etc.
+Product listing page for displaying category products, search results, brand products, and comparable listing contexts.
 Page layout: Left sidebar filters + Right product grid.
 Top shows breadcrumb navigation, category title, product count, and sort dropdown.
 Products displayed in card grid format, supports pagination.
@@ -264,7 +262,7 @@ Quick entry links to subcategories under current category.
   - **THEN:** Navigate to subcategory product list
 
 ### REQ-3.5 Product Grid Display
-Display product cards in grid format, including image, name, price, discount label, quick view, wishlist, etc.
+Display product cards in grid format, including image, name, price, discount label, quick view, wishlist control, and related card actions.
 
 **Dependencies:** None
 
@@ -276,7 +274,7 @@ View product cards in the product grid.
 **Scenarios:**
 - View Product Cards
   - **GIVEN:** User is on a category page and can see the product grid.
-  - **WHEN:** Observe product list area
+  - **WHEN:** Review product list area
   - **THEN:** Each product card displays product image, name, price (regular/sale), discount label
 
 #### REQ-3.5.2 Hover to Show Action Buttons
@@ -302,7 +300,7 @@ Click a product card to enter detail page.
   - **THEN:** Navigate to product detail page
 
 ### REQ-3.6 Filters
-Sidebar filters, supports filtering by availability, on sale, categories, size, color, composition, price, brand, etc.
+Sidebar filters, supports filtering by availability, on sale, categories, size, color, composition, price, brand, and related product attributes.
 
 **Dependencies:** None
 
@@ -371,7 +369,7 @@ Display total product count under current filter conditions.
 **Scenarios:**
 - Product Count Display
   - **GIVEN:** User is on a category page and can see the product list header.
-  - **WHEN:** Observe product list area
+  - **WHEN:** Review product list area
   - **THEN:** Display total product count (e.g., "Showing 1-12 of 18 item(s)")
 
 ### REQ-3.9 Pagination
@@ -424,7 +422,7 @@ Product basic information display, including name, price (tax incl./excl.), regu
 **Scenarios:**
 - Product Basic Info
   - **GIVEN:** User is on a product detail page.
-  - **WHEN:** Observe product info area
+  - **WHEN:** Review product info area
   - **THEN:** Display product name, current price, regular price (if discounted), discount percentage, tax info, product description
 
 ### REQ-4.4 Variant Selection
@@ -643,7 +641,7 @@ Product list display in cart, including image, name, variant, unit price, quanti
 **Scenarios:**
 - Cart Product List
   - **GIVEN:** User is on the cart page.
-  - **WHEN:** Observe cart product list
+  - **WHEN:** Review cart product list
   - **THEN:** Each product displays image, name, variant (Size, Color), unit price, quantity, subtotal, delete button
 
 ### REQ-5.3 Modify Product Quantity
@@ -676,7 +674,7 @@ Price summary area on cart page, showing items subtotal, shipping fee, discount 
 **Scenarios:**
 - Cart Summary
   - **GIVEN:** User is on the cart page.
-  - **WHEN:** Observe cart summary area
+  - **WHEN:** Review cart summary area
   - **THEN:** Display items subtotal, shipping fee, discount amount (if any), total (tax incl.)
 
 ### REQ-5.6 Continue Shopping Link
@@ -727,11 +725,10 @@ Checkout flow first step, logged-in users see their info, non-logged users can l
 **Dependencies:** None
 
 **Scenarios:**
-- Personal Information Step (1)
+- Personal Information Step
   - **GIVEN:** User is on checkout personal information step and is logged in.
   - **WHEN:** View personal information
   - **THEN:** Display current user's personal information summary
-- Personal Information Step (2)
   - **GIVEN:** User is on checkout personal information step and is not logged in.
   - **WHEN:** Select login/register/guest checkout
   - **THEN:** Navigate to corresponding form based on selection
@@ -873,11 +870,10 @@ New user registration form, including social title, name, email, password, birth
 **Dependencies:** REQ-7.1
 
 **Scenarios:**
-- User Registration (1)
+- User Registration
   - **GIVEN:** User is on the login page.
   - **WHEN:** Click "No account? Create one here" link
   - **THEN:** Display registration form
-- User Registration (2)
   - **GIVEN:** Registration form is visible.
   - **WHEN:** Select social title (Mr. / Mrs.)
   - **THEN:** Title is selected
@@ -902,11 +898,10 @@ Forgot password functionality, sends password reset email. ![image](./reference/
 **Dependencies:** REQ-7.1
 
 **Scenarios:**
-- Forgot Password (1)
+- Forgot Password
   - **GIVEN:** User is on the login page.
   - **WHEN:** Click "Forgot your password?" link
   - **THEN:** Navigate to password reset page
-- Forgot Password (2)
   - **GIVEN:** User is on the password reset page.
   - **WHEN:** Enter registered email
   - **THEN:** Email is entered
@@ -941,7 +936,7 @@ Account homepage, displaying user info summary and quick entry to each function.
 - Account Overview
   - **GIVEN:** User is on My Account page.
   - **WHEN:** View account overview page
-  - **THEN:** Display user info summary and function entries (orders, addresses, information, etc.)
+  - **THEN:** Display user info summary and function entries (orders, addresses, information and related account entries.)
 
 ### REQ-8.3 Account Information Management
 Modify personal information and password. ![image](./reference/my_account_info.png)
@@ -949,11 +944,10 @@ Modify personal information and password. ![image](./reference/my_account_info.p
 **Dependencies:** REQ-8.1
 
 **Scenarios:**
-- Account Information Management (1)
+- Account Information Management
   - **GIVEN:** User is on My Account page.
   - **WHEN:** Click "Information" link
   - **THEN:** Enter account information edit page
-- Account Information Management (2)
   - **GIVEN:** User is on account information edit page.
   - **WHEN:** Modify personal information and save
   - **THEN:** Information updated successfully
@@ -982,11 +976,10 @@ Add a new address.
 **Dependencies:** REQ-8.4.1
 
 **Scenarios:**
-- Add New Address (1)
+- Add New Address
   - **GIVEN:** User is on address list page.
   - **WHEN:** Click "Create new address" button
   - **THEN:** Display address form
-- Add New Address (2)
   - **GIVEN:** Address form is visible.
   - **WHEN:** Fill in address info (Alias, First name, Last name, Address, Zip/Postal code, City, Country, Phone)
   - **THEN:** Form filled
@@ -999,11 +992,10 @@ Edit an existing address.
 **Dependencies:** REQ-8.4.1
 
 **Scenarios:**
-- Edit Address (1)
+- Edit Address
   - **GIVEN:** User is on address list page.
   - **WHEN:** Click "Update" button on address card
   - **THEN:** Enter address edit page, display current address info
-- Edit Address (2)
   - **GIVEN:** User is on address edit page.
   - **WHEN:** Modify address info and click "SAVE"
   - **THEN:** Address updated successfully
@@ -1090,11 +1082,10 @@ Create a new wishlist.
 **Dependencies:** REQ-8.6.1
 
 **Scenarios:**
-- Create New Wishlist (1)
+- Create New Wishlist
   - **GIVEN:** User is on wishlist list page.
   - **WHEN:** Click "Create new wishlist" button
   - **THEN:** Pop up create modal
-- Create New Wishlist (2)
   - **GIVEN:** Create wishlist modal is visible.
   - **WHEN:** Enter wishlist name and confirm
   - **THEN:** New wishlist created successfully, displays in list

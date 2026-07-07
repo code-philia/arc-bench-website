@@ -7,7 +7,7 @@ children:
   - id: REQ-1
     name: System Home
     type: FOLDER
-    description: 'The default landing page after the system starts. The top area shows "assets/logo.png" on the left, and "Login", "Register", and a "My 12306" dropdown entry on the right. The navigation bar contains "Home", a "Booking" dropdown entry, and a "Travel guides" dropdown entry. The page also displays a banner carousel with "assets/banner1.jpg", "assets/banner2.jpg", and "assets/banner3.jpg", an empty search box area, and an empty "Quick Guide" area. ![image](./reference/homepage.png)'
+    description: 'The default landing page after the system starts. The top area shows "assets/logo.png" on the left, and "Login", "Register", and a "My 12306" dropdown entry on the right. The navigation bar contains "Home", a "Booking" dropdown entry, and a "Travel guides" dropdown entry. The page also displays a banner carousel with "assets/banner1.jpg", "assets/banner2.jpg", and "assets/banner3.jpg", a ticket search area, and a "Quick Guide" section. ![image](./reference/homepage.png)'
     dependencies: []
     children:
       - id: REQ-1.1
@@ -36,7 +36,7 @@ children:
               - keyword: GIVEN
                 content: 'The user is on the home page.'
               - keyword: WHEN
-                content: 'Observe the content below the banner area.'
+                content: 'Review the content below the banner area.'
               - keyword: THEN
                 content: 'The page shows a visible "Quick Guide" section reserved for quick links.'
   - id: REQ-2
@@ -80,7 +80,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the registration page.'
                   - keyword: WHEN
-                    content: 'Observe the form content.'
+                    content: 'Review the registration form content.'
                   - keyword: THEN
                     content: 'The page shows the labeled fields "Nationality", "Name", "Passport number", "Passport expiration date", "Date of birth", "Gender", "Username", "Password", "Confirm Password", and "Email address", the agreement checkbox text, and the "Register" button.'
           - id: REQ-2.1.3
@@ -222,7 +222,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the login page.'
                   - keyword: WHEN
-                    content: 'Observe the page.'
+                    content: 'Review the login form.'
                   - keyword: THEN
                     content: 'The page shows the "Email/Username/Mobile number" input, the password input with the placeholder "Password", and the "LOGIN" button.'
           - id: REQ-2.2.3
@@ -357,7 +357,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the forgot password page.'
                   - keyword: WHEN
-                    content: 'Observe the first step and continue to the second step after the identity check.'
+                    content: 'Review the first-step identity form and continue to the second step after the identity check.'
                   - keyword: THEN
                     content: 'The first step shows the "Email: " field, the "ID number: " field, and the "submit" button, and the second step shows the "New password: " field, the "Confirm new password: " field, and the "submit" button.'
           - id: REQ-2.4.3
@@ -483,7 +483,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the home page.'
                   - keyword: WHEN
-                    content: 'Observe the search area.'
+                    content: 'Review the search area.'
                   - keyword: THEN
                     content: 'The page shows inputs with the placeholders "From", "To", and "Date", and a "Search" button.'
           - id: REQ-3.1.2
@@ -620,7 +620,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on a populated ticket search results page.'
                   - keyword: WHEN
-                    content: 'Observe the train result rows.'
+                    content: 'Review the train result rows.'
                   - keyword: THEN
                     content: 'Each result row shows one or more seat price lines in the "Price" column, and each price line is followed by a "Book" button.'
           - id: REQ-3.2.3
@@ -813,7 +813,7 @@ children:
           - id: REQ-3.3.1
             name: Show transfer plans when no direct train exists
             type: ATOMIC
-            description: 'When no direct train matches the search, calculate transfer plans by finding a transfer station that has train services from the departure place and to the destination, enforce the time connection requirement, calculate the total travel time as the sum of the two train segments and the transfer waiting time, sort the qualified plans by total travel time, and display the first 10 plans.'
+            description: 'When no direct train matches the search, calculate valid transfer plans that satisfy the connection-time requirement, sort the qualified plans by total travel time, and display the first 10 plans.'
             dependencies:
               - REQ-3.2.1
             scenarios:
@@ -824,7 +824,7 @@ children:
                   - keyword: WHEN
                     content: 'The page calculates available transfer plans.'
                   - keyword: THEN
-                    content: 'The page shows up to 10 qualified transfer plans sorted by total travel time.'
+                    content: 'The page lists up to 10 qualified transfer plans, sorted by total travel time.'
           - id: REQ-3.3.2
             name: View transfer plan details
             type: ATOMIC
@@ -837,7 +837,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is viewing transfer plans on the ticket search results page.'
                   - keyword: WHEN
-                    content: 'Observe one transfer plan.'
+                    content: 'Review one transfer plan.'
                   - keyword: THEN
                     content: 'The plan shows the first train segment, the second train segment, the transfer waiting time, and a "Book" button.'
           - id: REQ-3.3.3
@@ -917,7 +917,7 @@ children:
           - id: REQ-4.1.2
             name: Open personal center home page
             type: ATOMIC
-            description: 'After login, open the personal center home page from the top "My 12306" entry. The left side shows the items "Personal Center", "Order center", "Personal", and "Information management". The default right-side content shows the icon "assets/noticepic.png", the user name, and a notice box containing "Welcome to 12306.cn.", "If your password is also used in other websites, it is recommended that you modify the password of this website.", "Please verify your e-mail address to receive service e-mails from 12306.", and "Please click “ticket booking” to book your tickets.". ![image](./reference/user-center.png)'
+            description: 'After login, open the personal center home page from the top "My 12306" entry. The page shows the left-side menu items "Personal Center", "Order center", "Personal", and "Information management", and a default notice panel containing the icon "assets/noticepic.png", the user name, and the notice text shown in the reference. ![image](./reference/user-center.png)'
             dependencies:
               - REQ-2.2.3
             scenarios:
@@ -979,7 +979,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the "Uncompleted orders" tab and there is no uncompleted order.'
                   - keyword: WHEN
-                    content: 'Observe the tab content.'
+                    content: 'Review the tab content.'
                   - keyword: THEN
                     content: 'The page shows "assets/empty.png" and the text "You don''t have uncompleted orders.".'
           - id: REQ-4.2.3
@@ -1010,7 +1010,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the "Uncompleted orders" tab and there is at least one uncompleted order.'
                   - keyword: WHEN
-                    content: 'Observe the order table.'
+                    content: 'Review the order table.'
                   - keyword: THEN
                     content: 'The page shows the columns "Train Information", "Passenger Information", "Seat Information", "Price", "Status", and "Total Price", and each order group is followed by a "Pay" button.'
           - id: REQ-4.2.5
@@ -1041,7 +1041,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the "Upcoming trips" tab and there is no upcoming trip.'
                   - keyword: WHEN
-                    content: 'Observe the tab content.'
+                    content: 'Review the tab content.'
                   - keyword: THEN
                     content: 'The page shows "assets/empty.png" and the text "You don''t have any bookings or we can''t access your bookings at this time.".'
           - id: REQ-4.2.7
@@ -1110,7 +1110,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the "Upcoming trips" tab and there is at least one upcoming order.'
                   - keyword: WHEN
-                    content: 'Observe the order table.'
+                    content: 'Review the order table.'
                   - keyword: THEN
                     content: 'The page shows the columns "Train Information", "Passenger Information", "Seat Information", "Price", "Status", and "Total Price" for the upcoming trips.'
           - id: REQ-4.2.11
@@ -1155,7 +1155,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the "History orders" tab and there is no historical order.'
                   - keyword: WHEN
-                    content: 'Observe the tab content.'
+                    content: 'Review the tab content.'
                   - keyword: THEN
                     content: 'The page shows "assets/empty.png" and the text "You don''t have any bookings or we can''t access your bookings at this time.".'
           - id: REQ-4.2.14
@@ -1224,7 +1224,7 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the "History orders" tab and there is at least one historical order.'
                   - keyword: WHEN
-                    content: 'Observe the order table.'
+                    content: 'Review the order table.'
                   - keyword: THEN
                     content: 'The page shows the columns "Train Information", "Passenger Information", "Seat Information", "Price", "Status", and "Total Price" for the history orders.'
       - id: REQ-4.3
@@ -1320,7 +1320,7 @@ children:
           - id: REQ-4.3.6
             name: Edit login password from account security page
             type: ATOMIC
-            description: 'Allow the user to click the "Edit" button in the "Login password" section, open a password change form with the fields "Current password: ", "New password: ", and "Confirm your password: ", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in all password fields.", reject an incorrect current password with "Incorrect current password.", reject mismatched new passwords with "New passwords do not match.", and persist the new password and show a successful password change message after valid submission. ![image](./reference/edit-password.png)'
+            description: 'Open the password change form from the "Login password" section with the fields "Current password: ", "New password: ", and "Confirm your password: ", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in all password fields.", reject an incorrect current password with "Incorrect current password.", reject mismatched new passwords with "New passwords do not match.", and persist the new password and show a successful password change message after valid submission. ![image](./reference/edit-password.png)'
             dependencies:
               - REQ-4.3.5
             scenarios:
@@ -1359,7 +1359,7 @@ children:
           - id: REQ-4.3.7
             name: Edit security mailbox
             type: ATOMIC
-            description: 'Allow the user to click the "Edit" button in the "Security mailbox" section, open a form showing "Current email address: ", a "New e-mail: " input with the placeholder "Please enter a new email address.", a "Confirm your password: " input with the placeholder "Correct password input to modify personal information.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new email and password.", reject an incorrect password with "Incorrect password.", reject an invalid email address with "Invalid email address format.", and persist the new email address and show a successful update message after valid submission. ![image](./reference/edit-email.png)'
+            description: 'Open the security mailbox form from the "Security mailbox" section. The form shows "Current email address: ", a "New e-mail: " input with the placeholder "Please enter a new email address.", a "Confirm your password: " input with the placeholder "Correct password input to modify personal information.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new email and password.", reject an incorrect password with "Incorrect password.", reject an invalid email address with "Invalid email address format.", and persist the new email address and show a successful update message after valid submission. ![image](./reference/edit-email.png)'
             dependencies:
               - REQ-4.3.5
             scenarios:
@@ -1398,7 +1398,7 @@ children:
           - id: REQ-4.3.8
             name: Verify mobile number
             type: ATOMIC
-            description: 'Open the "Verify mobile number" page and show the current mobile number under "old mobile number: " with the area code in parentheses and the middle four digits hidden, a region-code dropdown and input under "new mobile number: " with the default region code "(+86)" and the placeholder "new mobile number.", an input under "Confirm your password: " with the placeholder "Please enter the login password.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new mobile number and password.", reject an incorrect password with "Incorrect password.", reject an invalid mobile number with "Invalid mobile number format.", and persist the new mobile number and show a successful update message after valid submission. ![image](./reference/verify-mobile.png)'
+            description: 'Open the "Verify mobile number" page. The page shows the current mobile number under "old mobile number: " with the area code in parentheses and the middle four digits hidden, a region-code dropdown and input under "new mobile number: " with the default region code "(+86)" and the placeholder "new mobile number.", an input under "Confirm your password: " with the placeholder "Please enter the login password.", and the buttons "Cancel" and "Determine". Reject missing fields with "Please fill in the new mobile number and password.", reject an incorrect password with "Incorrect password.", reject an invalid mobile number with "Invalid mobile number format.", and persist the new mobile number and show a successful update message after valid submission. ![image](./reference/verify-mobile.png)'
             dependencies:
               - REQ-4.1.2
             scenarios:
@@ -1739,13 +1739,13 @@ children:
                   - keyword: GIVEN
                     content: 'The user is on the booking form page.'
                   - keyword: WHEN
-                    content: 'Observe the "Train Information:" section.'
+                    content: 'Review the "Train Information:" section.'
                   - keyword: THEN
                     content: 'The section shows the selected train details, the seat types, the prices, and the current remaining ticket information.'
           - id: REQ-5.2.3
             name: Select passengers for booking
             type: ATOMIC
-            description: 'Display the passenger section with the title "Passenger Information:" and the user''s frequent passengers. When the user selects one or more passengers, add one row per selected passenger to the table. The table columns are "Ticket class", "Ticket type", "Name", "ID type", "ID number", "Nationality", and "Operation". The "Ticket class" dropdown contains "Business-class seat", "First-class seat", "Second-class seat", and "Standing ticket". The "Ticket type" dropdown contains "Adult" and "Child". The "Operation" column contains a "Delete" button.'
+            description: 'Display the passenger section with the title "Passenger Information:" and the user''s frequent passengers. When the user selects one or more passengers, add one booking row per selected passenger. The table columns are "Ticket class", "Ticket type", "Name", "ID type", "ID number", "Nationality", and "Operation". The "Ticket class" dropdown contains "Business-class seat", "First-class seat", "Second-class seat", and "Standing ticket". The "Ticket type" dropdown contains "Adult" and "Child". The "Operation" column contains a "Delete" button.'
             dependencies:
               - REQ-5.2.1
               - REQ-4.4.1

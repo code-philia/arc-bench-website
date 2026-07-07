@@ -1,481 +1,481 @@
 # BookStack Knowledge Base System
-Web-based knowledge base/document management system, completing the construction of front-end and back-end infrastructure.
+Web-based knowledge base system for browsing, organizing, and reading shelves, books, chapters, and pages.
 
-## REQ-1 BookStack Homepage
-Defaults to the homepage, including the top navigation bar, search box, and other activities and quick entry points that need to be displayed. Reference image ![image](./reference/index.png)
+## REQ-1 Homepage
+Default landing page of the system. It presents the global navigation bar, search input, and visible entry points to core areas of the product. Reference image ![image](./reference/index.png)
 
 **Dependencies:** None
 
 ### REQ-1.1 Open Homepage
-Open the system and enter the homepage.
+Open the application and display the homepage.
 
 **Dependencies:** None
 
 **Scenarios:**
 - Open Homepage
-  - **GIVEN:** System is accessible.
-  - **WHEN:** Open the system
-  - **THEN:** Defaults to the homepage
+  - **GIVEN:** The system is accessible.
+  - **WHEN:** The user opens the application URL.
+  - **THEN:** The homepage is displayed as the default page.
 
-### REQ-1.2 Back to homepage from other pages
-Click the logo to return to the homepage.
+### REQ-1.2 Back to Homepage from Other Pages
+Return to the homepage by clicking the BookStack logo in the global navigation bar.
 
 **Dependencies:** REQ-1.1
 
 **Scenarios:**
-- Back to homepage from other pages
-  - **GIVEN:** User is on a non-homepage page and the top navigation bar is visible.
-  - **WHEN:** Click the 'BookStack' logo on the top left of the navigation bar from other pages
-  - **THEN:** Redirect to the homepage
+- Back to Homepage from Other Pages
+  - **GIVEN:** The user is on a non-homepage page and the global navigation bar is visible.
+  - **WHEN:** The user clicks the BookStack logo in the top-left corner.
+  - **THEN:** The system navigates to the homepage.
 
-## REQ-2 User Authentication and Session Module
-Provides login entry and session state, recording the login status. Login page ![image](./reference/login.png) Homepage after login ![image](./reference/index_after_login.png)
+## REQ-2 User Authentication and Session
+Provides login entry and authenticated session state. The login page and the authenticated homepage state follow the referenced layouts. Login page ![image](./reference/login.png) Homepage after login ![image](./reference/index_after_login.png)
 
 **Dependencies:** REQ-1
 
 ### REQ-2.1 Enter Login Page
-Navigate to the login form.
+Open the login form from the homepage navigation bar.
 
 **Dependencies:** REQ-1.1
 
 **Scenarios:**
 - Enter Login Page
-  - **GIVEN:** User is on the homepage and is not logged in.
-  - **WHEN:** Click 'Login' on the right side of the homepage navigation bar
-  - **THEN:** Redirect to the login form page.
+  - **GIVEN:** The user is on the homepage and is not logged in.
+  - **WHEN:** The user clicks `Login` in the homepage navigation bar.
+  - **THEN:** The system displays the login form page.
 
-### REQ-2.2 Login successful and enter homepage after login
-Fill in credentials and log in.
+### REQ-2.2 Log In Successfully
+Authenticate with valid credentials and enter the authenticated homepage state.
 
 **Dependencies:** REQ-2.1
 
 **Scenarios:**
-- Login successful and enter homepage after login
-  - **GIVEN:** User is on the login form page.
-  - **WHEN:** Enter valid email and password, check 'Remember Me', and click Login
-  - **THEN:** Redirect to the homepage, with the user nickname displayed in the upper right corner
+- Log In Successfully
+  - **GIVEN:** The user is on the login form page.
+  - **WHEN:** The user enters a valid email and password, enables `Remember Me`, and clicks `Login`.
+  - **THEN:** The system logs the user in, returns to the homepage, and displays the user nickname in the top-right area.
 
-## REQ-3 Homepage after login (Dashboard) module
-Displays overview information after login, including recent drafts, recent views, most viewed favorites, recently updated pages, and recent activity stream, and provides a dark mode switch (placeholder implementation). Reference image ![image](./reference/index_after_login.png)
+## REQ-3 Authenticated Homepage Dashboard
+Authenticated homepage dashboard that shows recent drafts, recently viewed items, most viewed favorites, recently updated pages, recent activity, and the dashboard controls shown in the reference image. Reference image ![image](./reference/index_after_login.png)
 
 **Dependencies:** REQ-2
 
-### REQ-3.1 Enter homepage after login
-View the dashboard layout after login.
+### REQ-3.1 Enter Authenticated Homepage
+Display the dashboard layout after a successful login.
 
 **Dependencies:** REQ-2.2
 
 **Scenarios:**
-- Enter homepage after login
-  - **GIVEN:** User has logged in successfully.
-  - **WHEN:** Redirect after successful login
-  - **THEN:** Display dashboard layout and multiple information cards.
+- Enter Authenticated Homepage
+  - **GIVEN:** The user has logged in successfully.
+  - **WHEN:** The system finishes the post-login navigation.
+  - **THEN:** The authenticated homepage dashboard is displayed with its overview cards and lists.
 
 ## REQ-4 Shelves Module
-Shelves serve as the top-level container for content organization, including name, description, books, and tag attributes; support viewing shelf lists, entering shelf details, editing shelves, and deleting shelves (with confirmation page/box). Shelf list page ![image](./reference/shelves.png)
+Shelves are top-level content containers with name, description, related books, and tags. This module covers listing shelves, opening shelf details, creating shelves, editing shelves, and deleting shelves. Shelf list page ![image](./reference/shelves.png)
 
 **Dependencies:** REQ-1
 
 ### REQ-4.1 View Shelf List
-Navigate to the shelf list page.
+Open the shelf list page from the global navigation bar.
 
 **Dependencies:** REQ-1.1
 
 **Scenarios:**
 - View Shelf List
-  - **GIVEN:** User is on a page with the top navigation bar visible.
-  - **WHEN:** Click Shelves at the top
-  - **THEN:** Enter the shelf list page.
+  - **GIVEN:** The user is on a page where the global navigation bar is visible.
+  - **WHEN:** The user clicks `Shelves` in the top navigation bar.
+  - **THEN:** The system displays the shelf list page.
 
 ### REQ-4.2 Shelf Details Page
-Displays detailed information for a shelf, including book lists and related Actions. Reference image ![image](./reference/shelf.png)
+Shelf details page that shows shelf information, included books, and the related action panel. Reference image ![image](./reference/shelf.png)
 
 **Dependencies:** REQ-4.1
 
 #### REQ-4.2.1 Enter Shelf Details Page
-Click a shelf to view its details.
+Open the details page of a shelf from the shelf list.
 
 **Dependencies:** REQ-4.1
 
 **Scenarios:**
 - Enter Shelf Details Page
-  - **GIVEN:** User is on the shelf list page and at least one shelf is displayed.
-  - **WHEN:** Click on any shelf on the shelf list page
-  - **THEN:** Enter the shelf details page
+  - **GIVEN:** The user is on the shelf list page and at least one shelf is visible.
+  - **WHEN:** The user clicks a shelf in the list.
+  - **THEN:** The system displays the selected shelf details page.
 
 ### REQ-4.3 Create New Shelf
-Create a new shelf. Type in name, description, and tags. Reference image ![image](./reference/create_shelf.png)
+Provide a shelf creation flow with fields for shelf name, description, and tags. Reference image ![image](./reference/create_shelf.png)
 
 **Dependencies:** REQ-4.2
 
 #### REQ-4.3.1 Create Shelf
-Fill out the form and save the shelf.
+Create a shelf from the shelf creation form.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Create Shelf
-  - **GIVEN:** User is on the shelf details page and can see the Actions list.
-  - **WHEN:** Click 'new shelf', enter name, description, add tags, and click 'Save Shelf'
-  - **THEN:** Save the shelf and display it on the shelf list page
+  - **GIVEN:** The user is on the shelf details page and can access the action panel.
+  - **WHEN:** The user opens the `New Shelf` flow, enters shelf information, and clicks `Save Shelf`.
+  - **THEN:** The system creates the shelf and displays it in the shelf list.
 
 #### REQ-4.3.2 Cancel Creation
-Cancel the shelf creation process.
+Exit the shelf creation flow without saving a new shelf.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Cancel Creation
-  - **GIVEN:** User is on the create shelf page.
-  - **WHEN:** On the create shelf page, click the 'Cancel' button below
-  - **THEN:** Cancel shelf creation and return to the shelf list page
+  - **GIVEN:** The user is on the shelf creation page.
+  - **WHEN:** The user clicks `Cancel`.
+  - **THEN:** The system returns to the shelf list without creating a new shelf.
 
 ### REQ-4.4 Delete Shelf
-The current shelf can be deleted from the shelf details page. Double confirmation is required. Confirmation page ![image](./reference/delete_shelves.png)
+Delete the current shelf from the shelf details flow with confirmation. Confirmation page ![image](./reference/delete_shelves.png)
 
 **Dependencies:** REQ-4.2
 
 #### REQ-4.4.1 Confirm Delete Shelf
-Confirm the deletion of a shelf.
+Delete a shelf after the user confirms the action.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Confirm Delete Shelf
-  - **GIVEN:** User is on the shelf details page and can see the Actions list.
-  - **WHEN:** Click 'Delete' in Actions, then click 'Confirm' on the Delete Shelf confirmation page
-  - **THEN:** Delete the shelf and redirect to the shelf list page
+  - **GIVEN:** The user is on the shelf details page and can access the action panel.
+  - **WHEN:** The user clicks `Delete` and confirms the deletion on the confirmation page.
+  - **THEN:** The system deletes the shelf and returns to the shelf list page.
 
 #### REQ-4.4.2 Cancel Delete Shelf
-Cancel the deletion of a shelf.
+Exit the delete flow without deleting the shelf.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Cancel Delete Shelf
-  - **GIVEN:** User is on the Delete Shelf confirmation page.
-  - **WHEN:** Click 'Cancel'
-  - **THEN:** Cancel deletion and return to the shelf details page
+  - **GIVEN:** The user is on the delete shelf confirmation page.
+  - **WHEN:** The user clicks `Cancel`.
+  - **THEN:** The system returns to the shelf details page and keeps the shelf unchanged.
 
 ### REQ-4.5 Edit Shelf
-Edit shelf, enter new name and description, add or remove books and tags. Shelf edit page ![image](./reference/edit_shelve.png)
+Provide a shelf editing flow for changing shelf information, related books, and tags. Shelf edit page ![image](./reference/edit_shelve.png)
 
 **Dependencies:** REQ-4.2
 
 #### REQ-4.5.1 Save Shelf Edits
-Modify shelf information and save.
+Save changes made in the shelf edit form.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Save Shelf Edits
-  - **GIVEN:** User is on the shelf details page and can see the Actions list.
-  - **WHEN:** Click 'Edit', enter new information on the shelf edit page, and click 'Save Shelf'
-  - **THEN:** Modify shelf information and return to the shelf details page
+  - **GIVEN:** The user is on the shelf details page and can access the action panel.
+  - **WHEN:** The user clicks `Edit`, updates shelf information, and clicks `Save Shelf`.
+  - **THEN:** The system saves the changes and returns to the shelf details page.
 
 #### REQ-4.5.2 Cancel Shelf Edits
-Cancel editing the shelf.
+Exit the shelf editing flow without saving changes.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Cancel Shelf Edits
-  - **GIVEN:** User is on the shelf edit page.
-  - **WHEN:** Click 'Cancel'
-  - **THEN:** Cancel modifications and return to the shelf details page
+  - **GIVEN:** The user is on the shelf edit page.
+  - **WHEN:** The user clicks `Cancel`.
+  - **THEN:** The system returns to the shelf details page without applying the edits.
 
 ## REQ-5 Books Module
-Books contain attributes such as name, description, chapters, and pages. Book list page: ![image](./reference/books.png)
+Books contain a name, description, chapters, and pages. This module covers viewing books, opening book details, creating books, editing books, deleting books, and creating books from a shelf context. Book list page ![image](./reference/books.png)
 
 **Dependencies:** REQ-1
 
 ### REQ-5.1 View Books List
-Navigate to the Books list page.
+Open the books list page from the global navigation bar.
 
 **Dependencies:** REQ-1.1
 
 **Scenarios:**
 - View Books List
-  - **GIVEN:** User is on a page with the top navigation bar visible.
-  - **WHEN:** Click Books at the top
-  - **THEN:** Enter the Books list page, displaying a grid of book cards and Actions on the right.
+  - **GIVEN:** The user is on a page where the global navigation bar is visible.
+  - **WHEN:** The user clicks `Books` in the top navigation bar.
+  - **THEN:** The system displays the books list page with book cards and the action panel.
 
 ### REQ-5.2 Book Details Page
-Enter the book details page through the book list, homepage books, shelves, etc., to display detailed book information. Book details page ![image](./reference/book.png)
+Book details page that can be opened from supported book entry points and displays the selected book information. Book details page ![image](./reference/book.png)
 
 **Dependencies:** REQ-5.1
 
 #### REQ-5.2.1 Enter Book Details Page through Book List Page
-Click a book from the book list.
+Open a book details page from the books list.
 
 **Dependencies:** REQ-5.1
 
 **Scenarios:**
 - Enter Book Details Page through Book List Page
-  - **GIVEN:** User is on the book list page and at least one book card is displayed.
-  - **WHEN:** Click on any book on the book list page
-  - **THEN:** Enter the details page of the corresponding book
+  - **GIVEN:** The user is on the books list page and at least one book card is visible.
+  - **WHEN:** The user clicks a book card in the list.
+  - **THEN:** The system displays the selected book details page.
 
 #### REQ-5.2.2 Enter Book Details Page through Shelf Details Page
-Click a book from the shelf details.
+Open a book details page from a shelf details page.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Enter Book Details Page through Shelf Details Page
-  - **GIVEN:** User is on the shelf details page and at least one book is listed.
-  - **WHEN:** Click on any book in the shelf details page
-  - **THEN:** Enter the details page of the corresponding book
+  - **GIVEN:** The user is on a shelf details page and at least one book is listed on the shelf.
+  - **WHEN:** The user clicks a book in the shelf details page.
+  - **THEN:** The system displays the selected book details page.
 
 ### REQ-5.3 Create Book in Book List Page
-Create a book on the book list page, providing a Create Book form: Name, Description (rich text), with expandable Cover image / Book Tags / Default Page Template. Reference image ![image](./reference/create_book.png)
+Provide a book creation flow from the books list page with fields for name, rich-text description, optional cover image, book tags, and default page template. Reference image ![image](./reference/create_book.png)
 
 **Dependencies:** REQ-5.1
 
 #### REQ-5.3.1 Fill out and Save Book
-Create a book from the list page.
+Create a new book from the books list page.
 
 **Dependencies:** REQ-5.1
 
 **Scenarios:**
 - Fill out and Save Book
-  - **GIVEN:** User is on the book list page and can see the Actions panel on the right.
-  - **WHEN:** Click 'Create New Book', fill in required fields, optionally set cover/tags/template, and click Save Book
-  - **THEN:** Success prompt; redirect to the new Book details page or Books list.
+  - **GIVEN:** The user is on the books list page and can access the action panel.
+  - **WHEN:** The user clicks `Create New Book`, enters the required information, and clicks `Save Book`.
+  - **THEN:** The system creates the book and opens the created book details page.
 
 #### REQ-5.3.2 Cancel Creating Book
-Cancel the book creation process.
+Exit the book creation flow without creating a book.
 
 **Dependencies:** REQ-5.1
 
 **Scenarios:**
 - Cancel Creating Book
-  - **GIVEN:** User is on the Create New Book page.
-  - **WHEN:** Click Cancel
-  - **THEN:** Return to the previous page; do not create a new Book.
+  - **GIVEN:** The user is on the create new book page.
+  - **WHEN:** The user clicks `Cancel`.
+  - **THEN:** The system returns to the previous page and does not create a new book.
 
 ### REQ-5.4 Edit Book
-Books can be edited on the book details page to modify various attributes. Reference image ![image](./reference/edit_book.png)
+Provide a book editing flow for changing book metadata on the book details page. Reference image ![image](./reference/edit_book.png)
 
 **Dependencies:** REQ-5.2
 
 #### REQ-5.4.1 Save Book Edits
-Edit book details and save.
+Save changes made in the book edit form.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Save Book Edits
-  - **GIVEN:** User is on the book details page and can see the Actions list.
-  - **WHEN:** Click 'Edit', modify book attributes on the edit page, and click 'Save Book'
-  - **THEN:** Save book attributes and return to the book details page
+  - **GIVEN:** The user is on the book details page and can access the action panel.
+  - **WHEN:** The user clicks `Edit`, updates book information, and clicks `Save Book`.
+  - **THEN:** The system saves the changes and returns to the book details page.
 
 #### REQ-5.4.2 Cancel Book Edits
-Cancel book edits.
+Exit the book editing flow without saving changes.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Cancel Book Edits
-  - **GIVEN:** User is on the book edit page.
-  - **WHEN:** Click 'Cancel'
-  - **THEN:** Cancel editing and return to the book details page
+  - **GIVEN:** The user is on the book edit page.
+  - **WHEN:** The user clicks `Cancel`.
+  - **THEN:** The system returns to the book details page without applying the edits.
 
 ### REQ-5.5 Delete Book
-The current book can be deleted on the book details page. Double confirmation is required. Confirmation page ![image](./reference/delete_book.png)
+Delete the current book from the book details flow with confirmation. Confirmation page ![image](./reference/delete_book.png)
 
 **Dependencies:** REQ-5.2
 
 #### REQ-5.5.1 Confirm Delete Book
-Delete the book.
+Delete a book after the user confirms the action.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Confirm Delete Book
-  - **GIVEN:** User is on the book details page and can see the Actions list.
-  - **WHEN:** Click 'Delete', then click 'Confirm' on the confirmation page
-  - **THEN:** Delete book and return to the book list page
+  - **GIVEN:** The user is on the book details page and can access the action panel.
+  - **WHEN:** The user clicks `Delete` and confirms the deletion.
+  - **THEN:** The system deletes the book and returns to the books list page.
 
 #### REQ-5.5.2 Cancel Delete Book
-Cancel deleting the book.
+Exit the delete flow without deleting the book.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Cancel Delete Book
-  - **GIVEN:** User is on the confirmation delete page.
-  - **WHEN:** Click 'Cancel'
-  - **THEN:** Cancel deletion and return to the book details page
+  - **GIVEN:** The user is on the delete book confirmation page.
+  - **WHEN:** The user clicks `Cancel`.
+  - **THEN:** The system returns to the book details page and keeps the book unchanged.
 
 ### REQ-5.6 Create Book from Shelf Details Page
-On the shelf details page, create a book directly within the shelf. The created book is automatically associated with the shelf.
+Provide a book creation flow from a shelf details page so the created book is associated with the current shelf.
 
 **Dependencies:** REQ-4.2
 
 #### REQ-5.6.1 Fill out and Save Book with Shelf
-Create a book associated with a shelf.
+Create a new book from the current shelf context.
 
 **Dependencies:** REQ-4.2.1
 
 **Scenarios:**
 - Fill out and Save Book with Shelf
-  - **GIVEN:** User is on the shelf details page and can see the Actions list.
-  - **WHEN:** Click 'Create New Book', fill in required fields, and click Save Book
-  - **THEN:** Success prompt; redirect to Books list, with the new Book associated with the current shelf.
+  - **GIVEN:** The user is on a shelf details page and can access the action panel.
+  - **WHEN:** The user clicks `Create New Book`, enters the required information, and clicks `Save Book`.
+  - **THEN:** The system creates the book and associates it with the current shelf.
 
 ## REQ-6 Pages and Chapters Module
-Pages are the basic units of a book; chapters can combine multiple pages, and chapters can also be added within chapters.
+Pages are the basic reading units of a book, and chapters organize groups of pages. This module covers page editing, draft handling, chapter creation, and page reading.
 
 **Dependencies:** REQ-5
 
 ### REQ-6.1 Page Edit Page
-Create a new page on the book details page. Page edit page ![image](./reference/page_draft.png) Delete draft confirmation page ![image](./reference/delete_draft.png)
+Provide the page editing flow for creating pages, saving drafts, and deleting drafts. Page edit page ![image](./reference/page_draft.png) Delete draft confirmation page ![image](./reference/delete_draft.png)
 
 **Dependencies:** REQ-5.2
 
 #### REQ-6.1.1 Save Page
-Create and save a new page.
+Create and save a new page in a book.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Save Page
-  - **GIVEN:** User is on the book details page.
-  - **WHEN:** Click 'New Page', enter page name and content, and click 'Save Page'
-  - **THEN:** Save the page, add it to the book, and return to the book details page
+  - **GIVEN:** The user is on a book details page.
+  - **WHEN:** The user clicks `New Page`, enters page information, and clicks `Save Page`.
+  - **THEN:** The system saves the page, adds it to the book, and returns to the book details page.
 
 #### REQ-6.1.2 Save Draft
-Save a page as draft.
+Save the current page content as a draft.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Save Draft
-  - **GIVEN:** User is on the page draft page.
-  - **WHEN:** Enter content, press Ctrl+S, click 'Draft saved at', and click 'Save Draft'
-  - **THEN:** Save draft and display it in the 'My Recent Drafts' list on the homepage
+  - **GIVEN:** The user is on the page edit page.
+  - **WHEN:** The user enters page content and saves a draft.
+  - **THEN:** The system stores the draft and shows it in the `My Recent Drafts` list on the homepage.
 
 #### REQ-6.1.3 Delete Draft
-Delete an existing draft.
+Delete an existing page draft.
 
 **Dependencies:** REQ-6.1.2
 
 **Scenarios:**
 - Delete Draft
-  - **GIVEN:** User is on the page edit page and a draft exists.
-  - **WHEN:** Click 'Draft saved at', click 'Delete Draft', and click 'Confirm' on the confirmation page
-  - **THEN:** Delete draft and redirect to the book details page
+  - **GIVEN:** The user is on the page edit page and a draft already exists.
+  - **WHEN:** The user opens the draft actions, clicks `Delete Draft`, and confirms the deletion.
+  - **THEN:** The system deletes the draft and returns to the related book details page.
 
 ### REQ-6.2 Create New Chapter
-Chapters can be added on the book details page; clicking a chapter redirects to the pages or chapter list within that chapter. Add chapter page ![image](./reference/create_chapter.png) Inside chapter page ![image](./reference/chapter.png)
+Provide a chapter creation flow from the book details page and support entering the chapter view after a chapter is available. Add chapter page ![image](./reference/create_chapter.png) Inside chapter page ![image](./reference/chapter.png)
 
 **Dependencies:** REQ-5.2
 
 #### REQ-6.2.1 Create Chapter
-Add a new chapter to a book.
+Create a new chapter within a book.
 
 **Dependencies:** REQ-5.2.1
 
 **Scenarios:**
 - Create Chapter
-  - **GIVEN:** User is on the book details page.
-  - **WHEN:** Click 'New Chapter', fill in the name and description, and click 'Save Chapter'
-  - **THEN:** Create the chapter and add it to the book
+  - **GIVEN:** The user is on the book details page.
+  - **WHEN:** The user clicks `New Chapter`, enters the chapter information, and clicks `Save Chapter`.
+  - **THEN:** The system creates the chapter and adds it to the current book.
 
 ### REQ-6.3 Page Reading Page
-Click a page from the book or chapter details page to enter the page reading page. Reference image ![image](./reference/page.png)
+Page reading page that opens from a book or chapter page list and shows the selected page content. Reference image ![image](./reference/page.png)
 
 **Dependencies:** REQ-6.1, REQ-6.2
 
 #### REQ-6.3.1 Enter Page Reading Page
-Read a page.
+Open the reading page for a selected page.
 
 **Dependencies:** REQ-6.1.1
 
 **Scenarios:**
 - Enter Page Reading Page
-  - **GIVEN:** User is viewing a list of pages within a book or chapter.
-  - **WHEN:** Click some page
-  - **THEN:** Enter the page reading page
+  - **GIVEN:** The user is viewing a list of pages within a book or chapter.
+  - **WHEN:** The user clicks a page entry.
+  - **THEN:** The system displays the page reading page.
 
 #### REQ-6.3.2 Redirect to Page Edit Page
-Edit a page while reading.
+Open the page edit flow from the page reading page.
 
 **Dependencies:** REQ-6.3.1
 
 **Scenarios:**
 - Redirect to Page Edit Page
-  - **GIVEN:** User is on the page reading page and can see the Actions area.
-  - **WHEN:** Click 'Edit' on the page reading page
-  - **THEN:** Redirect to the edit page for that page.
+  - **GIVEN:** The user is on the page reading page and can access the action area.
+  - **WHEN:** The user clicks `Edit`.
+  - **THEN:** The system opens the edit page for the current page.
 
 ## REQ-7 Recently Viewed
-The homepage displays recently viewed shelves, books, chapters, and pages in the 'My Recently Viewed' list, showing up to ten records.
+Display recently viewed shelves, books, chapters, and pages in the `My Recently Viewed` list on the homepage, with up to ten records.
 
 **Dependencies:** REQ-4, REQ-5, REQ-6
 
 ### REQ-7.1 Add to Recently Viewed
-Viewing content adds it to the list.
+Add supported content to the recently viewed list after it is opened.
 
 **Dependencies:** REQ-4.2.1, REQ-5.2.1, REQ-6.3.1
 
 **Scenarios:**
 - Add to Recently Viewed
-  - **GIVEN:** User is browsing content pages in the system.
-  - **WHEN:** Open and enter shelf details page, book details page, page reading page, or chapter details page
-  - **THEN:** Add to recently viewed and update the 'My Recently Viewed' list on the homepage
+  - **GIVEN:** The user is browsing supported content pages in the system.
+  - **WHEN:** The user opens a shelf details page, book details page, page reading page, or chapter view.
+  - **THEN:** The system adds the item to `My Recently Viewed` on the homepage.
 
 ### REQ-7.2 Quick Navigation from Recently Viewed
-Clicking a recently viewed item navigates to it.
+Open a content page from the recently viewed list.
 
 **Dependencies:** REQ-7.1
 
 **Scenarios:**
 - Quick Navigation from Recently Viewed
-  - **GIVEN:** The homepage shows a 'My Recently Viewed' list with at least one item.
-  - **WHEN:** Click an item in the 'My Recently Viewed' list
-  - **THEN:** Quickly enter the corresponding content details page
+  - **GIVEN:** The homepage shows `My Recently Viewed` with at least one item.
+  - **WHEN:** The user clicks an item in `My Recently Viewed`.
+  - **THEN:** The system opens the corresponding content page.
 
 ## REQ-8 Favorites
-Shelves, books, chapters, and pages can be favorited and displayed in the 'My Most Viewed Favorites' list on the homepage, showing up to 4 items. A favorites page is provided to view all favorites. Favorites page ![image](./reference/favourites.png)
+Allow shelves, books, chapters, and pages to be favorited and displayed in the `My Most Viewed Favorites` list on the homepage, with up to four items. A dedicated favorites page is available for viewing the complete list. Favorites page ![image](./reference/favourites.png)
 
 **Dependencies:** REQ-4, REQ-5, REQ-6
 
 ### REQ-8.1 Favorite Items
-Favorite shelves, books, chapters, and pages.
+Add supported content items to the favorites list.
 
 **Dependencies:** REQ-4.2.1, REQ-5.2.1, REQ-6.3.1, REQ-6.2.1
 
 **Scenarios:**
 - Favorite Items
-  - **GIVEN:** User is on a shelf details page, book details page, chapter details page, or page reading page.
-  - **WHEN:** Click 'Favorite' on the shelf details page, book details page, chapter details page, or page reading page
-  - **THEN:** Add to the favorites list, and the corresponding button changes to 'Unfavorite'
+  - **GIVEN:** The user is on a supported shelf, book, chapter, or page view.
+  - **WHEN:** The user clicks `Favorite` for the current content item.
+  - **THEN:** The system adds the item to the favorites list and changes the action to `Unfavorite`.
 
 ### REQ-8.2 Quick Navigation from Favorites
-Navigate via the favorites list.
+Open a content page from a favorites list entry.
 
 **Dependencies:** REQ-8.1
 
 **Scenarios:**
 - Quick Navigation from Favorites
-  - **GIVEN:** The homepage or favorites page shows a favorites list with at least one item.
-  - **WHEN:** Click a list item in 'My Most Viewed Favorites' on the homepage or favorites page
-  - **THEN:** Enter the corresponding content details page
+  - **GIVEN:** The homepage or favorites page shows at least one favorite item.
+  - **WHEN:** The user clicks an item in `My Most Viewed Favorites`.
+  - **THEN:** The system opens the corresponding content page.
 
 ## REQ-9 Recently Updated Pages
-Add recently created or edited pages to the homepage, showing up to 5 items.
+Show recently created or edited pages on the homepage, with up to five items.
 
 **Dependencies:** REQ-6.1
 
 ### REQ-9.1 Quick Navigation from Recently Updated
-Navigate via the recently updated pages list.
+Open a page from the recently updated pages list.
 
 **Dependencies:** REQ-6.1.1
 
 **Scenarios:**
 - Quick Navigation from Recently Updated
-  - **GIVEN:** The homepage shows a 'Recently Updated Pages' list with at least one item.
-  - **WHEN:** Click an item in the 'Recently Updated Pages' list on the homepage
-  - **THEN:** Enter the reading page of the corresponding page
+  - **GIVEN:** The homepage shows `Recently Updated Pages` with at least one item.
+  - **WHEN:** The user clicks an item in the `Recently Updated Pages` list.
+  - **THEN:** The system opens the reading page for the selected page.
