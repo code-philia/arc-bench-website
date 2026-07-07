@@ -20,3 +20,5 @@ requirement/
 __demo__
 
 rebuild-arc-agent-runner.ps1
+
+.codex
