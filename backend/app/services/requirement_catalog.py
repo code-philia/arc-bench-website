@@ -386,22 +386,13 @@ class RequirementCatalogService:
 
         entries: list[tuple[Path, str]] = []
         for requirement in benchmark_tasks:
-            root = f"{benchmark_id}/{requirement.id}"
+            root = f"{benchmark_id}"
             entries.extend(
                 [
-                    (requirement.requirements_path, f"{root}/requirements.md"),
-                    (requirement.tests_path, f"{root}/tests"),
+                    (requirement.requirements_path.parent, f"{root}/requirements/{requirement.id}"),
+                    (requirement.tests_path, f"{root}/tests/{requirement.id}"),
                 ]
             )
-            if requirement.prerequisites_path.exists():
-                entries.append((requirement.prerequisites_path, f"{root}/prerequisites.md"))
-            requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
-            if requirement_yaml_path.exists():
-                entries.append((requirement_yaml_path, f"{root}/requirements.yaml"))
-            if requirement.assets_path.exists():
-                entries.append((requirement.assets_path, f"{root}/assets"))
-            if requirement.references_path.exists():
-                entries.append((requirement.references_path, f"{root}/reference"))
 
         readme = self._build_benchmark_bundle_readme(benchmark_id, benchmark_tasks)
         return self._build_zip_with_virtual_files(
@@ -414,18 +405,9 @@ class RequirementCatalogService:
         requirement = self.get_entry(requirement_id)
         archive_name = f"arcbench-{requirement.id}-bundle.zip"
         entries = [
-            (requirement.requirements_path, f"{requirement.id}/requirements.md"),
+            (requirement.requirements_path.parent, f"{requirement.id}/requirements"),
             (requirement.tests_path, f"{requirement.id}/tests"),
         ]
-        if requirement.prerequisites_path.exists():
-            entries.append((requirement.prerequisites_path, f"{requirement.id}/prerequisites.md"))
-        requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
-        if requirement_yaml_path.exists():
-            entries.append((requirement_yaml_path, f"{requirement.id}/requirements.yaml"))
-        if requirement.assets_path.exists():
-            entries.append((requirement.assets_path, f"{requirement.id}/assets"))
-        if requirement.references_path.exists():
-            entries.append((requirement.references_path, f"{requirement.id}/reference"))
         readme = self._build_benchmark_bundle_readme(requirement.category, [requirement])
         return self._build_zip_with_virtual_files(
             entries,
@@ -645,9 +627,8 @@ class RequirementCatalogService:
             "",
             "## Included",
             "",
-            "- `requirements.md` and `requirements.yaml` for each task",
-            "- `tests/` containing the benchmark test cases",
-            "- `prerequisites.md` when the task provides extra setup notes",
+            "- `requirements/<task>/` with every file from the task requirement directory",
+            "- `tests/<task>/` containing the benchmark test cases",
             "",
             "## How to run tests",
             "",
