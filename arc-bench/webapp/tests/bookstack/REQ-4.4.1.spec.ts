@@ -1,13 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.4.1
+// fixtures: sample_shelf, editable_shelf
 
 test('REQ-4.4.1: Confirm Delete Shelf', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/shelves/1'); // Navigate to shelf details
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Delete/i }).click();
-  await page.getByRole('button', { name: /Confirm/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/shelves/);
+  await h.openShelfDetails(page);
+  await h.clickNamed(page, /^Delete$/i);
+  await h.clickNamed(page, /Confirm|Delete/i);
+  await h.expectTextsVisible(page, [/Shelves/i]);
 });

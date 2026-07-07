@@ -1,12 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.2
+// fixtures: public_homepage
 
 test('REQ-2.2: Open Login Entry', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /登录/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/login/i);
+  await h.ensurePasswordLogin(page);
 });

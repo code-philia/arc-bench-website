@@ -1,13 +1,11 @@
-import { test, expect } from '@playwright/test';
-import { navigateToHomePage } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.1.1
+// fixtures: registered_user, personal_center_user
 
 test('REQ-4.1.1: Block personal center access for an unauthenticated user', async ({ page }) => {
-  // GIVEN: The user is not logged in and is on the home page.
-  await navigateToHomePage(page);
-
-  // WHEN: Click the top "My 12306" entry.
-  await page.getByRole('button', { name: /My 12306/i }).click();
-
-  // THEN: Navigate to the login page.
-  await expect(page).toHaveURL(/login/i, { timeout: 10000 });
+  await h.openHome(page);
+  await h.clickNamed(page, /my 12306/i);
+  await h.expectLoginForm(page);
 });

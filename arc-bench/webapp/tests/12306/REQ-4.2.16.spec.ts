@@ -1,34 +1,21 @@
-import { test, expect } from '@playwright/test';
-import { navigateToTicketOrders } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.2.16
+// fixtures: orders_history_user
 
 test('REQ-4.2.16: Search history orders with a valid keyword', async ({ page }) => {
-  // GIVEN: The user is on the "History orders" tab with a valid date range selected.
-  await navigateToTicketOrders(page);
-  await page.getByRole('button', { name: /History orders/i }).click();
-  await page.waitForTimeout(1000);
-
-  // WHEN: Enter a valid value in the input and click "Search".
-  const searchInput = page.getByPlaceholder(/Order number\/train number\/name/i);
-  await expect(searchInput).toBeVisible({ timeout: 5000 }).catch(() => {});
-  await searchInput.fill('G1').catch(() => {});
-  await page.getByRole('button', { name: /Search/i }).click().catch(() => {});
-
-  // THEN: The page shows the history orders that match.
-  await page.waitForTimeout(1000);
+  await h.openTicketOrders(page, h.FIXTURES.ordersHistoryUser);
+  await h.clickNamed(page, 'History orders');
+  await h.fillField(page, 'Order number/train number/name', h.FIXTURES.orderKeyword);
+  await h.clickNamed(page, 'Search');
+  await h.expectTextsVisible(page, [h.FIXTURES.orderKeyword]);
 });
 
 test('REQ-4.2.16: Reject an invalid history orders search condition', async ({ page }) => {
-  // GIVEN: The user is on the "History orders" tab.
-  await navigateToTicketOrders(page);
-  await page.getByRole('button', { name: /History orders/i }).click();
-  await page.waitForTimeout(1000);
-
-  // WHEN: Enter an invalid search condition and click "Search".
-  const searchInput = page.getByPlaceholder(/Order number\/train number\/name/i);
-  await expect(searchInput).toBeVisible({ timeout: 5000 }).catch(() => {});
-  await searchInput.fill('!!!invalid!!!').catch(() => {});
-  await page.getByRole('button', { name: /Search/i }).click().catch(() => {});
-
-  // THEN: The page shows "Please enter a valid search condition."
-  await expect(page.getByText(/Please enter a valid search condition/i)).toBeVisible({ timeout: 5000 }).catch(() => {});
+  await h.openTicketOrders(page, h.FIXTURES.ordersHistoryUser);
+  await h.clickNamed(page, 'History orders');
+  await h.fillField(page, 'Order number/train number/name', '***');
+  await h.clickNamed(page, 'Search');
+  await h.expectErrorFeedback(page, 'Please enter a valid search condition.');
 });

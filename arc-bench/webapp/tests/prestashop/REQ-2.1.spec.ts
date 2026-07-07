@@ -1,12 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.1
+// fixtures: public_homepage
 
 test('REQ-2.1: Browse Homepage', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Assertion
-  await expect(page.getByRole('region', { name: /carousel|banner/i })).toBeVisible();
-  await expect(page.getByRole('region', { name: /popular products/i }).or(page.getByText(/popular products/i))).toBeVisible();
-  await expect(page.getByRole('form', { name: /newsletter/i }).or(page.getByText(/newsletter/i))).toBeVisible();
-  await expect(page.getByRole('contentinfo')).toBeVisible(); // Footer
+  await h.openHome(page);
+  await h.expectTextsVisible(page, [/carousel/i, /popular products/i, /newsletter/i, /footer/i]);
 });

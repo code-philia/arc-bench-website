@@ -1,13 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-6.3.2
+// fixtures: sample_book, sample_page, sample_chapter, draft_page
 
 test('REQ-6.3.2: Redirect to Page Edit Page', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/books/1/page/1'); // Navigate to a specific page reading view
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Edit/i }).click();
-
-  // 3. Assertion
-  // Should redirect to the edit view of that page
-  await expect(page).toHaveURL(/\/books\/1\/page\/edit\/1/);
+  await h.openPageReading(page);
+  await h.clickNamed(page, /^Edit$/i);
+  await h.expectTextsVisible(page, [/Save Page/i]);
 });

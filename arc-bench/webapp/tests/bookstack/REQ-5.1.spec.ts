@@ -1,13 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-5.1
+// fixtures: sample_book
 
 test('REQ-5.1: View Books List', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Books/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/books/);
-  await expect(page.getByRole('heading', { name: /Books/i })).toBeVisible();
+  await h.openBooks(page);
+  await h.expectTextsVisible(page, [h.FIXTURES.book.name]);
 });

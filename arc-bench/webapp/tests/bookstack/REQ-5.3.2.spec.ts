@@ -1,12 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-5.3.2
+// fixtures: sample_book, editable_book
 
 test('REQ-5.3.2: Cancel Creating Book', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/books/create'); // Create book page
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Cancel/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/books/);
+  await h.openBookCreationFromList(page);
+  await h.clickNamed(page, /^Cancel$/i);
+  await h.expectTextsVisible(page, [/Books/i]);
 });

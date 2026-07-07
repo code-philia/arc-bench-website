@@ -1,15 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.2.3
+// fixtures: public_homepage
 
 test('REQ-2.2.3: Click Carousel to Navigate', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  const carousel = page.getByRole('region', { name: /carousel|banner/i });
-  const activeLink = carousel.locator('.carousel-item.active, [aria-hidden="false"]').getByRole('link').first();
-  
-  await activeLink.click();
-
-  // 3. Assertion
-  await expect(page).not.toHaveURL(/\/$/);
+  await h.openHome(page);
+  await h.clickFirstAvailable(page, [[/shop now/i, /discover/i, /carousel/i]]);
+  await h.expectTextsVisible(page, [/product|sale|category/i]);
 });

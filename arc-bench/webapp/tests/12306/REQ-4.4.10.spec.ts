@@ -1,16 +1,12 @@
-import { test, expect } from '@playwright/test';
-import { navigateToMyPassengers } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.4.10
+// fixtures: passenger_manager_user
 
 test('REQ-4.4.10: Search the passenger list by a fuzzy condition', async ({ page }) => {
-  // GIVEN: The user is on the "My Passengers" page.
-  await navigateToMyPassengers(page);
-
-  // WHEN: Enter a passenger name or ID number in the input and click "Search".
-  const searchInput = page.getByPlaceholder(/Please enter passenger name/i);
-  await expect(searchInput).toBeVisible({ timeout: 5000 }).catch(() => {});
-  await searchInput.fill('Test');
-  await page.getByRole('button', { name: /Search/i }).click().catch(() => {});
-
-  // THEN: The table shows the passenger rows that match the search condition.
-  await page.waitForTimeout(1000);
+  await h.openMyPassengers(page);
+  await h.fillField(page, 'Name', h.FIXTURES.passenger.name);
+  await h.clickNamed(page, 'Search');
+  await h.expectTextsVisible(page, [h.FIXTURES.passenger.name]);
 });

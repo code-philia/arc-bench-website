@@ -1,12 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-1.6.1
+// fixtures: public_homepage, cart_header_state
 
 test('REQ-1.6.1: View Cart Count', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Assertion
-  const cartIcon = page.getByRole('banner').getByRole('link', { name: /cart/i });
-  await expect(cartIcon).toBeVisible();
-  // Ensure some text representing count is visible within the cart area
-  await expect(cartIcon.locator('.cart-products-count').or(page.getByText(/\d+/))).toBeVisible();
+  await h.openHome(page);
+  await h.expectTextsVisible(page, [/cart/i, /\d+/]);
 });

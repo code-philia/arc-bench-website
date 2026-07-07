@@ -1,16 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.3.1
+// fixtures: sample_shelf, editable_shelf
 
 test('REQ-4.3.1: Create Shelf', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/shelves/1'); // Navigate to a shelf details page as per scenario
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /New Shelf/i }).click();
-  await page.getByLabel(/Name/i).fill('New Test Shelf');
-  await page.getByLabel(/Description/i).fill('This is a description for the new shelf.');
-  await page.getByRole('button', { name: /Save Shelf/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/shelves/);
-  await expect(page.getByText(/New Test Shelf/i)).toBeVisible();
+  await h.openShelfDetails(page);
+  await h.clickNamed(page, /New Shelf/i);
+  await h.fillShelfForm(page, 'create');
+  await h.clickNamed(page, /Save Shelf/i);
+  await h.expectTextsVisible(page, [h.FIXTURES.shelf.name]);
 });

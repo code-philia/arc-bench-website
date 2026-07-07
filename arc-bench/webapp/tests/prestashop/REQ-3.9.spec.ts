@@ -1,22 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.9
+// fixtures: category_listing, sortable_catalog
 
 test('REQ-3.9: Pagination', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  // Search for something with many results
-  const searchBox = page.getByRole('searchbox');
-  await searchBox.fill('a');
-  await searchBox.press('Enter');
-
-  // 2. Interaction
-  const pagination = page.getByRole('navigation', { name: /pagination/i });
-  const nextButton = pagination.getByRole('link', { name: /next/i }).or(pagination.getByText(/next/i));
-  
-  // If pagination exists, click next
-  if (await nextButton.isVisible()) {
-    await nextButton.click();
-    
-    // 3. Assertion
-    await expect(page).toHaveURL(/.*page=2.*/i);
-  }
+  await h.openCategoryPage(page);
+  await h.clickFirstAvailable(page, [[/next/i, /^2$/i]]);
+  await h.expectTextsVisible(page, [/showing/i]);
 });

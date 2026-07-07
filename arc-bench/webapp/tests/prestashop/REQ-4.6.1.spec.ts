@@ -1,16 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.6.1
+// fixtures: product_detail_product, cart_ready_product, checkout_customer
 
 test('REQ-4.6.1: Add Product to Cart', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.locator('article').first().getByRole('link').first().click();
-
-  // 2. Interaction
-  const addToCartBtn = page.getByRole('button', { name: /add to cart/i });
-  await addToCartBtn.click();
-
-  // 3. Assertion
-  const modal = page.getByRole('dialog').or(page.locator('#blockcart-modal'));
-  await expect(modal).toBeVisible();
-  await expect(modal.getByText(/successfully added/i)).toBeVisible();
+  await h.openDefaultProductDetail(page);
+  await h.addProductToCart(page);
+  await h.expectTextsVisible(page, [/product successfully added to your shopping cart/i, /cart/i]);
 });

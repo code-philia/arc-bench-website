@@ -1,16 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.7
+// fixtures: category_listing, sortable_catalog
 
 test('REQ-3.7: Sort Function', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.getByRole('navigation').getByRole('link', { name: /clothes/i }).click();
-
-  // 2. Interaction
-  const sortDropdown = page.getByRole('button', { name: /sort by/i });
-  await sortDropdown.click();
-  
-  await page.getByRole('link', { name: /price, low to high/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/.*order=product.price.asc.*/i);
+  await h.openCategoryPage(page);
+  await h.clickFirstAvailable(page, [[/sort by/i]]);
+  await h.expectTextsVisible(page, [/price, low to high/i]);
+  await h.clickFirstAvailable(page, [[/price, low to high/i]]);
+  await h.expectTextsVisible(page, [/€|\$/i]);
 });

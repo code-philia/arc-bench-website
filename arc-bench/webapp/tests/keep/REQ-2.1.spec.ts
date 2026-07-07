@@ -1,13 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.1
+// fixtures: public_homepage, notes_overview
 
 test('REQ-2.1: Note Listing', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  // (None required for this scenario)
-
-  // 3. Assertion
-  // Note list shows up
-  await expect(page.getByRole('main')).toBeVisible();
+  await h.openHome(page);
+  await h.expectTextsVisible(page, [h.FIXTURES.notes.pinnedTitle, h.FIXTURES.notes.regularTitle]);
+  await h.expectTextsVisible(page, [/pinned/i, /others|notes/i]);
 });

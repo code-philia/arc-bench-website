@@ -1,13 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.1
+// fixtures: public_homepage, authenticated_user
 
 test('REQ-2.1: Enter Login Page', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Login/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByRole('button', { name: /Login/i })).toBeVisible();
+  await h.openLoginPage(page);
+  await h.expectTextsVisible(page, [/Login/i]);
 });

@@ -1,15 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.5.3
+// fixtures: category_listing
 
 test('REQ-3.5.3: Click to Enter Detail Page', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.getByRole('navigation').getByRole('link', { name: /clothes/i }).click();
-
-  // 2. Interaction
-  const firstProduct = page.locator('article').first();
-  await firstProduct.getByRole('link').first().click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/.*[a-zA-Z0-9].*/);
-  await expect(page.getByRole('button', { name: /add to cart/i })).toBeVisible();
+  await h.openCategoryPage(page);
+  await h.clickFirstAvailable(page, [[h.FIXTURES.catalog.popularProduct]]);
+  await h.expectTextsVisible(page, [h.FIXTURES.catalog.popularProduct, /add to cart/i]);
 });

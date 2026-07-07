@@ -1,11 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
 
-test('REQ-1.1: View Homepage Total Layout', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
+// requirement: REQ-1.1
+// fixtures: public_homepage, homepage_questions
 
-  // 2. Assertion: Display the multi-column homepage layout
-  await expect(page.getByRole('banner')).toBeVisible();
-  await expect(page.getByRole('navigation').first()).toBeVisible();
-  await expect(page.getByRole('main')).toBeVisible();
+test('REQ-1.1: View Homepage Layout', async ({ page }) => {
+  await h.openHome(page);
+  await h.expectTextsVisible(page, [/header/i, /sidebar/i, /questions/i]);
 });

@@ -1,11 +1,10 @@
-import { test, expect } from '@playwright/test';
-import { navigateToForgotPasswordPage } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.4.1
+// fixtures: password_reset_user
 
 test('REQ-2.4.1: Open the forgot password page from the login page', async ({ page }) => {
-  // GIVEN: The user is on the login page.
-  // WHEN: Click the link "Forgot password?".
-  await navigateToForgotPasswordPage(page);
-
-  // THEN: Navigate to the forgot password page.
-  await expect(page).toHaveURL(/forgot.*password|reset.*password/i);
+  await h.openForgotPasswordPage(page);
+  await h.expectForgotPasswordPage(page);
 });

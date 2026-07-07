@@ -1,12 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
 
-test('REQ-1.2: Back to homepage from other pages', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/login');
+// requirement: REQ-1.2
+// fixtures: public_homepage
 
-  // 2. Interaction
-  await page.getByRole('link', { name: /BookStack/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\//);
+test('REQ-1.2: Back to Homepage from Other Pages', async ({ page }) => {
+  await h.openShelves(page);
+  await h.returnHomeByLogo(page);
+  await h.expectTextsVisible(page, [/BookStack/i]);
 });

@@ -1,20 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-7.1
+// fixtures: public_homepage, search_index
 
 test('REQ-7.1: Basic Search', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  const searchBox = page.getByRole('textbox', { name: /search/i }).or(page.getByPlaceholder(/search/i));
-  await searchBox.fill('react hooks');
-  
-  // Press enter to search
-  await searchBox.press('Enter');
-
-  // Wait for the URL to change
-  await page.waitForURL(/\/questions\?search=react%20hooks/i);
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/questions\?search=react%20hooks/i);
-  await expect(page.getByRole('heading', { name: /search results for/i })).toBeVisible();
+  await h.openHome(page);
+  await h.fillField(page, [/search/i], 'react state');
+  await h.expectTextsVisible(page, [/react/i, /state/i]);
+  await h.pressEnter(page, [/search/i]);
+  await h.expectTextsVisible(page, [/results/i, /react/i]);
 });

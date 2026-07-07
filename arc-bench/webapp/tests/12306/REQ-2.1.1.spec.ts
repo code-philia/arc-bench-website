@@ -1,11 +1,10 @@
-import { test, expect } from '@playwright/test';
-import { navigateToRegistrationPage } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.1.1
+// fixtures: public_homepage, registration_candidates
 
 test('REQ-2.1.1: Open the registration page from the home page', async ({ page }) => {
-  // GIVEN: The user is on the home page and is not logged in.
-  // WHEN: Click the "Register" link in the top-right area.
-  await navigateToRegistrationPage(page);
-
-  // THEN: Navigate to the registration page.
-  await expect(page).toHaveURL(/register/i);
+  await h.openRegistrationPage(page);
+  await h.expectRegistrationForm(page);
 });

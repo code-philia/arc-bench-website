@@ -1,5 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-8.1
+// fixtures: registered_user
 
 test('REQ-8.1: Enter My Account', async ({ page }) => {
-  test.skip('Requires logged in user', () => {});
+  await h.openMyAccount(page);
+  await h.expectTextsVisible(page, [/my account/i, /information|addresses|orders/i]);
 });

@@ -1,25 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.4
+// fixtures: product_detail_product
 
 test('REQ-4.4: Variant Selection', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  // Search for a product that likely has variants
-  await page.getByRole('searchbox').fill('t-shirt');
-  await page.getByRole('searchbox').press('Enter');
-  await page.locator('article').first().getByRole('link').first().click();
-
-  // 2. Interaction
-  const sizeDropdown = page.getByRole('combobox', { name: /size/i }).or(page.getByLabel(/size/i));
-  if (await sizeDropdown.isVisible()) {
-    await sizeDropdown.selectOption({ index: 1 });
-    // Verify it changed
-    await expect(sizeDropdown).not.toHaveValue('');
-  }
-
-  const colorGroup = page.locator('.product-variants').getByRole('radiogroup', { name: /color/i }).or(page.locator('.color-label').first());
-  if (await colorGroup.isVisible()) {
-    await colorGroup.click();
-    // 3. Assertion
-    await expect(page).toHaveURL(/.*[a-zA-Z0-9].*/);
-  }
+  await h.openDefaultProductDetail(page);
+  await h.chooseOption(page, [/size/i], h.FIXTURES.product.size);
+  await h.clickFirstAvailable(page, [[/white/i]]);
+  await h.expectTextsVisible(page, [/white/i, /m/i]);
 });

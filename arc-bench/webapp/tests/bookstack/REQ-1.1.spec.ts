@@ -1,14 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-1.1
+// fixtures: public_homepage
 
 test('REQ-1.1: Open Homepage', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  // No explicit interaction required for opening the homepage
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\//);
-  await expect(page.getByRole('navigation')).toBeVisible();
-  await expect(page.getByRole('searchbox')).toBeVisible();
+  await h.openHome(page);
+  await h.expectTextsVisible(page, [/BookStack/i]);
 });

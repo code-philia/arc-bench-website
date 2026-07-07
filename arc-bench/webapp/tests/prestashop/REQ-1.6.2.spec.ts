@@ -1,12 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-1.6.2
+// fixtures: public_homepage, cart_header_state
 
 test('REQ-1.6.2: Click to Enter Cart', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('banner').getByRole('link', { name: /cart/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/.*cart.*/i);
+  await h.openHome(page);
+  await h.openCart(page);
+  await h.expectTextsVisible(page, [/shopping cart/i, /cart/i]);
 });

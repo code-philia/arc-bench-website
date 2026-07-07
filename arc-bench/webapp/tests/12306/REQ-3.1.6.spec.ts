@@ -1,15 +1,13 @@
-import { test, expect } from '@playwright/test';
-import { navigateToHomePage, selectLocationByTyping } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.1.6
+// fixtures: public_homepage, searchable_routes
 
 test('REQ-3.1.6: Search without a valid departure place', async ({ page }) => {
-  // GIVEN: The user is on the home page with the arrival place and departure date filled, and the departure place missing.
-  await navigateToHomePage(page);
-  await selectLocationByTyping(page, 'To', 'shanghai');
-  // Leave the From field empty
-
-  // WHEN: Click the "Search" button.
-  await page.getByRole('button', { name: /Search/i }).click();
-
-  // THEN: The page shows "Please select the place of departure." and does not navigate to the search results page.
-  await expect(page.getByText(/Please select the place of departure/i)).toBeVisible();
+  await h.openHome(page);
+  await h.fillField(page, 'To', h.FIXTURES.searchRoute.to);
+  await h.fillField(page, 'Date', h.FIXTURES.searchRoute.date);
+  await h.clickNamed(page, 'Search');
+  await h.expectErrorFeedback(page, 'Please enter a valid departure place.');
 });

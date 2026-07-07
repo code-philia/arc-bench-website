@@ -1,15 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-6.1
+// fixtures: tags_catalog
 
 test('REQ-6.1: View All Tags', async ({ page }) => {
-  // 1. Navigate directly to tags page
-  await page.goto('/tags');
-  await page.waitForLoadState('domcontentloaded');
-
-  // 2. Assertion - Check tags page structure
-  const heading = page.getByRole('heading', { name: /tags/i });
-  await expect(heading).toBeVisible({ timeout: 10000 });
-
-  // Check for tag items (with error handling)
-  const tagLink = page.getByRole('link', { name: /^[a-z0-9-]+$/i }).first();
-  await expect(tagLink).toBeVisible();
+  await h.openTagsPage(page);
+  await h.expectTextsVisible(page, [/python/i, /javascript/i, /questions/i]);
 });

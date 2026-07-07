@@ -1,25 +1,22 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-7.3
+// fixtures: registration_candidate
 
 test('REQ-7.3: User Registration', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/login');
-  
-  // 2. Interaction
-  await page.getByRole('link', { name: /no account\? create one here/i }).click();
-  await expect(page).toHaveURL(/.*register.*/i);
-
-  await page.getByLabel(/mr\./i).check();
-  await page.getByRole('textbox', { name: /first name/i }).fill('John');
-  await page.getByRole('textbox', { name: /last name/i }).fill('Doe');
-  await page.getByRole('textbox', { name: /email/i }).fill(`test${Date.now()}@example.com`);
-  await page.getByRole('textbox', { name: /password/i }).or(page.locator('input[type="password"]')).fill('password123');
-  await page.getByRole('textbox', { name: /birthdate/i }).fill('01/01/1990');
-  
-  // Check terms
-  await page.getByLabel(/i agree to the terms/i).or(page.locator('input[name="psgdpr"]')).check();
-  await page.getByLabel(/customer data privacy/i).or(page.locator('input[name="customer_privacy"]')).check();
-
-  // 3. Assertion
-  await page.getByRole('button', { name: /save/i }).click();
-  await expect(page).toHaveURL(/.*my-account.*/i);
+  await h.openSignIn(page);
+  await h.clickFirstAvailable(page, [[/no account\? create one here/i, /create one here/i]]);
+  await h.expectTextsVisible(page, [/first name/i, /last name/i, /birthday/i]);
+  await h.setRadio(page, [/mr\.?/i]);
+  await h.fillField(page, [/first name/i], 'New');
+  await h.fillField(page, [/last name/i], 'Customer');
+  await h.fillField(page, [/email/i], 'new_customer@example.com');
+  await h.fillField(page, [/password/i], 'ShopPass123!');
+  await h.fillField(page, [/birthdate|birthday/i], '1995-08-21');
+  await h.setCheckbox(page, [/receive offers/i], true);
+  await h.setCheckbox(page, [/newsletter/i], true);
+  await h.setCheckbox(page, [/terms/i], true);
+  await h.clickFirstAvailable(page, [[/save/i]]);
+  await h.expectTextsVisible(page, [/my account|sign out/i]);
 });

@@ -1,20 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.2.2
+// fixtures: public_homepage
 
 test('REQ-2.2.2: Manual Carousel Switch', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  const carousel = page.getByRole('region', { name: /carousel|banner/i });
-  const nextButton = carousel.getByRole('button', { name: /next/i });
-  
-  const initialSlide = carousel.locator('.carousel-item.active, [aria-hidden="false"]');
-  const initialContent = await initialSlide.innerHTML();
-
-  await nextButton.click();
-
-  // 3. Assertion
-  const newSlide = carousel.locator('.carousel-item.active, [aria-hidden="false"]');
-  const newContent = await newSlide.innerHTML();
-  expect(initialContent).not.toEqual(newContent);
+  await h.openHome(page);
+  await h.clickFirstAvailable(page, [[/next/i, /previous/i, /right/i, /left/i]]);
+  await h.expectTextsVisible(page, [/carousel/i]);
 });

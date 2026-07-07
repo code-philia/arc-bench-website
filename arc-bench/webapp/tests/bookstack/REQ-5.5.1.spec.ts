@@ -1,13 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-5.5.1
+// fixtures: sample_book, editable_book
 
 test('REQ-5.5.1: Confirm Delete Book', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/books/1'); // Navigate to book details
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Delete/i }).click();
-  await page.getByRole('button', { name: /Confirm/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/books/);
+  await h.openBookDetailsFromList(page);
+  await h.clickNamed(page, /^Delete$/i);
+  await h.clickNamed(page, /Confirm|Delete/i);
+  await h.expectTextsVisible(page, [/Books/i]);
 });

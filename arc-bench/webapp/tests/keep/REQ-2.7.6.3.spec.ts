@@ -1,12 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.7.6.3
+// fixtures: public_homepage, label_catalog, label_filtered_notes
 
 test('REQ-2.7.6.3: View Reminders', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('navigation').getByRole('button', { name: 'Reminders', exact: true }).click();
-
-  // 3. Assertion
-  await expect(page.getByRole('heading', { name: 'Reminders', exact: true })).toBeVisible();
+  await h.openHome(page);
+  await h.openSidebar(page);
+  await h.clickFirstAvailable(page, [[h.FIXTURES.labels.default]]);
+  await h.expectNoteVisible(page, h.FIXTURES.notes.reminderTitle);
+  await h.expectTextAbsent(page, h.FIXTURES.notes.otherTitle);
 });

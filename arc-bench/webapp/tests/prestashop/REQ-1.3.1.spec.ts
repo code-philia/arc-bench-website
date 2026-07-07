@@ -1,15 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-1.3.1
+// fixtures: public_homepage, category_catalog
 
 test('REQ-1.3.1: Expand Category Menu', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  const categoryLink = page.getByRole('navigation').getByRole('link', { name: /clothes/i });
-  await categoryLink.hover();
-
-  // 3. Assertion
-  const dropdown = page.getByRole('menu').or(page.locator('.dropdown-menu'));
-  await expect(dropdown).toBeVisible();
-  await expect(dropdown.getByRole('link', { name: /men/i })).toBeVisible();
+  await h.openHome(page);
+  await h.openCategoryMenu(page);
+  await h.expectTextsVisible(page, [/men/i, /women/i]);
 });

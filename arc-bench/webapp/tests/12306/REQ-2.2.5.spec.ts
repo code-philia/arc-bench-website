@@ -1,15 +1,12 @@
-import { test, expect } from '@playwright/test';
-import { navigateToLoginPage } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.2.5
+// fixtures: public_homepage
 
 test('REQ-2.2.5: Submit the login form with an unknown account', async ({ page }) => {
-  // GIVEN: The user is on the login page with a username that does not exist and a password entered.
-  await navigateToLoginPage(page);
-  await page.getByPlaceholder(/Email\/Username\/Mobile number/i).fill('nonexistent_user_12345');
-  await page.getByPlaceholder(/^Password$/i).fill('SomePassword1!');
-
-  // WHEN: Click the "LOGIN" button.
-  await page.getByRole('button', { name: /LOGIN/i }).click();
-
-  // THEN: The page shows "User not found." and does not complete login.
-  await expect(page.getByText(/User not found/i)).toBeVisible();
+  await h.openLoginPage(page);
+  await h.fillLoginForm(page, 'unknown_account', h.FIXTURES.registeredUser.password);
+  await h.clickNamed(page, 'LOGIN');
+  await h.expectErrorFeedback(page, 'User not found.');
 });

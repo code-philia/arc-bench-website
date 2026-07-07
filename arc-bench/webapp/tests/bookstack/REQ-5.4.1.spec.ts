@@ -1,16 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-5.4.1
+// fixtures: sample_book, editable_book
 
 test('REQ-5.4.1: Save Book Edits', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/books/1'); // Navigate to book details
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Edit/i }).click();
-  await page.getByLabel(/Name/i).fill('Updated Book Name');
-  await page.getByLabel(/Description/i).fill('Updated book description.');
-  await page.getByRole('button', { name: /Save Book/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/books\/1/);
-  await expect(page.getByText(/Updated Book Name/i)).toBeVisible();
+  await h.openBookDetailsFromList(page);
+  await h.clickNamed(page, /^Edit$/i);
+  await h.fillBookForm(page, 'edit');
+  await h.clickNamed(page, /Save Book/i);
+  await h.expectTextsVisible(page, [h.FIXTURES.book.updatedName]);
 });

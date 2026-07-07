@@ -1,14 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-6.1
+// fixtures: public_homepage, notes_overview
 
 test('REQ-6.1: Items and styling', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  // (None)
-
-  // 3. Assertion
-  await expect(page.getByRole('navigation').or(page.getByRole('complementary')).or(page.getByLabel(/sidebar/i)).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /notes/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /reminders/i }).first()).toBeVisible();
+  await h.openHome(page);
+  await h.openSidebar(page);
+  await h.expectTextsVisible(page, [/notes/i, /reminders/i, /edit labels/i, /archive/i, /trash/i]);
 });

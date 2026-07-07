@@ -1,12 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.1
+// fixtures: public_homepage
 
 test('REQ-2.1: Open Registration Entry', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /注册/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/register/i);
+  await h.openHome(page);
+  await h.clickFirstAvailable(page, [[/注册/, /register/i, /sign up/i]]);
+  await h.expectAnyVisible(page, [[/注册/, /register/i], [/手机号/, /mobile/i, /验证/i]]);
 });

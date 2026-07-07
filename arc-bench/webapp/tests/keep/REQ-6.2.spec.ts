@@ -1,14 +1,15 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-6.2
+// fixtures: public_homepage, notes_overview
 
 test('REQ-6.2: Collapsible Sidebar', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('button', { name: /toggle sidebar/i }).click();
-
-  // 3. Assertion
-  // Assuming the text is hidden or the state changes, we just verify the toggle works without crashing
-  await page.getByRole('button', { name: /toggle sidebar/i }).click();
-  await expect(page.getByRole('button', { name: /notes/i })).toBeVisible();
+  await h.openHome(page);
+  await h.openSidebar(page);
+  await h.expectTextsVisible(page, [/notes/i, /trash/i]);
+  await h.toggleSidebar(page);
+  await h.expectVisible(page, [/main menu/i, /menu/i, /sidebar/i]);
+  await h.toggleSidebar(page);
+  await h.expectTextsVisible(page, [/notes/i, /trash/i]);
 });

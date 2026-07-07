@@ -1,5 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-8.5.3
+// fixtures: registered_user, order_history
 
 test('REQ-8.5.3: Reorder', async ({ page }) => {
-  test.skip('Requires logged in user with orders', () => {});
+  await h.openOrderHistory(page);
+  await h.clickFirstAvailable(page, [[/reorder/i]]);
+  await h.expectTextsVisible(page, [/cart/i, /subtotal/i]);
 });

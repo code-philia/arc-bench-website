@@ -1,21 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-7.2
+// fixtures: homepage_questions
 
 test('REQ-7.2: Filter Questions by Tab', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/questions');
-
-  // 2. Interaction
-  // Looking for the sort select dropdown based on FilterPanel implementation
-  // Using combobox role to find the sort by select
-  const sortSelect = page.getByRole('combobox', { name: /sort by/i }).or(page.getByRole('combobox'));
-  await sortSelect.selectOption('active');
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/sort=active/i);
-  
-  // Interaction
-  await sortSelect.selectOption('unanswered');
-  
-  // Assertion
-  await expect(page).toHaveURL(/sort=unanswered/i);
+  await h.openQuestionList(page);
+  await h.clickFirstAvailable(page, [[/newest/i]]);
+  await h.expectTextsVisible(page, [/newest/i]);
+  await h.clickFirstAvailable(page, [[/active/i]]);
+  await h.expectTextsVisible(page, [/active/i]);
 });

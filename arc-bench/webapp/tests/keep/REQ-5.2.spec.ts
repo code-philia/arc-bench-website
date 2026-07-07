@@ -1,13 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-5.2
+// fixtures: public_homepage, notes_overview
 
 test('REQ-5.2: Grid View by default', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  // (None)
-
-  // 3. Assertion
-  // Notes are in grid view and icon shows List view
-  await expect(page.getByRole('button', { name: /list view/i })).toBeVisible();
+  await h.openHome(page);
+  await h.expectTextsVisible(page, [/list view/i, /list/i]);
 });

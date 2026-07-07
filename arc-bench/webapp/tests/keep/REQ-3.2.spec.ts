@@ -1,14 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.2
+// fixtures: public_homepage, searchable_notes
 
 test('REQ-3.2: Search by keyword', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByPlaceholder(/search/i).click();
-  await page.getByPlaceholder(/search/i).fill('st');
-  await page.keyboard.press('Enter');
-
-  // 3. Assertion
-  await expect(page.getByRole('main')).toBeVisible();
+  await h.openHome(page);
+  await h.search(page, h.FIXTURES.search.keyword);
+  await h.expectNoteVisible(page, h.FIXTURES.search.matchingTitle);
+  await h.expectTextsVisible(page, [/st/i]);
 });

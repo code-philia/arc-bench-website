@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.5.3
+// fixtures: public_homepage, archivable_note
 
 test('REQ-2.5.3: Show archived notes', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('navigation').getByRole('button', { name: 'Archive', exact: true }).click();
-
-  // 3. Assertion
-  await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+  await h.openHome(page);
+  await h.archiveNote(page, h.FIXTURES.notes.archiveTitle);
+  await h.openArchive(page);
+  await h.expectNoteVisible(page, h.FIXTURES.notes.archiveTitle);
 });

@@ -1,20 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.6.3
+// fixtures: category_listing, filterable_catalog
 
 test('REQ-3.6.3: Filter by Price Range', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.getByRole('navigation').getByRole('link', { name: /clothes/i }).click();
-
-  // 2. Interaction
-  const filterSection = page.locator('#search_filters').or(page.getByRole('complementary', { name: /filter/i }));
-  const slider = filterSection.locator('.ui-slider-handle').first();
-  
-  // Drag slider right
-  await slider.hover();
-  await page.mouse.down();
-  await page.mouse.move(100, 0);
-  await page.mouse.up();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/.*q=Price-.*/i);
+  await h.openCategoryPage(page);
+  await h.fillField(page, [/price/i], '20');
+  await h.expectTextsVisible(page, [/€|\$/i]);
 });

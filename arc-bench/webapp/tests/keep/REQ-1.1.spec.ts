@@ -1,13 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-1.1
+// fixtures: public_homepage
 
 test('REQ-1.1: Enter Website', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  // (None required for this scenario)
-
-  // 3. Assertion
-  // Verify the home page shows up
-  await expect(page.getByRole('banner')).toBeVisible();
+  await h.openHome(page);
+  await h.expectHomePage(page);
 });

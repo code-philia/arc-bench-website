@@ -1,21 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.4
+// fixtures: public_homepage, editable_note
 
 test('REQ-2.4: Update Note', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // Pre-condition: Create a note
-  await page.getByText(/take a note/i).click();
-  await page.getByPlaceholder(/title/i).fill('Old Title');
-  await page.getByRole('button', { name: /close/i }).click();
-
-  // 2. Interaction
-  await page.getByText('Old Title').first().click();
-  await page.getByPlaceholder(/title/i).fill('Updated Title');
-  await page.getByRole('textbox', { name: /note/i }).last().fill('Updated Content');
-  await page.getByRole('button', { name: /close/i }).click();
-
-  // 3. Assertion
-  await expect(page.getByText('Updated Title').first()).toBeVisible();
-  await expect(page.getByText('Updated Content').first()).toBeVisible();
+  await h.openHome(page);
+  await h.openNote(page, h.FIXTURES.notes.editTitle);
+  await h.fillField(page, [/note/i, /content/i], h.FIXTURES.notes.updatedContent);
+  await h.closeEditor(page);
+  await h.expectNoteVisible(page, h.FIXTURES.notes.updatedContent);
 });

@@ -1,11 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.2
+// fixtures: product_detail_product
 
 test('REQ-4.2: Product Image Area', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.locator('article').first().getByRole('link').first().click();
-
-  // 2. Assertion
-  const imageContainer = page.locator('.product-cover').or(page.getByRole('img', { name: /cover/i }).first());
-  await expect(imageContainer).toBeVisible();
+  await h.openDefaultProductDetail(page);
+  await h.expectTextsVisible(page, [/image/i, /zoom/i]);
 });

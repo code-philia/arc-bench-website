@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.3.2
+// fixtures: sample_shelf, editable_shelf
 
 test('REQ-4.3.2: Cancel Creation', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/shelves/create'); // Directly navigating to create page or from shelf details
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /Cancel/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/\/shelves/);
+  await h.openShelfDetails(page);
+  await h.clickNamed(page, /New Shelf/i);
+  await h.clickNamed(page, /^Cancel$/i);
+  await h.expectTextsVisible(page, [h.FIXTURES.shelf.name]);
 });

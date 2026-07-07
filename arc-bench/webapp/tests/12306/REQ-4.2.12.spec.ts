@@ -1,15 +1,13 @@
-import { test, expect } from '@playwright/test';
-import { loginAsTestUser, navigateToHomePage } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.2.12
+// fixtures: orders_upcoming_user
 
 test('REQ-4.2.12: Open upcoming trips from the booking dropdown', async ({ page }) => {
-  // GIVEN: The user is on the home page.
-  await loginAsTestUser(page);
-  await navigateToHomePage(page);
-
-  // WHEN: Open the "Booking" dropdown in the navigation bar and click the "Refund" option.
-  await page.locator('.main-nav').getByText(/Booking/i).hover();
-  await page.locator('.nav-menu').getByRole('link', { name: /Refund/i }).click();
-
-  // THEN: Navigate directly to the personal center order center and show the "Upcoming trips" page.
-  await expect(page.getByRole('button', { name: /Upcoming trips/i })).toBeVisible({ timeout: 10000 });
+  await h.openHome(page);
+  await h.loginAs(page);
+  await h.hoverNamed(page, /Booking/i);
+  await h.clickNamed(page, /Upcoming trips/i);
+  await h.expectTextsVisible(page, ['Upcoming trips']);
 });

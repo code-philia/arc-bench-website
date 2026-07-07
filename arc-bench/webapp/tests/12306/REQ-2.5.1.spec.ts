@@ -1,13 +1,11 @@
-import { test, expect } from '@playwright/test';
-import { navigateToRegistrationPage } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.5.1
+// fixtures: public_homepage
 
 test('REQ-2.5.1: Open the terms of service page from the registration page', async ({ page }) => {
-  // GIVEN: The user is on the registration page.
-  await navigateToRegistrationPage(page);
-
-  // WHEN: Click the "Terms of Service" link in the agreement text.
-  await page.getByRole('link', { name: /Terms of Service/i }).click();
-
-  // THEN: Navigate to the terms page and show the title "Terms of Service".
-  await expect(page.getByRole('heading', { name: /Terms of Service/i })).toBeVisible({ timeout: 10000 });
+  await h.openRegistrationPage(page);
+  await h.clickNamed(page, 'Terms of Service');
+  await h.expectTextsVisible(page, ['Terms of Service']);
 });

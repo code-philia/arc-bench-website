@@ -1,15 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.6.1
+// fixtures: category_listing, filterable_catalog
 
 test('REQ-3.6.1: Filter by Availability', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.getByRole('navigation').getByRole('link', { name: /clothes/i }).click();
-
-  // 2. Interaction
-  const filterSection = page.locator('#search_filters').or(page.getByRole('complementary', { name: /filter/i }));
-  await filterSection.getByLabel(/in stock/i).check();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/.*q=Availability-In\+stock.*/i);
-  await expect(page.locator('.active-filter')).toBeVisible();
+  await h.openCategoryPage(page);
+  await h.setCheckbox(page, [/in stock/i], true);
+  await h.expectTextsVisible(page, [/in stock/i]);
+  await h.expectUrlIncludes(page, /stock|in-stock|q=/i);
 });

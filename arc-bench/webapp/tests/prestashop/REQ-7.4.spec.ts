@@ -1,16 +1,14 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-7.4
+// fixtures: registered_user
 
 test('REQ-7.4: Forgot Password', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/login');
-
-  // 2. Interaction
-  await page.getByRole('link', { name: /forgot your password/i }).click();
-  await expect(page).toHaveURL(/.*password.*/i);
-
-  await page.getByRole('textbox', { name: /email/i }).fill('test@example.com');
-  await page.getByRole('button', { name: /send/i }).click();
-
-  // 3. Assertion
-  await expect(page.getByText(/if this email address has been registered/i).or(page.locator('.item-success'))).toBeVisible();
+  await h.openSignIn(page);
+  await h.clickFirstAvailable(page, [[/forgot your password\?/i]]);
+  await h.expectTextsVisible(page, [/reset password|password reset/i]);
+  await h.fillField(page, [/email/i], h.FIXTURES.account.email);
+  await h.clickFirstAvailable(page, [[/send/i, /retrieve/i]]);
+  await h.expectTextsVisible(page, [/email sent|reset link|success/i]);
 });

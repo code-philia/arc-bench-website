@@ -1,25 +1,17 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-7.2
+// fixtures: registered_user
 
 test('REQ-7.2: User Login', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/login');
-
-  // 2. Interaction
-  const emailInput = page.getByRole('textbox', { name: /email/i });
-  await emailInput.fill('test@example.com');
-  
-  const passwordInput = page.getByRole('textbox', { name: /password/i }).or(page.locator('input[type="password"]'));
-  await passwordInput.fill('password123');
-
-  const showBtn = page.getByRole('button', { name: /show/i });
-  if (await showBtn.isVisible()) {
-    await showBtn.click();
-    await expect(passwordInput).toHaveAttribute('type', 'text');
-  }
-
-  // 3. Assertion
-  await page.getByRole('button', { name: /sign in/i }).click();
-  
-  // Might fail because it's a fake account, but we verify the attempt
-  await expect(page.getByRole('alert').or(page.getByText(/authentication failed/i)).or(page.locator('.page-my-account'))).toBeVisible();
+  await h.openSignIn(page);
+  await h.fillField(page, [/email/i], h.FIXTURES.account.email);
+  await h.fillField(page, [/password/i], h.FIXTURES.account.password);
+  await h.expectFieldValue(page, [/password/i], /.+/);
+  await h.clickFirstAvailable(page, [[/show/i]]);
+  await h.expectTextsVisible(page, [/hide/i, /remember me/i]);
+  await h.setCheckbox(page, [/remember me/i], true);
+  await h.clickFirstAvailable(page, [[/sign in/i]]);
+  await h.expectTextsVisible(page, [/my account|sign out|store/i]);
 });

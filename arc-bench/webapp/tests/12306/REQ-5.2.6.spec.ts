@@ -1,13 +1,11 @@
-import { test, expect } from '@playwright/test';
-import { openBookingForm } from './helpers';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-5.2.6
+// fixtures: bookable_user, bookable_route, passenger_manager_user
 
 test('REQ-5.2.6: Submit the booking form without selecting any passenger', async ({ page }) => {
-  // GIVEN: The user is on the booking form page with no passenger selected.
-  await openBookingForm(page);
-
-  // WHEN: Click the "Place order" button.
-  await page.getByRole('button', { name: /Place order/i }).click();
-
-  // THEN: The page shows "Please select at least one passenger."
-  await expect(page.getByText(/Please select at least one passenger/i)).toBeVisible({ timeout: 5000 }).catch(() => {});
+  await h.openBookingForm(page, true);
+  await h.clickNamed(page, 'Place order');
+  await h.expectErrorFeedback(page, 'Please select at least one passenger.');
 });

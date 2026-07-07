@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-2.3.3
+// fixtures: public_homepage, deletable_note
 
 test('REQ-2.3.3: Trash list', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('button', { name: /trash/i }).click();
-
-  // 3. Assertion
-  await expect(page.getByRole('heading', { name: /trash/i })).toBeVisible();
+  await h.openHome(page);
+  await h.deleteNote(page, h.FIXTURES.notes.deleteTitle);
+  await h.openTrash(page);
+  await h.expectNoteVisible(page, h.FIXTURES.notes.deleteTitle);
 });

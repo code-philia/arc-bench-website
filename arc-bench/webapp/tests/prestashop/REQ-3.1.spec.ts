@@ -1,13 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.1
+// fixtures: public_homepage, category_catalog
 
 test('REQ-3.1: Enter Category Page', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-
-  // 2. Interaction
-  await page.getByRole('navigation').getByRole('link', { name: /clothes/i }).click();
-
-  // 3. Assertion
-  await expect(page).toHaveURL(/.*clothes.*/i);
-  await expect(page.getByRole('heading', { name: /clothes/i })).toBeVisible();
+  await h.openCategoryPage(page);
+  await h.expectTextsVisible(page, [/men/i, /sort by/i, /showing/i]);
 });

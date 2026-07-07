@@ -1,14 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-3.5.2
+// fixtures: category_listing
 
 test('REQ-3.5.2: Hover to Show Action Buttons', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.getByRole('navigation').getByRole('link', { name: /clothes/i }).click();
-
-  // 2. Interaction
-  const firstProduct = page.locator('article').first();
-  await firstProduct.hover();
-
-  // 3. Assertion
-  await expect(firstProduct.getByRole('button', { name: /quick view/i }).or(firstProduct.getByText(/quick view/i))).toBeVisible();
+  await h.openCategoryPage(page);
+  await h.hoverNamed(page, [h.FIXTURES.catalog.popularProduct]);
+  await h.expectTextsVisible(page, [/quick view/i, /wishlist/i, /color/i]);
 });

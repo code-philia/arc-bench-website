@@ -1,15 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import * as h from './helpers';
+
+// requirement: REQ-4.8.2
+// fixtures: product_detail_product
 
 test('REQ-4.8.2: View Product Details Tab', async ({ page }) => {
-  // 1. Navigation
-  await page.goto('/');
-  await page.locator('article').first().getByRole('link').first().click();
-
-  // 2. Interaction
-  const detailsTab = page.getByRole('tab', { name: /product details/i });
-  await detailsTab.click();
-
-  // 3. Assertion
-  const detailsContent = page.getByRole('tabpanel', { name: /product details/i }).or(page.locator('.product-features'));
-  await expect(detailsContent).toBeVisible();
+  await h.openDefaultProductDetail(page);
+  await h.clickFirstAvailable(page, [[/product details/i, /details/i]]);
+  await h.expectTextsVisible(page, [/reference/i, /data sheet/i, /features/i]);
 });
