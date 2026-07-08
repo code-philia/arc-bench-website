@@ -1,0 +1,7 @@
+{
+  "package_name": "com.arcbench.mintcalc",
+  "permissions": [
+    "android.permission.VIBRATE"
+  ],
+  "test_num": 4
+}
