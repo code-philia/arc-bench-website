@@ -145,6 +145,7 @@ def resume_submission(
             service.build_step_states(
                 active_key="deploy_agent",
                 description="Restarting runner from checkpoint",
+                category=service.get_submission_requirement_category(submission),
             ),
         )
         HostDemoPreviewService.stop_backend()

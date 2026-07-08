@@ -1,5 +1,4 @@
 from functools import lru_cache
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +20,9 @@ class Settings(BaseSettings):
     requirements_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "requirements"
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
     templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"
+    mobile_requirements_root: Path = ROOT_DIR / "arc-bench" / "mobileapp" / "requirements"
+    mobile_tests_root: Path = ROOT_DIR / "arc-bench" / "mobileapp" / "tests"
+    mobile_templates_root: Path = ROOT_DIR / "arc-bench" / "mobileapp" / "template"
     playground_requirements_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "requirements"
     playground_tests_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "tests"
     playground_templates_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "template"
@@ -29,6 +31,8 @@ class Settings(BaseSettings):
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"
+    mobile_runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "mobile-agent-runner"
+    mobile_runner_image: str = "arcbench-mobile-agent-runner:latest"
     builtin_arc_agent_dist_dir: Path = ROOT_DIR / "agentic-requirement-compiler" / "dist" / "arc-agent"
     builtin_openai_api_key: str | None = Field(
         default=None,
@@ -64,6 +68,9 @@ class Settings(BaseSettings):
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
     runner_timeout_seconds: int = 1200
+    mobile_runner_cpu_limit: int = 4
+    mobile_runner_memory_limit: str = "8g"
+    mobile_runner_timeout_seconds: int = 1800
     agent_health_timeout_seconds: int = 90
 
     model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False, extra="ignore")

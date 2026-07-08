@@ -1,6 +1,5 @@
 import json
 import time
-from pathlib import Path
 
 from docker.errors import DockerException, NotFound
 from sqlalchemy.orm import Session
@@ -63,13 +62,22 @@ class ExecutionService:
         *,
         reuse_workspace: bool,
     ) -> None:
-        if requirement.category != "web":
-            raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
+        requirement_category = requirement.category
+        if requirement_category not in {"web", "mobile"}:
+            raise ValueError(f"Unsupported requirement category: {requirement_category}")
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
         agent_source = str(submission.agent_source or "upload").strip()
         start_agent_description = "Running built-in arc-agent" if agent_source == "builtin_arc_agent" else "Running uploaded agent"
+        step_keys = SubmissionService.step_keys_for_category(requirement_category)
+        step_descriptions = {
+            "deploy_agent": "Preparing workspace",
+            "start_agent": start_agent_description,
+            "build_app": "Building Android app",
+            "boot_device": "Booting Android device",
+            "run_tests": "Preparing and running tests",
+        }
         stdout_path = workspace_path / "artifacts" / "stdout.log"
         stderr_path = workspace_path / "artifacts" / "stderr.log"
         result_path = workspace_path / "artifacts" / "result.json"
@@ -152,7 +160,7 @@ class ExecutionService:
                 step_key = str(event.get("step_key", "")).strip()
                 message = str(event.get("message", "")).strip()
                 status = str(event.get("status", "info")).strip() or "info"
-                if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
+                if step_key in step_keys and message:
                     emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
 
@@ -186,24 +194,23 @@ class ExecutionService:
 
             event_step_keys = {str(event.get("step_key", "")).strip() for event in latest_events}
 
-            if "run_tests" in event_step_keys:
-                completed_steps = {"deploy_agent", "start_agent"}
-                active_step_key = "run_tests"
-                description = "Preparing and running tests"
-            elif "start_agent" in event_step_keys:
-                completed_steps = {"deploy_agent"}
-                active_step_key = "start_agent"
-                description = start_agent_description
-            else:
-                completed_steps = set()
-                active_step_key = "deploy_agent"
-                description = "Preparing workspace"
+            active_index = 0
+            for index, step_key in enumerate(step_keys):
+                if step_key in event_step_keys:
+                    active_index = max(active_index, index)
+            active_step_key = step_keys[active_index]
+            completed_steps = set(step_keys[:active_index])
+            description = step_descriptions.get(
+                active_step_key,
+                SubmissionService.step_description_for_key(requirement_category, active_step_key),
+            )
             submission_service.update_steps(
                 submission_service.get_submission(submission_id),
                 submission_service.build_step_states(
                     active_key=active_step_key,
                     completed=completed_steps,
                     description=description,
+                    category=requirement_category,
                 ),
             )
 
@@ -242,6 +249,7 @@ class ExecutionService:
                 submission_service.build_step_states(
                     active_key="deploy_agent",
                     description="Reusing rewound workspace" if reuse_workspace else "Preparing workspace",
+                    category=requirement_category,
                 ),
             )
 
@@ -254,14 +262,20 @@ class ExecutionService:
             submission = submission_service.get_submission(submission_id)
             submission_service.update_steps(
                 submission,
-                submission_service.build_step_states(active_key="deploy_agent", description="Creating runner container"),
+                submission_service.build_step_states(
+                    active_key="deploy_agent",
+                    description="Creating runner container",
+                    category=requirement_category,
+                ),
             )
             emit_event("deploy_agent", "Preparing runner image")
-            debug_log.append("backend", f"Ensuring runner image is available: {self.settings.runner_image}")
+            runner_image = self.settings.mobile_runner_image if requirement_category == "mobile" else self.settings.runner_image
+            debug_log.append("backend", f"Ensuring runner image is available: {runner_image}")
             manager.remove_submission_container(submission_id)
             container = manager.create_container(
                 submission.id,
                 workspace_path,
+                requirement_category=requirement_category,
                 agent_source=agent_source,
                 github_email=user.github_email,
                 github_username=user.github_username,
@@ -284,6 +298,7 @@ class ExecutionService:
                     active_key="start_agent",
                     completed={"deploy_agent"},
                     description=start_agent_description,
+                    category=requirement_category,
                 ),
             )
             emit_event("start_agent", start_agent_description)
@@ -306,6 +321,7 @@ class ExecutionService:
                                 active_key="start_agent",
                                 completed={"deploy_agent"},
                                 description="Pausing current run",
+                                category=requirement_category,
                             ),
                         )
                         debug_log.append("backend", "Pause requested; waiting briefly for checkpoint flush")
@@ -364,8 +380,9 @@ class ExecutionService:
                 submission,
                 submission_service.build_step_states(
                     active_key="run_tests",
-                    completed={"deploy_agent", "start_agent"},
+                    completed=set(step_keys[:-1]),
                     description="Preparing and running tests",
+                    category=requirement_category,
                 ),
             )
 
@@ -384,7 +401,7 @@ class ExecutionService:
                 emit_event("run_tests", failure_reason, status="error")
             submission_service.update_steps(
                 submission_service.get_submission(submission_id),
-                submission_service.build_step_states(completed={"deploy_agent", "start_agent", "run_tests"}),
+                submission_service.build_step_states(completed=set(step_keys), category=requirement_category),
             )
             submission_service.finalize(
                 submission_service.get_submission(submission_id),
@@ -416,6 +433,7 @@ class ExecutionService:
                     failed_key=active_step_key,
                     reason=str(exc),
                     completed=completed_steps,
+                    category=requirement_category,
                 ),
             )
             submission_service.finalize(

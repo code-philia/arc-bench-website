@@ -40,7 +40,7 @@ from app.services.traceability_db_schema import ensure_traceability_schema
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
-DEFAULT_STEPS = [
+WEB_DEFAULT_STEPS = [
     StepState(
         key="deploy_agent",
         title="Deploy Agent",
@@ -58,6 +58,39 @@ DEFAULT_STEPS = [
         title="Run Tests",
         status="pending",
         description="Execute the benchmark test suite against the finished task output.",
+    ),
+]
+
+MOBILE_DEFAULT_STEPS = [
+    StepState(
+        key="deploy_agent",
+        title="Deploy Agent",
+        status="pending",
+        description="Pull mobile runner container, prepare workspace, and initialize the selected agent runtime.",
+    ),
+    StepState(
+        key="start_agent",
+        title="Run Agent",
+        status="pending",
+        description="Execute the selected agent and let it modify the Android starter project.",
+    ),
+    StepState(
+        key="build_app",
+        title="Build App",
+        status="pending",
+        description="Validate the Android project structure and build a debug APK.",
+    ),
+    StepState(
+        key="boot_device",
+        title="Boot Device",
+        status="pending",
+        description="Start the Android emulator, wait for adb readiness, and install the APK.",
+    ),
+    StepState(
+        key="run_tests",
+        title="Run Tests",
+        status="pending",
+        description="Execute the mobile benchmark test suite and collect structured artifacts.",
     ),
 ]
 
@@ -93,8 +126,9 @@ class SubmissionService:
         requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")
-        if requirement.category != "web":
-            raise ValueError("Only web requirements are supported in v1")
+        requirement_category = requirement.category
+        if requirement_category not in {"web", "mobile"}:
+            raise ValueError(f"Unsupported requirement category: {requirement_category}")
 
         submission_id = uuid.uuid4().hex[:12]
         user = self._get_submission_user(user_id)
@@ -131,7 +165,7 @@ class SubmissionService:
             original_filename=original_filename,
             archive_path=str(archive_path),
             status=SubmissionStatus.PENDING.value,
-            steps_json=json.dumps([step.model_dump() for step in DEFAULT_STEPS]),
+            steps_json=json.dumps([step.model_dump() for step in self.default_steps_for_category(requirement_category)]),
         )
         self.db.add(submission)
         self.db.commit()
@@ -316,6 +350,7 @@ class SubmissionService:
                 active_key="start_agent",
                 completed={"deploy_agent"},
                 description=f"Paused at edited checkpoint {normalized_node_id} (design)",
+                category=self.get_submission_requirement_category(submission),
             ),
         )
         self.append_step_event(
@@ -515,6 +550,28 @@ class SubmissionService:
             output.write(f"[{timestamp}] {message}\n")
         return log_path
 
+    def get_submission_requirement_category(self, submission: Submission) -> str:
+        requirement = self.db.get(Requirement, submission.requirement_id)
+        if not requirement:
+            raise LookupError(f"Requirement '{submission.requirement_id}' not found")
+        return requirement.category
+
+    @classmethod
+    def default_steps_for_category(cls, category: str) -> list[StepState]:
+        template = MOBILE_DEFAULT_STEPS if category == "mobile" else WEB_DEFAULT_STEPS
+        return [StepState(**step.model_dump()) for step in template]
+
+    @classmethod
+    def step_keys_for_category(cls, category: str) -> list[str]:
+        return [step.key for step in cls.default_steps_for_category(category)]
+
+    @classmethod
+    def step_description_for_key(cls, category: str, step_key: str) -> str:
+        for step in cls.default_steps_for_category(category):
+            if step.key == step_key:
+                return step.description
+        return "Running"
+
     @staticmethod
     def _normalize_display_name(display_name: str | None) -> str | None:
         if display_name is None:
@@ -540,7 +597,7 @@ class SubmissionService:
     def append_step_event(
         self,
         submission_id: str,
-        step_key: Literal["deploy_agent", "start_agent", "run_tests"],
+        step_key: Literal["deploy_agent", "start_agent", "build_app", "boot_device", "run_tests"],
         message: str,
         status: Literal["info", "success", "error"] = "info",
     ) -> Path:
@@ -1067,6 +1124,7 @@ class SubmissionService:
                 active_key="start_agent",
                 completed={"deploy_agent"},
                 description=f"Paused at rewound checkpoint {node_id} ({phase})",
+                category=self.get_submission_requirement_category(submission),
             ),
         )
         self.append_step_event(
@@ -1120,10 +1178,16 @@ class SubmissionService:
         return Path(*normalized.parts)
 
     @staticmethod
-    def build_step_states(active_key: str | None = None, completed: set[str] | None = None, description: str | None = None) -> list[StepState]:
+    def build_step_states(
+        active_key: str | None = None,
+        completed: set[str] | None = None,
+        description: str | None = None,
+        *,
+        category: str,
+    ) -> list[StepState]:
         completed = completed or set()
         steps: list[StepState] = []
-        for step in DEFAULT_STEPS:
+        for step in SubmissionService.default_steps_for_category(category):
             status = "pending"
             step_description = step.description
             if step.key in completed:
@@ -1136,10 +1200,16 @@ class SubmissionService:
         return steps
 
     @staticmethod
-    def build_failed_step_states(failed_key: str, reason: str, completed: set[str] | None = None) -> list[StepState]:
+    def build_failed_step_states(
+        failed_key: str,
+        reason: str,
+        completed: set[str] | None = None,
+        *,
+        category: str,
+    ) -> list[StepState]:
         completed = completed or set()
         steps: list[StepState] = []
-        for step in DEFAULT_STEPS:
+        for step in SubmissionService.default_steps_for_category(category):
             if step.key in completed:
                 status = "completed"
                 step_description = "Done"

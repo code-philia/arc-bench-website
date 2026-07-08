@@ -19,10 +19,12 @@ class WorkspaceAssembler:
         self.traceability_seed_builder = TraceabilitySeedBuilder()
 
     def assemble(self, submission: Submission, requirement: Requirement, user: User) -> Path:
+        requirement_category = requirement.category
         workspace_root = self.runtime_paths.get_workspace_root(submission, username=user.username)
         if workspace_root.exists():
             shutil.rmtree(workspace_root)
         submission_dir = workspace_root / "submission"
+        sdk_dir = workspace_root / "sdk"
         template_dir = workspace_root / "template"
         task_dir = workspace_root / "task"
         tests_dir = workspace_root / "tests"
@@ -30,11 +32,14 @@ class WorkspaceAssembler:
         prompt_dir = workspace_root / "prompt"
 
         submission_dir.mkdir(parents=True, exist_ok=True)
+        sdk_dir.mkdir(parents=True, exist_ok=True)
         template_dir.mkdir(parents=True, exist_ok=True)
         task_dir.mkdir(parents=True, exist_ok=True)
         tests_dir.mkdir(parents=True, exist_ok=True)
         artifacts_dir.mkdir(parents=True, exist_ok=True)
         prompt_dir.mkdir(parents=True, exist_ok=True)
+        self._prepare_artifact_directories(artifacts_dir)
+        self._prepare_sdk_directories(sdk_dir, requirement_category)
 
         agent_source = AgentSourceType(submission.agent_source)
         if agent_source == AgentSourceType.UPLOAD:
@@ -55,6 +60,9 @@ class WorkspaceAssembler:
             shutil.copy2(prerequisites_path, task_dir / "prerequisites.md")
         else:
             (task_dir / "prerequisites.md").write_text("", encoding="utf-8")
+        task_info_path = requirement_markdown_path.with_name("task_info.json")
+        if requirement_category == "mobile" and task_info_path.exists():
+            shutil.copy2(task_info_path, task_dir / "task_info.json")
         shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
         self.traceability_seed_builder.write_seed_file(
             artifacts_dir / "traceability-seed.json",
@@ -62,6 +70,8 @@ class WorkspaceAssembler:
             requirement_yaml_path=task_dir / "requirements.yaml",
         )
         self._write_demo_test_status_seed(artifacts_dir / "demo-test-statuses.json")
+
+        task_info = self._read_task_info(task_dir / "task_info.json")
 
         (workspace_root / "runner-spec.json").write_text(
             json.dumps(
@@ -85,7 +95,7 @@ class WorkspaceAssembler:
                             "--output-dir",
                             "/workspace/template",
                             "--app-type",
-                            "web",
+                            requirement_category,
                         ],
                         "env": {
                             "MODEL": submission.model_name or "",
@@ -96,6 +106,7 @@ class WorkspaceAssembler:
                         "requirement_id": requirement.id,
                         "test_runner": requirement.test_runner,
                     },
+                    "android": self._build_android_spec(requirement.id, task_info),
                 },
                 indent=2,
             ) + "\n",
@@ -116,6 +127,49 @@ class WorkspaceAssembler:
         }
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    @staticmethod
+    def _prepare_artifact_directories(artifacts_dir: Path) -> None:
+        for relative_path in [
+            "build",
+            "build/outputs",
+            "device",
+            "device/screenshots",
+            "device/ui_dumps",
+            "device/recordings",
+            "evaluation",
+        ]:
+            (artifacts_dir / relative_path).mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _prepare_sdk_directories(sdk_dir: Path, category: str) -> None:
+        (sdk_dir / "traceability").mkdir(parents=True, exist_ok=True)
+        if category == "mobile":
+            (sdk_dir / "android_runner_sdk").mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _read_task_info(path: Path) -> dict:
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _build_android_spec(requirement_id: str, task_info: dict) -> dict:
+        return {
+            "sdk_root": "/opt/android",
+            "emulator_mode": "in_container",
+            "avd_name": "arcbench_api31",
+            "apk_output_path": "/workspace/artifacts/build/outputs/app-debug.apk",
+            "results_path": "/workspace/artifacts/result.json",
+            "template_name": "android-starter",
+            "requirement_id": requirement_id,
+            "package_name_hint": str(task_info.get("package_name", "com.arcbench.generated")),
+            "permissions": list(task_info.get("permissions", [])),
+        }
 
     @staticmethod
     def _flatten_single_root(agent_dir: Path) -> None:

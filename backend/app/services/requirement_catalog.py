@@ -105,8 +105,8 @@ class RequirementCatalogService:
                         title=self._extract_title(requirements_md, fallback=requirement_id),
                         category=category,
                         summary=self._extract_summary(requirements_md),
-                        test_runner="playwright",
-                        total_tests=leaf_requirement_count * 3,
+                        test_runner=self._test_runner_for_category(category),
+                        total_tests=self._estimate_total_tests(category, tests_path, leaf_requirement_count),
                         module_count=leaf_requirement_count,
                         requirements_path=requirements_path,
                         prerequisites_path=prerequisites_path,
@@ -399,9 +399,20 @@ class RequirementCatalogService:
         priority = {
             "web": 0,
             "mobile": 1,
-            "android": 1,
         }
         return (priority.get(category, 99), category)
+
+    @staticmethod
+    def _test_runner_for_category(category: str) -> str:
+        if category == "mobile":
+            return "android-uiautomator"
+        return "playwright"
+
+    @staticmethod
+    def _estimate_total_tests(category: str, tests_path: Path, leaf_requirement_count: int) -> int:
+        if category == "mobile" and tests_path.exists():
+            return len([path for path in tests_path.glob("*.json") if path.is_file()])
+        return leaf_requirement_count * 3
 
     @staticmethod
     def _resolve_requirement_yaml_path(requirements_path: Path) -> Path:
@@ -448,15 +459,13 @@ class RequirementCatalogService:
             return "Web Competition"
         if category == "mobile":
             return "Mobile Competition"
-        if category == "android":
-            return "Mobile Competition"
         return f"{category.title()} Competition"
 
     @staticmethod
     def _competition_summary(category: str, task_count: int) -> str:
         if category == "web":
             return f"Browser-based product tasks with Playwright evaluation across {task_count} benchmark tasks."
-        if category in {"mobile", "android"}:
+        if category == "mobile":
             return f"Mobile application tasks across {task_count} benchmark tasks."
         return f"{task_count} benchmark tasks in the {category} track."
 
