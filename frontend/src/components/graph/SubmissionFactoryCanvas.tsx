@@ -1,7 +1,6 @@
 ﻿import { Graph, type EdgeData, type GraphData, type NodeData } from "@antv/g6";
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-
 import type { RequirementNode } from "../../lib/taskTree";
 import type {
   RequirementVisualState,
@@ -83,11 +82,11 @@ type Bounds = {
 };
 
 const REQUIREMENT_NODE_WIDTH = 236;
-const REQUIREMENT_NODE_HEIGHT = 96;
+const REQUIREMENT_NODE_HEIGHT = 104;
 const INTERFACE_NODE_WIDTH = 204;
-const INTERFACE_NODE_HEIGHT = 78;
-const TEST_NODE_WIDTH = 188;
-const TEST_NODE_HEIGHT = 72;
+const INTERFACE_NODE_HEIGHT = 88;
+const TEST_NODE_WIDTH = 196;
+const TEST_NODE_HEIGHT = 90;
 const LANE_HEADER_WIDTH = 92;
 const LANE_HEADER_HEIGHT = 30;
 const LANE_CONTAINER_MIN_HEIGHT = 88;
@@ -106,12 +105,9 @@ const INTERFACE_LANE_HEADER_GAP = 22;
 const SECTION_FRAME_PADDING_X = 44;
 const SECTION_FRAME_PADDING_TOP = 64;
 const SECTION_FRAME_PADDING_BOTTOM = 42;
-const SECTION_HEADER_WIDTH = 236;
-const SECTION_HEADER_HEIGHT = 34;
+const SECTION_HEADER_HEIGHT = 44;
 const SECTION_MIN_WIDTH = 344;
 const FLOW_LANE_WIDTH = 108;
-const FLOW_LABEL_WIDTH = 164;
-const FLOW_LABEL_HEIGHT = 32;
 const INTERFACE_LANE_ORDERS: InterfaceLane[] = ["ui", "api", "func", "db"];
 const TEST_LANE_ORDERS: TestLane[] = ["e2e", "integration", "unit"];
 
@@ -193,27 +189,31 @@ function resolveNodeAccent(meta: FactoryNodeMeta | undefined) {
   return "#0f766e";
 }
 
-function resolveSelectedNodeFill(meta: FactoryNodeMeta | undefined) {
-  if (meta?.kind === "interface") {
-    return "#ecfdf5";
+function resolveNodeHighlightFill(datum: NodeData) {
+  const meta = (datum.data ?? {}) as FactoryNodeMeta;
+  const style = (datum.style ?? {}) as { stroke?: string };
+  if (meta.kind === "requirement" && style.stroke) {
+    return style.stroke;
   }
-  if (meta?.kind === "test") {
-    return "#fff7ed";
-  }
-  return "#eff6ff";
+  return resolveNodeAccent(meta);
 }
 
-function resolveRelatedNodeFill(meta: FactoryNodeMeta | undefined) {
-  if (meta?.kind === "interface") {
-    return "#f5fbff";
+function resolveNodeHighlightSize(datum: NodeData, scale: number): number | [number, number] | undefined {
+  const style = (datum.style ?? {}) as { size?: number | [number, number] };
+  const baseSize = style.size;
+  if (Array.isArray(baseSize)) {
+    return [baseSize[0] * scale, baseSize[1] * scale] as [number, number];
   }
-  if (meta?.kind === "test") {
-    return "#fffaf2";
+  if (typeof baseSize === "number") {
+    return baseSize * scale;
   }
-  return "#f8fbff";
+  return baseSize;
 }
 
 function resolveEdgeHighlightColor(kind: FactoryEdgeKind | string) {
+  if (kind === "factory-flow") {
+    return "#f59e0b";
+  }
   if (kind === "interface-call") {
     return "#7c3aed";
   }
@@ -227,21 +227,21 @@ function sectionFrameStyle(section: "requirements" | "interfaces" | "tests") {
   switch (section) {
     case "requirements":
       return {
-        fill: "#fffdf5",
-        stroke: "#c89f2f",
-        accent: "#c89f2f",
+        fill: "#f3f4f6",
+        stroke: "#9ca3af",
+        accent: "#e5e7eb",
       };
     case "interfaces":
       return {
-        fill: "#f4fbff",
-        stroke: "#0f766e",
-        accent: "#0f766e",
+        fill: "#f3f4f6",
+        stroke: "#9ca3af",
+        accent: "#e5e7eb",
       };
     case "tests":
       return {
-        fill: "#fff8f1",
-        stroke: "#ea580c",
-        accent: "#ea580c",
+        fill: "#f3f4f6",
+        stroke: "#9ca3af",
+        accent: "#e5e7eb",
       };
   }
 }
@@ -359,6 +359,26 @@ function parseTestNodeTitle(item: SubmissionTraceabilityTest) {
   return truncateLabel(location || item.test_id, 34);
 }
 
+function formatTraceabilityFirstLine(firstLine: string | null) {
+  const normalized = typeof firstLine === "string" ? firstLine.trim() : "";
+  if (!normalized) {
+    return null;
+  }
+  if (/^[0-9]+$/.test(normalized)) {
+    return `Line ${normalized}`;
+  }
+  return truncateLabel(normalized, 26);
+}
+
+function buildNodeLabelText(nodeId: string, name: string, firstLine?: string | null) {
+  const lines = [nodeId, name];
+  const firstLineLabel = formatTraceabilityFirstLine(firstLine ?? null);
+  if (firstLineLabel) {
+    lines.push(firstLineLabel);
+  }
+  return lines.join("\n");
+}
+
 function buildInterfaceRelationPairs(interfaces: SubmissionTraceabilityInterface[]) {
   const existingIds = new Set(interfaces.map((item) => item.interface_id));
   const pairs = new Map<string, { source: string; target: string }>();
@@ -444,14 +464,14 @@ function buildGraphModel({
         shadowBlur: 10,
         shadowOffsetX: 0,
         shadowOffsetY: 4,
-        labelText: `${node.data.id}\n${truncateLabel(node.data.name, 42)}`,
+        labelText: buildNodeLabelText(node.data.id, truncateLabel(node.data.name, 42)),
         labelFill: "#16202a",
         labelFontFamily: nodeLabelFontFamily(),
-        labelFontSize: 15.5,
-        labelFontWeight: 650,
-        labelLineHeight: 21,
+        labelFontSize: 16.25,
+        labelFontWeight: 700,
+        labelLineHeight: 23,
         labelWordWrap: true,
-        labelMaxWidth: "80%",
+        labelMaxWidth: "78%",
         labelPlacement: "center",
         labelOffsetY: 2,
       },
@@ -742,16 +762,16 @@ function buildGraphModel({
             shadowBlur: 0,
             shadowOffsetX: 0,
             shadowOffsetY: 0,
-            labelText: `${item.interface_id}\n${parseInterfaceNodeTitle(item)}`,
+            labelText: buildNodeLabelText(item.interface_id, parseInterfaceNodeTitle(item)),
             labelFill: "#142031",
             labelFontFamily: nodeLabelFontFamily(),
-            labelFontSize: 14.75,
-            labelFontWeight: 650,
-            labelLineHeight: 19,
+            labelFontSize: 15.25,
+            labelFontWeight: 700,
+            labelLineHeight: 21,
             labelWordWrap: true,
-            labelMaxWidth: "80%",
+            labelMaxWidth: "78%",
             labelPlacement: "center",
-            labelOffsetY: 2,
+            labelOffsetY: 1,
           },
           data: {
             kind: "interface",
@@ -778,7 +798,7 @@ function buildGraphModel({
               stroke: "#c8d2df",
               lineWidth: 1.2,
               lineDash: [5, 4],
-              opacity: 0.04,
+              opacity: 0.018,
               endArrow: true,
               endArrowType: "vee",
               endArrowFill: "#c8d2df",
@@ -897,22 +917,22 @@ function buildGraphModel({
             size: [TEST_NODE_WIDTH, TEST_NODE_HEIGHT],
             radius: 10,
             fill: laneVisual.fill,
-            stroke: item.status === "failed" ? "#dc2626" : item.status === "passed" ? "#16a34a" : laneVisual.stroke,
+            stroke: laneVisual.stroke,
             lineWidth: 1.35,
             shadowColor: "rgba(0, 0, 0, 0)",
             shadowBlur: 0,
             shadowOffsetX: 0,
             shadowOffsetY: 0,
-            labelText: `${item.test_id}\n${parseTestNodeTitle(item)}`,
+            labelText: buildNodeLabelText(item.test_id, parseTestNodeTitle(item), item.first_line),
             labelFill: "#142031",
             labelFontFamily: nodeLabelFontFamily(),
-            labelFontSize: 13.5,
-            labelFontWeight: 650,
-            labelLineHeight: 18,
+            labelFontSize: 14.5,
+            labelFontWeight: 700,
+            labelLineHeight: 19.5,
             labelWordWrap: true,
-            labelMaxWidth: "82%",
+            labelMaxWidth: "78%",
             labelPlacement: "center",
-            labelOffsetY: 2,
+            labelOffsetY: 0,
           },
           data: {
             kind: "test",
@@ -936,7 +956,7 @@ function buildGraphModel({
               stroke: "#c8d2df",
               lineWidth: 1.2,
               lineDash: [5, 4],
-              opacity: 0.04,
+              opacity: 0.018,
               endArrow: true,
               endArrowType: "vee",
               endArrowFill: "#c8d2df",
@@ -1044,17 +1064,17 @@ function buildGraphModel({
       id: section.id.replace("section-frame", "section-header"),
       type: "rect",
       style: {
-        x: section.left + 28 + (SECTION_HEADER_WIDTH / 2),
-        y: sectionTop + 24,
-        size: [SECTION_HEADER_WIDTH, SECTION_HEADER_HEIGHT],
-        radius: 10,
+        x: section.left + (section.width / 2),
+        y: sectionTop - 2,
+        size: [section.width, SECTION_HEADER_HEIGHT],
+        radius: 12,
         fill: section.style.accent,
-        stroke: section.style.accent,
-        lineWidth: 1,
+        stroke: section.style.stroke,
+        lineWidth: 1.4,
         labelText: section.title,
-        labelFill: "#ffffff",
-        labelFontFamily: nodeLabelFontFamily(),
-        labelFontSize: 12.8,
+        labelFill: "#111111",
+        labelFontFamily: "'SimHei', 'Microsoft YaHei', sans-serif",
+        labelFontSize: 16,
         labelFontWeight: 700,
         labelPlacement: "center",
       },
@@ -1065,19 +1085,13 @@ function buildGraphModel({
     });
   });
 
+  const assemblyFlowY = sectionTop + (sectionHeight / 2);
   const flowOriginX = requirementFrame.left + requirementFrame.width + 18;
   const interfaceFlowTargetX = interfaceFrame.left - 18;
-  const testFlowTargetX = testFrame.left - 18;
-  const interfaceFlowY = sectionTop + 110;
-  const testFlowY = sectionTop + 168;
-  const flowLabelX = flowOriginX + Math.max(72, Math.min(FLOW_LANE_WIDTH, (interfaceFlowTargetX - flowOriginX) / 2));
-  const flowLabelY = sectionTop + 138;
 
   [
-    { id: "flow-anchor:req-interface", x: flowOriginX, y: interfaceFlowY },
-    { id: "flow-anchor:req-test", x: flowOriginX, y: testFlowY },
-    { id: "flow-anchor:interface", x: interfaceFlowTargetX, y: interfaceFlowY },
-    { id: "flow-anchor:test", x: testFlowTargetX, y: testFlowY },
+    { id: "flow-anchor:req-interface", x: flowOriginX, y: assemblyFlowY },
+    { id: "flow-anchor:interface", x: interfaceFlowTargetX, y: assemblyFlowY },
   ].forEach((anchor) => {
     flowNodes.push({
       id: anchor.id,
@@ -1086,9 +1100,9 @@ function buildGraphModel({
         x: anchor.x,
         y: anchor.y,
         size: 6,
-        fill: "#f59e0b",
+        fill: "#2563eb",
         fillOpacity: 0,
-        stroke: "#f59e0b",
+        stroke: "#2563eb",
         strokeOpacity: 0,
       },
       states: [],
@@ -1098,66 +1112,27 @@ function buildGraphModel({
     });
   });
 
-  flowNodes.push({
-    id: "flow-label:pipeline",
-    type: "rect",
+  flowEdges.push({
+    id: "factory-flow:requirements->interfaces",
+    source: "flow-anchor:req-interface",
+    target: "flow-anchor:interface",
+    type: "cubic-horizontal",
     style: {
-      x: flowLabelX,
-      y: flowLabelY,
-      size: [FLOW_LABEL_WIDTH, FLOW_LABEL_HEIGHT],
-      radius: 16,
-      fill: "#f59e0b",
-      fillOpacity: 0.92,
-      stroke: "#d97706",
-      lineWidth: 1.2,
-      labelText: "Factory Pipeline",
-      labelFill: "#ffffff",
-      labelFontFamily: nodeLabelFontFamily(),
-      labelFontSize: 12.5,
-      labelFontWeight: 700,
-      labelPlacement: "center",
+      stroke: "l(0) 0:#1d4ed8 0.5:#38bdf8 1:#0f766e",
+      lineWidth: 8,
+      opacity: 0.9,
+      lineDash: [22, 10],
+      endArrow: true,
+      endArrowType: "vee",
+      endArrowFill: "#0f766e",
+      endArrowStroke: "#0f766e",
+      endArrowSize: 22,
     },
     states: [],
     data: {
-      kind: "flow-label",
-    } satisfies FactoryNodeMeta,
-  });
-
-  [
-    {
-      id: "factory-flow:requirements->interfaces",
-      source: "flow-anchor:req-interface",
-      target: "flow-anchor:interface",
+      kind: "factory-flow" satisfies FactoryEdgeKind,
     },
-    {
-      id: "factory-flow:requirements->tests",
-      source: "flow-anchor:req-test",
-      target: "flow-anchor:test",
-    },
-  ].forEach((edge) => {
-    flowEdges.push({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: "cubic-horizontal",
-      style: {
-        stroke: "#f59e0b",
-        lineWidth: 3,
-        opacity: 0.72,
-        lineDash: [12, 6],
-        endArrow: true,
-        endArrowType: "vee",
-        endArrowFill: "#f59e0b",
-        endArrowStroke: "#f59e0b",
-        endArrowSize: 15,
-      },
-      states: [],
-      data: {
-        kind: "factory-flow" satisfies FactoryEdgeKind,
-      },
-    });
   });
-
   if (showInterfaces) {
     interfaceRelationPairs.forEach((pair) => {
       const sourceActive = activeInterfaceIds.has(pair.source);
@@ -1174,9 +1149,9 @@ function buildGraphModel({
         states: hasHighlight && showRelation ? ["related"] : [],
         style: {
           stroke: "#6d28d9",
-          lineWidth: 2.3,
+          lineWidth: 2.6,
           lineDash: [10, 6],
-          opacity: 0.06,
+          opacity: 0.14,
           endArrow: true,
           endArrowType: "vee",
           endArrowFill: "#6d28d9",
@@ -1376,10 +1351,11 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
             style: (datum: NodeData) => ({ ...(datum.style ?? {}) }),
             state: {
               selected: {
-                fill: (datum: NodeData) => resolveSelectedNodeFill((datum.data ?? {}) as FactoryNodeMeta),
-                stroke: (datum: NodeData) => resolveNodeAccent((datum.data ?? {}) as FactoryNodeMeta),
-                lineWidth: 4.8,
-                labelFill: "#0f172a",
+                fill: (datum: NodeData) => resolveNodeHighlightFill(datum),
+                stroke: (datum: NodeData) => resolveNodeHighlightFill(datum),
+                size: (datum: NodeData) => resolveNodeHighlightSize(datum, 1.1),
+                lineWidth: 4.4,
+                labelFill: "#ffffff",
                 shadowColor: "rgba(0, 0, 0, 0)",
                 shadowBlur: 0,
                 shadowOffsetX: 0,
@@ -1387,10 +1363,11 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 opacity: 1,
               },
               related: {
-                fill: (datum: NodeData) => resolveRelatedNodeFill((datum.data ?? {}) as FactoryNodeMeta),
-                stroke: (datum: NodeData) => resolveNodeAccent((datum.data ?? {}) as FactoryNodeMeta),
-                lineWidth: 3.1,
-                labelFill: "#0f172a",
+                fill: (datum: NodeData) => resolveNodeHighlightFill(datum),
+                stroke: (datum: NodeData) => resolveNodeHighlightFill(datum),
+                size: (datum: NodeData) => resolveNodeHighlightSize(datum, 1.06),
+                lineWidth: 3.4,
+                labelFill: "#ffffff",
                 shadowColor: "rgba(0, 0, 0, 0)",
                 shadowBlur: 0,
                 shadowOffsetX: 0,
@@ -1410,15 +1387,33 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 },
                 lineWidth: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                  return kind === "interface-call" ? 3.2 : 2.8;
+                  if (kind === "interface-call") {
+                    return 3.4;
+                  }
+                  if (kind === "factory-flow") {
+                    return 4.2;
+                  }
+                  return 2.1;
                 },
                 lineDash: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                  return kind === "interface-call" ? [12, 6] : [8, 4];
+                  if (kind === "interface-call") {
+                    return [12, 6];
+                  }
+                  if (kind === "factory-flow") {
+                    return [14, 6];
+                  }
+                  return [8, 4];
                 },
                 opacity: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                  return kind === "interface-call" ? 0.98 : 0.92;
+                  if (kind === "interface-call") {
+                    return 0.98;
+                  }
+                  if (kind === "factory-flow") {
+                    return 0.9;
+                  }
+                  return 0.46;
                 },
                 endArrowFill: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
@@ -1430,7 +1425,13 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 },
                 endArrowSize: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                  return kind === "interface-call" ? 16 : 14;
+                  if (kind === "interface-call") {
+                    return 16;
+                  }
+                  if (kind === "factory-flow") {
+                    return 17;
+                  }
+                  return 13;
                 },
               },
             },
