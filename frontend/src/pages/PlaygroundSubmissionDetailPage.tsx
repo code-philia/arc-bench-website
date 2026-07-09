@@ -1,9 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { MinusOutlined, PlusOutlined, RadarChartOutlined } from "@ant-design/icons";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
-import SubmissionFactoryCanvas from "../components/graph/SubmissionFactoryCanvas";
-import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
+import SubmissionFactoryCanvas, { type SubmissionFactoryCanvasHandle } from "../components/graph/SubmissionFactoryCanvas";
+import RequirementTreeCanvas, { type RequirementTreeCanvasHandle } from "../components/requirements/RequirementTreeCanvas";
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
@@ -1367,6 +1368,8 @@ export default function PlaygroundSubmissionDetailPage() {
       ? "benchmark"
       : "playground";
   const { user } = useAuth();
+  const requirementCanvasRef = useRef<RequirementTreeCanvasHandle | null>(null);
+  const factoryCanvasRef = useRef<SubmissionFactoryCanvasHandle | null>(null);
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
   const [requirement, setRequirement] = useState<RequirementDetail | null>(null);
@@ -1426,6 +1429,8 @@ export default function PlaygroundSubmissionDetailPage() {
   const [editableTree, setEditableTree] = useState<RequirementNode | null>(null);
   const [submissionTaskAssets, setSubmissionTaskAssets] = useState<SubmissionTaskAssets | null>(null);
   const [traceabilityOverlayVisible, setTraceabilityOverlayVisible] = useState(false);
+  const [showInterfaces, setShowInterfaces] = useState(true);
+  const [showTests, setShowTests] = useState(true);
   const [editableNodeId, setEditableNodeId] = useState<string | null>("ROOT");
   const [editableDetailExpanded, setEditableDetailExpanded] = useState(false);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
@@ -1605,6 +1610,8 @@ export default function PlaygroundSubmissionDetailPage() {
     setFactorySelectionActive(false);
     setAllTraceability(null);
     setTraceabilityOverlayVisible(false);
+    setShowInterfaces(true);
+    setShowTests(true);
     setSource(null);
     setSourceError(null);
     setCommitHistory(null);
@@ -2451,8 +2458,52 @@ export default function PlaygroundSubmissionDetailPage() {
                   display: activeTab === "canvas" ? "block" : "none",
                 }}
               >
+                <div className="task-flow-toolbar submission-canvas-floating-toolbar">
+                  <button
+                    type="button"
+                    className="icon-tool-btn"
+                    title="Zoom out"
+                    onClick={() => executionPaused ? requirementCanvasRef.current?.zoomOut() : factoryCanvasRef.current?.zoomOut()}
+                  >
+                    <MinusOutlined />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-tool-btn"
+                    title="Zoom in"
+                    onClick={() => executionPaused ? requirementCanvasRef.current?.zoomIn() : factoryCanvasRef.current?.zoomIn()}
+                  >
+                    <PlusOutlined />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-tool-btn"
+                    title="Center graph"
+                    onClick={() => executionPaused ? requirementCanvasRef.current?.fitView() : factoryCanvasRef.current?.fitView()}
+                  >
+                    <RadarChartOutlined />
+                  </button>
+                  <div className="task-flow-toolbar-divider toolbar-divider-right" />
+                  <button
+                    type="button"
+                    className={`icon-tool-btn ${showInterfaces ? "active" : ""}`}
+                    title={showInterfaces ? "Hide interfaces" : "Show interfaces"}
+                    onClick={() => setShowInterfaces((current) => !current)}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 600 }}>IF</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`icon-tool-btn ${showTests ? "active" : ""}`}
+                    title={showTests ? "Hide tests" : "Show tests"}
+                    onClick={() => setShowTests((current) => !current)}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 600 }}>T</span>
+                  </button>
+                </div>
                 {submission?.status === "PAUSED" ? (
                   <RequirementTreeCanvas
+                    ref={requirementCanvasRef}
                     tree={pausedCanvasTree ?? tree}
                     selectedNodeId={pausedCanvasSelectedNodeId}
                     onSelectNode={(nodeId) => {
@@ -2488,10 +2539,15 @@ export default function PlaygroundSubmissionDetailPage() {
                       ? (editableNodeId ?? pulseNodeId)
                       : (useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId)}
                     showLegend
+                    showCanvasToolbar={false}
                     detailTestId="quickstart-submission-node-detail"
                     taskAssets={submissionTaskAssets}
                     autoFitOnTreeChange={false}
                     traceabilityNodes={visibleTraceability}
+                    showInterfaces={showInterfaces}
+                    showTests={showTests}
+                    onShowInterfacesChange={setShowInterfaces}
+                    onShowTestsChange={setShowTests}
                     allTraceability={allTraceability}
                     onRequestAllTraceability={() => {
                       void refreshAllTraceability().catch(() => undefined);
@@ -2546,6 +2602,7 @@ export default function PlaygroundSubmissionDetailPage() {
                   />
                 ) : (
                   <SubmissionFactoryCanvas
+                    ref={factoryCanvasRef}
                     key={`factory-canvas:${submissionId}`}
                     tree={tree}
                     selectedNodeId={factorySelectionActive ? activeSelectedNodeId : null}
@@ -2566,6 +2623,8 @@ export default function PlaygroundSubmissionDetailPage() {
                     onRequestAllTraceability={() => {
                       void refreshAllTraceability().catch(() => undefined);
                     }}
+                    showInterfaces={showInterfaces}
+                    showTests={showTests}
                     selectedTraceabilityId={selectedTraceabilityId}
                     selectedTraceabilityKind={selectedTraceabilityKind}
                     onSelectInterface={({ id, requirementNodeId }) => {
@@ -2579,6 +2638,20 @@ export default function PlaygroundSubmissionDetailPage() {
                         }
                       }
                       setSelectedTraceabilityKind("interface");
+                      setSelectedTraceabilityId(id);
+                      setSidebarTab("traceability");
+                    }}
+                    onSelectTest={({ id, requirementNodeId }) => {
+                      setFactorySelectionActive(true);
+                      const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
+                      if (targetNodeId) {
+                        setSelectedNodeId(targetNodeId);
+                        setFocusNodeId(targetNodeId);
+                        if (useQuickStartSubmission) {
+                          quickStart.setSelectedNode(targetNodeId);
+                        }
+                      }
+                      setSelectedTraceabilityKind("test");
                       setSelectedTraceabilityId(id);
                       setSidebarTab("traceability");
                     }}

@@ -1,24 +1,42 @@
-import { Graph, type EdgeData, type GraphData, type NodeData } from "@antv/g6";
+﻿import { Graph, type EdgeData, type GraphData, type NodeData } from "@antv/g6";
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 
 import type { RequirementNode } from "../../lib/taskTree";
 import type {
   RequirementVisualState,
   SubmissionTraceabilityInterface,
   SubmissionTraceabilityPayload,
+  SubmissionTraceabilityTest,
 } from "../../lib/types";
 
-type FactoryNodeKind = "requirement" | "interface" | "lane-header" | "lane-container";
+type FactoryNodeKind =
+  | "requirement"
+  | "interface"
+  | "test"
+  | "lane-header"
+  | "lane-container"
+  | "section-frame"
+  | "section-header"
+  | "flow-anchor"
+  | "flow-label";
 type InterfaceLane = "ui" | "api" | "func" | "db";
-type FactoryEdgeKind = "requirement-hierarchy" | "requirement-interface" | "interface-call";
+type TestLane = "unit" | "integration" | "e2e";
+type FactoryEdgeKind =
+  | "requirement-hierarchy"
+  | "requirement-interface"
+  | "requirement-test"
+  | "interface-call"
+  | "factory-flow";
 
 type FactoryNodeMeta = {
   kind: FactoryNodeKind;
   requirementId?: string | null;
   interfaceId?: string | null;
-  lane?: InterfaceLane;
+  testId?: string | null;
+  lane?: InterfaceLane | TestLane;
   interfaceItem?: SubmissionTraceabilityInterface;
+  testItem?: SubmissionTraceabilityTest;
 };
 
 type SubmissionFactoryCanvasProps = {
@@ -29,6 +47,8 @@ type SubmissionFactoryCanvasProps = {
   nodeStates?: Record<string, RequirementVisualState>;
   allTraceability?: SubmissionTraceabilityPayload | null;
   onRequestAllTraceability?: () => void;
+  showInterfaces?: boolean;
+  showTests?: boolean;
   selectedTraceabilityId?: string | null;
   selectedTraceabilityKind?: "interface" | "test" | null;
   onSelectInterface?: (payload: {
@@ -37,16 +57,37 @@ type SubmissionFactoryCanvasProps = {
     filePath: string;
     firstLine: string | null;
   }) => void;
+  onSelectTest?: (payload: {
+    id: string;
+    requirementNodeId: string | null;
+    filePath: string;
+    firstLine: string | null;
+  }) => void;
+};
+
+export type SubmissionFactoryCanvasHandle = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitView: () => void;
 };
 
 type GraphModel = {
   data: GraphData;
 };
 
+type Bounds = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
 const REQUIREMENT_NODE_WIDTH = 236;
 const REQUIREMENT_NODE_HEIGHT = 96;
 const INTERFACE_NODE_WIDTH = 204;
 const INTERFACE_NODE_HEIGHT = 78;
+const TEST_NODE_WIDTH = 188;
+const TEST_NODE_HEIGHT = 72;
 const LANE_HEADER_WIDTH = 92;
 const LANE_HEADER_HEIGHT = 30;
 const LANE_CONTAINER_MIN_HEIGHT = 88;
@@ -58,10 +99,21 @@ const INTERFACE_AREA_OFFSET = 420;
 const INTERFACE_COLUMN_GAP = 34;
 const INTERFACE_ROW_GAP = 28;
 const INTERFACE_SECTION_GAP = 34;
+const TRACEABILITY_SECTION_GAP = 42;
 const INTERFACE_LANE_PADDING_X = 28;
 const INTERFACE_LANE_PADDING_Y = 24;
 const INTERFACE_LANE_HEADER_GAP = 22;
+const SECTION_FRAME_PADDING_X = 44;
+const SECTION_FRAME_PADDING_TOP = 64;
+const SECTION_FRAME_PADDING_BOTTOM = 42;
+const SECTION_HEADER_WIDTH = 236;
+const SECTION_HEADER_HEIGHT = 34;
+const SECTION_MIN_WIDTH = 344;
+const FLOW_LANE_WIDTH = 108;
+const FLOW_LABEL_WIDTH = 164;
+const FLOW_LABEL_HEIGHT = 32;
 const INTERFACE_LANE_ORDERS: InterfaceLane[] = ["ui", "api", "func", "db"];
+const TEST_LANE_ORDERS: TestLane[] = ["e2e", "integration", "unit"];
 
 function truncateLabel(value: string, maxLength: number): string {
   const normalized = value.trim();
@@ -109,8 +161,134 @@ function interfaceLaneStyle(lane: InterfaceLane) {
   }
 }
 
+function testLaneFromType(value: string): TestLane {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "integration") return "integration";
+  if (normalized === "e2e") return "e2e";
+  return "unit";
+}
+
+function testLaneStyle(lane: TestLane) {
+  switch (lane) {
+    case "unit":
+      return { fill: "#f5f3ff", stroke: "#7c3aed", accent: "#7c3aed" };
+    case "integration":
+      return { fill: "#ecfeff", stroke: "#0891b2", accent: "#0891b2" };
+    case "e2e":
+      return { fill: "#fef2f2", stroke: "#dc2626", accent: "#dc2626" };
+  }
+}
+
 function nodeLabelFontFamily() {
   return "'Aptos', 'Segoe UI', 'Helvetica Neue', sans-serif";
+}
+
+function resolveNodeAccent(meta: FactoryNodeMeta | undefined) {
+  if (meta?.kind === "interface" && meta.lane) {
+    return interfaceLaneStyle(meta.lane as InterfaceLane).accent;
+  }
+  if (meta?.kind === "test" && meta.lane) {
+    return testLaneStyle(meta.lane as TestLane).accent;
+  }
+  return "#0f766e";
+}
+
+function resolveSelectedNodeFill(meta: FactoryNodeMeta | undefined) {
+  if (meta?.kind === "interface") {
+    return "#ecfdf5";
+  }
+  if (meta?.kind === "test") {
+    return "#fff7ed";
+  }
+  return "#eff6ff";
+}
+
+function resolveRelatedNodeFill(meta: FactoryNodeMeta | undefined) {
+  if (meta?.kind === "interface") {
+    return "#f5fbff";
+  }
+  if (meta?.kind === "test") {
+    return "#fffaf2";
+  }
+  return "#f8fbff";
+}
+
+function resolveEdgeHighlightColor(kind: FactoryEdgeKind | string) {
+  if (kind === "interface-call") {
+    return "#7c3aed";
+  }
+  if (kind === "requirement-test") {
+    return "#ea580c";
+  }
+  return "#0f766e";
+}
+
+function sectionFrameStyle(section: "requirements" | "interfaces" | "tests") {
+  switch (section) {
+    case "requirements":
+      return {
+        fill: "#fffdf5",
+        stroke: "#c89f2f",
+        accent: "#c89f2f",
+      };
+    case "interfaces":
+      return {
+        fill: "#f4fbff",
+        stroke: "#0f766e",
+        accent: "#0f766e",
+      };
+    case "tests":
+      return {
+        fill: "#fff8f1",
+        stroke: "#ea580c",
+        accent: "#ea580c",
+      };
+  }
+}
+
+function resolveInterfacePreferredColumns(itemCount: number) {
+  return Math.max(1, Math.min(itemCount || 1, itemCount > 12 ? 5 : itemCount > 6 ? 4 : 3));
+}
+
+function resolveTestPreferredColumns(itemCount: number) {
+  return Math.max(1, Math.min(itemCount || 1, itemCount > 9 ? 5 : itemCount > 4 ? 4 : 3));
+}
+
+function resolveLaneSectionWidth(itemCount: number, nodeWidth: number, preferredColumns: number) {
+  const columns = Math.max(1, Math.min(itemCount || 1, preferredColumns));
+  return (INTERFACE_LANE_PADDING_X * 2)
+    + (columns * nodeWidth)
+    + (Math.max(0, columns - 1) * INTERFACE_COLUMN_GAP);
+}
+
+function createBounds(): Bounds {
+  return {
+    left: Number.POSITIVE_INFINITY,
+    top: Number.POSITIVE_INFINITY,
+    right: Number.NEGATIVE_INFINITY,
+    bottom: Number.NEGATIVE_INFINITY,
+  };
+}
+
+function includeBounds(bounds: Bounds, centerX: number, centerY: number, width: number, height: number) {
+  bounds.left = Math.min(bounds.left, centerX - (width / 2));
+  bounds.top = Math.min(bounds.top, centerY - (height / 2));
+  bounds.right = Math.max(bounds.right, centerX + (width / 2));
+  bounds.bottom = Math.max(bounds.bottom, centerY + (height / 2));
+}
+
+function includeBoundsFromRect(bounds: Bounds, left: number, top: number, width: number, height: number) {
+  bounds.left = Math.min(bounds.left, left);
+  bounds.top = Math.min(bounds.top, top);
+  bounds.right = Math.max(bounds.right, left + width);
+  bounds.bottom = Math.max(bounds.bottom, top + height);
+}
+
+function hasBounds(bounds: Bounds) {
+  return Number.isFinite(bounds.left)
+    && Number.isFinite(bounds.top)
+    && Number.isFinite(bounds.right)
+    && Number.isFinite(bounds.bottom);
 }
 
 function buildElementStateMap(data: GraphData) {
@@ -171,6 +349,16 @@ function parseInterfaceNodeTitle(item: SubmissionTraceabilityInterface) {
   }
 }
 
+function fileBasename(filePath: string) {
+  const segments = filePath.split(/[\\/]/);
+  return segments[segments.length - 1] || filePath;
+}
+
+function parseTestNodeTitle(item: SubmissionTraceabilityTest) {
+  const location = fileBasename(item.file_path).trim();
+  return truncateLabel(location || item.test_id, 34);
+}
+
 function buildInterfaceRelationPairs(interfaces: SubmissionTraceabilityInterface[]) {
   const existingIds = new Set(interfaces.map((item) => item.interface_id));
   const pairs = new Map<string, { source: string; target: string }>();
@@ -194,6 +382,8 @@ function buildGraphModel({
   tree,
   nodeStates,
   allTraceability,
+  showInterfaces,
+  showTests,
   selectedNodeId,
   selectionActive,
   selectedTraceabilityId,
@@ -203,6 +393,8 @@ function buildGraphModel({
   tree: RequirementNode;
   nodeStates: Record<string, RequirementVisualState>;
   allTraceability: SubmissionTraceabilityPayload | null | undefined;
+  showInterfaces: boolean;
+  showTests: boolean;
   selectedNodeId: string | null;
   selectionActive: boolean;
   selectedTraceabilityId: string | null | undefined;
@@ -218,10 +410,17 @@ function buildGraphModel({
   const minY = Math.min(...positionedNodes.map((node) => node.y));
   const maxRequirementX = Math.max(...positionedNodes.map((node) => LEFT_MARGIN + (node.y - minY)));
 
+  const sectionNodes: NodeData[] = [];
+  const flowNodes: NodeData[] = [];
   const requirementNodes: NodeData[] = [];
   const requirementEdges: EdgeData[] = [];
+  const flowEdges: EdgeData[] = [];
   const requirementIndexById = new Map<string, number>();
   const requirementPositionById = new Map<string, { order: number; y: number }>();
+  const requirementBounds = createBounds();
+  const interfaceBounds = createBounds();
+  const testBounds = createBounds();
+
   positionedNodes.forEach((node, index) => {
     const nodeX = LEFT_MARGIN + (node.y - minY);
     const nodeY = TOP_MARGIN + (node.x - minX);
@@ -243,6 +442,8 @@ function buildGraphModel({
         lineWidth: 1.4,
         shadowColor: "rgba(15, 23, 42, 0.06)",
         shadowBlur: 10,
+        shadowOffsetX: 0,
+        shadowOffsetY: 4,
         labelText: `${node.data.id}\n${truncateLabel(node.data.name, 42)}`,
         labelFill: "#16202a",
         labelFontFamily: nodeLabelFontFamily(),
@@ -260,6 +461,7 @@ function buildGraphModel({
         requirementId: node.data.id,
       } satisfies FactoryNodeMeta,
     });
+    includeBounds(requirementBounds, nodeX, nodeY, REQUIREMENT_NODE_WIDTH, REQUIREMENT_NODE_HEIGHT);
   });
 
   positionedRoot.links().forEach((link) => {
@@ -284,22 +486,32 @@ function buildGraphModel({
     const lane = interfaceLaneFromType(item.type);
     return lane === "ui" || lane === "api" || lane === "func" || lane === "db";
   });
+  const tests = allTraceability?.tests ?? [];
+  const interfaceRelationPairs = showInterfaces ? buildInterfaceRelationPairs(interfaces) : [];
 
-  const interfaceStartX = Math.max(width * 0.45, maxRequirementX + INTERFACE_AREA_OFFSET);
   const interfaceNodes: NodeData[] = [];
   const interfaceEdges: EdgeData[] = [];
+  const testNodes: NodeData[] = [];
+  const testEdges: EdgeData[] = [];
   const interfaceRelationEdges: EdgeData[] = [];
   const effectiveSelectionActive = Boolean(selectionActive);
   const effectiveSelectedNodeId = effectiveSelectionActive ? selectedNodeId : null;
   const selectedInterfaceId = effectiveSelectionActive && selectedTraceabilityKind === "interface"
     ? selectedTraceabilityId ?? null
     : null;
+  const selectedTestId = effectiveSelectionActive && selectedTraceabilityKind === "test"
+    ? selectedTraceabilityId ?? null
+    : null;
   const selectedInterface = selectedInterfaceId
     ? interfaces.find((item) => item.interface_id === selectedInterfaceId) ?? null
+    : null;
+  const selectedTest = selectedTestId
+    ? tests.find((item) => item.test_id === selectedTestId) ?? null
     : null;
 
   const activeRequirementIds = new Set<string>();
   const activeInterfaceIds = new Set<string>();
+  const activeTestIds = new Set<string>();
 
   if (effectiveSelectedNodeId) {
     activeRequirementIds.add(effectiveSelectedNodeId);
@@ -308,14 +520,34 @@ function buildGraphModel({
         activeInterfaceIds.add(item.interface_id);
       }
     });
+    tests.forEach((item) => {
+      if (item.req_id === effectiveSelectedNodeId) {
+        activeTestIds.add(item.test_id);
+      }
+    });
   }
 
   if (selectedInterface) {
     activeInterfaceIds.add(selectedInterface.interface_id);
     selectedInterface.req_ids.forEach((reqId) => activeRequirementIds.add(reqId));
+    interfaceRelationPairs.forEach((pair) => {
+      if (pair.source === selectedInterface.interface_id) {
+        activeInterfaceIds.add(pair.target);
+      }
+      if (pair.target === selectedInterface.interface_id) {
+        activeInterfaceIds.add(pair.source);
+      }
+    });
   }
 
-  const hasHighlight = activeRequirementIds.size > 0 || activeInterfaceIds.size > 0;
+  if (selectedTest) {
+    activeTestIds.add(selectedTest.test_id);
+    if (selectedTest.req_id) {
+      activeRequirementIds.add(selectedTest.req_id);
+    }
+  }
+
+  const hasHighlight = activeRequirementIds.size > 0 || activeInterfaceIds.size > 0 || activeTestIds.size > 0;
 
   requirementNodes.forEach((node) => {
     const requirementId = String((node.data as FactoryNodeMeta).requirementId ?? "");
@@ -330,220 +562,635 @@ function buildGraphModel({
     }
   });
 
-  const laneBuckets = new Map<InterfaceLane, SubmissionTraceabilityInterface[]>(
-    INTERFACE_LANE_ORDERS.map((lane) => [lane, []]),
+  const laneBuckets = new Map<InterfaceLane, SubmissionTraceabilityInterface[]>(INTERFACE_LANE_ORDERS.map((lane) => [lane, []]));
+  if (showInterfaces) {
+    interfaces
+      .slice()
+      .sort((left, right) => {
+        const leftY = Math.min(...left.req_ids.map((reqId) => requirementPositionById.get(reqId)?.y ?? Number.MAX_SAFE_INTEGER));
+        const rightY = Math.min(...right.req_ids.map((reqId) => requirementPositionById.get(reqId)?.y ?? Number.MAX_SAFE_INTEGER));
+        if (leftY !== rightY) {
+          return leftY - rightY;
+        }
+        const leftOrder = Math.min(...left.req_ids.map((reqId) => requirementIndexById.get(reqId) ?? Number.MAX_SAFE_INTEGER));
+        const rightOrder = Math.min(...right.req_ids.map((reqId) => requirementIndexById.get(reqId) ?? Number.MAX_SAFE_INTEGER));
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return left.interface_id.localeCompare(right.interface_id);
+      })
+      .forEach((item) => {
+        laneBuckets.get(interfaceLaneFromType(item.type))?.push(item);
+      });
+  }
+
+  const testBuckets = new Map<TestLane, SubmissionTraceabilityTest[]>(TEST_LANE_ORDERS.map((lane) => [lane, []]));
+  if (showTests) {
+    tests
+      .slice()
+      .sort((left, right) => {
+        const leftY = requirementPositionById.get(left.req_id)?.y ?? Number.MAX_SAFE_INTEGER;
+        const rightY = requirementPositionById.get(right.req_id)?.y ?? Number.MAX_SAFE_INTEGER;
+        if (leftY !== rightY) {
+          return leftY - rightY;
+        }
+        const leftOrder = requirementIndexById.get(left.req_id) ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = requirementIndexById.get(right.req_id) ?? Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return left.test_id.localeCompare(right.test_id);
+      })
+      .forEach((item) => {
+        testBuckets.get(testLaneFromType(item.type))?.push(item);
+      });
+  }
+
+  const interfaceSectionWidth = Math.max(
+    SECTION_MIN_WIDTH,
+    ...INTERFACE_LANE_ORDERS.map((lane) => {
+      const itemCount = laneBuckets.get(lane)?.length ?? 0;
+      return resolveLaneSectionWidth(itemCount, INTERFACE_NODE_WIDTH, resolveInterfacePreferredColumns(itemCount));
+    }),
+  );
+  const testSectionWidth = Math.max(
+    SECTION_MIN_WIDTH,
+    ...TEST_LANE_ORDERS.map((lane) => {
+      const itemCount = testBuckets.get(lane)?.length ?? 0;
+      return resolveLaneSectionWidth(itemCount, TEST_NODE_WIDTH, resolveTestPreferredColumns(itemCount));
+    }),
   );
 
-  interfaces
-    .slice()
-    .sort((left, right) => {
-      const leftY = Math.min(...left.req_ids.map((reqId) => requirementPositionById.get(reqId)?.y ?? Number.MAX_SAFE_INTEGER));
-      const rightY = Math.min(...right.req_ids.map((reqId) => requirementPositionById.get(reqId)?.y ?? Number.MAX_SAFE_INTEGER));
-      if (leftY !== rightY) {
-        return leftY - rightY;
-      }
-      const leftOrder = Math.min(...left.req_ids.map((reqId) => requirementIndexById.get(reqId) ?? Number.MAX_SAFE_INTEGER));
-      const rightOrder = Math.min(...right.req_ids.map((reqId) => requirementIndexById.get(reqId) ?? Number.MAX_SAFE_INTEGER));
-      if (leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-      return left.interface_id.localeCompare(right.interface_id);
-    })
-    .forEach((item) => {
-      laneBuckets.get(interfaceLaneFromType(item.type))?.push(item);
-    });
+  const requirementFrameBaseWidth = Math.max(
+    SECTION_MIN_WIDTH,
+    (requirementBounds.right - requirementBounds.left) + (SECTION_FRAME_PADDING_X * 2),
+  );
+  const requirementFrameBaseRight = ((requirementBounds.left + requirementBounds.right) / 2) + (requirementFrameBaseWidth / 2);
+  const interfaceSectionStartX = Math.max(
+    Math.max(width * 0.45, maxRequirementX + INTERFACE_AREA_OFFSET),
+    requirementFrameBaseRight + FLOW_LANE_WIDTH + SECTION_FRAME_PADDING_X,
+  );
+  const testSectionStartX = interfaceSectionStartX + interfaceSectionWidth + (SECTION_FRAME_PADDING_X * 2) + TRACEABILITY_SECTION_GAP;
 
-  let laneTop = TOP_MARGIN - 4;
+  let interfaceLaneTop = TOP_MARGIN - 4;
+  let testLaneTop = TOP_MARGIN - 4;
 
-  INTERFACE_LANE_ORDERS.forEach((lane) => {
-    const laneItems = laneBuckets.get(lane) ?? [];
-    const laneVisual = interfaceLaneStyle(lane);
-    const preferredColumns = Math.max(1, Math.min(laneItems.length || 1, laneItems.length > 12 ? 5 : laneItems.length > 6 ? 4 : 3));
-    const interfaceAvailableWidth = Math.max(
-      width - interfaceStartX - 88,
-      (INTERFACE_LANE_PADDING_X * 2)
-        + (preferredColumns * INTERFACE_NODE_WIDTH)
-        + (Math.max(0, preferredColumns - 1) * INTERFACE_COLUMN_GAP),
-    );
-    const columns = Math.max(
-      1,
-      Math.floor(
-        (interfaceAvailableWidth - (INTERFACE_LANE_PADDING_X * 2) + INTERFACE_COLUMN_GAP)
-          / (INTERFACE_NODE_WIDTH + INTERFACE_COLUMN_GAP),
-      ),
-    );
-    const rowCount = Math.max(1, Math.ceil(laneItems.length / columns));
-    const containerHeight = Math.max(
-      LANE_CONTAINER_MIN_HEIGHT,
-      (INTERFACE_LANE_PADDING_Y * 2)
-        + (rowCount * INTERFACE_NODE_HEIGHT)
-        + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
-    );
-    const headerY = laneTop + 10;
-    const containerTop = laneTop + INTERFACE_LANE_HEADER_GAP;
-    const containerCenterY = containerTop + (containerHeight / 2);
-    const containerCenterX = interfaceStartX + (interfaceAvailableWidth / 2);
-
-    interfaceNodes.push({
-      id: `lane-container:${lane}`,
-      type: "rect",
-      style: {
-        x: containerCenterX,
-        y: containerCenterY,
-        size: [interfaceAvailableWidth, containerHeight],
-        radius: 16,
-        fill: laneVisual.fill,
-        fillOpacity: 0.42,
-        stroke: laneVisual.stroke,
-        strokeOpacity: 0.44,
-        lineWidth: 1.1,
-        lineDash: [7, 6],
-      },
-      states: [],
-      data: {
-        kind: "lane-container",
-        lane,
-      } satisfies FactoryNodeMeta,
-    });
-
-    interfaceNodes.push({
-      id: `lane-header:${lane}`,
-      type: "rect",
-      style: {
-        x: interfaceStartX + 44,
-        y: headerY,
-        size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
-        radius: 8,
-        fill: laneVisual.accent,
-        stroke: laneVisual.accent,
-        labelText: lane.toUpperCase(),
-        labelFill: "#ffffff",
-        labelFontFamily: nodeLabelFontFamily(),
-        labelFontSize: 12.5,
-        labelFontWeight: 700,
-        labelPlacement: "center",
-        lineWidth: 1,
-      },
-      states: [],
-      data: {
-        kind: "lane-header",
-        lane,
-      } satisfies FactoryNodeMeta,
-    });
-
-    laneItems.forEach((item, itemIndex) => {
-      const rowIndex = Math.floor(itemIndex / columns);
-      const columnIndex = itemIndex % columns;
-      const x = interfaceStartX
-        + INTERFACE_LANE_PADDING_X
-        + (INTERFACE_NODE_WIDTH / 2)
-        + (columnIndex * (INTERFACE_NODE_WIDTH + INTERFACE_COLUMN_GAP));
-      const y = containerTop
-        + INTERFACE_LANE_PADDING_Y
-        + (INTERFACE_NODE_HEIGHT / 2)
-        + (rowIndex * (INTERFACE_NODE_HEIGHT + INTERFACE_ROW_GAP));
-      const states: string[] = [];
-      const isSelectedInterface = Boolean(selectedInterfaceId && item.interface_id === selectedInterfaceId);
-      const isRelatedInterface = !isSelectedInterface && (
-        (effectiveSelectedNodeId ? item.req_ids.includes(effectiveSelectedNodeId) : false)
-        || activeInterfaceIds.has(item.interface_id)
+  if (showInterfaces) {
+    INTERFACE_LANE_ORDERS.forEach((lane) => {
+      const laneItems = laneBuckets.get(lane) ?? [];
+      const laneVisual = interfaceLaneStyle(lane);
+      const preferredColumns = resolveInterfacePreferredColumns(laneItems.length);
+      const interfaceAvailableWidth = interfaceSectionWidth;
+      const columns = Math.max(1, Math.min(laneItems.length || 1, preferredColumns));
+      const rowCount = Math.max(1, Math.ceil(laneItems.length / columns));
+      const containerHeight = Math.max(
+        LANE_CONTAINER_MIN_HEIGHT,
+        (INTERFACE_LANE_PADDING_Y * 2)
+          + (rowCount * INTERFACE_NODE_HEIGHT)
+          + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
       );
-      if (selectedInterfaceId && item.interface_id === selectedInterfaceId) {
-        states.push("selected");
-      } else if (isRelatedInterface) {
-        states.push("related");
-      }
+      const headerY = interfaceLaneTop + 10;
+      const containerTop = interfaceLaneTop + INTERFACE_LANE_HEADER_GAP;
+      const containerCenterY = containerTop + (containerHeight / 2);
+      const containerCenterX = interfaceSectionStartX + (interfaceAvailableWidth / 2);
 
       interfaceNodes.push({
-        id: item.interface_id,
+        id: `lane-container:${lane}`,
         type: "rect",
-        states,
         style: {
-          x,
-          y,
-          size: [INTERFACE_NODE_WIDTH, INTERFACE_NODE_HEIGHT],
-          radius: 10,
+          x: containerCenterX,
+          y: containerCenterY,
+          size: [interfaceAvailableWidth, containerHeight],
+          radius: 16,
           fill: laneVisual.fill,
+          fillOpacity: 0.42,
           stroke: laneVisual.stroke,
-          lineWidth: 1.35,
-          labelText: `${item.interface_id}\n${parseInterfaceNodeTitle(item)}`,
-          labelFill: "#142031",
-          labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 14.75,
-          labelFontWeight: 650,
-          labelLineHeight: 19,
-          labelWordWrap: true,
-          labelMaxWidth: "80%",
-          labelPlacement: "center",
-          labelOffsetY: 2,
+          strokeOpacity: 0.44,
+          lineWidth: 1.1,
+          lineDash: [7, 6],
         },
+        states: [],
         data: {
-          kind: "interface",
-          interfaceId: item.interface_id,
+          kind: "lane-container",
           lane,
-          requirementId: item.req_ids[0] ?? null,
-          interfaceItem: item,
         } satisfies FactoryNodeMeta,
       });
+      includeBounds(interfaceBounds, containerCenterX, containerCenterY, interfaceAvailableWidth, containerHeight);
 
-      item.req_ids.forEach((reqId) => {
-        if (!requirementIndexById.has(reqId)) {
-          return;
+      interfaceNodes.push({
+        id: `lane-header:${lane}`,
+        type: "rect",
+        style: {
+          x: interfaceSectionStartX + 44,
+          y: headerY,
+          size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
+          radius: 8,
+          fill: laneVisual.accent,
+          stroke: laneVisual.accent,
+          labelText: lane.toUpperCase(),
+          labelFill: "#ffffff",
+          labelFontFamily: nodeLabelFontFamily(),
+          labelFontSize: 12.5,
+          labelFontWeight: 700,
+          labelPlacement: "center",
+          lineWidth: 1,
+        },
+        states: [],
+        data: {
+          kind: "lane-header",
+          lane,
+        } satisfies FactoryNodeMeta,
+      });
+      includeBounds(interfaceBounds, interfaceSectionStartX + 44, headerY, LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT);
+
+      laneItems.forEach((item, itemIndex) => {
+        const rowIndex = Math.floor(itemIndex / columns);
+        const columnIndex = itemIndex % columns;
+        const x = interfaceSectionStartX
+          + INTERFACE_LANE_PADDING_X
+          + (INTERFACE_NODE_WIDTH / 2)
+          + (columnIndex * (INTERFACE_NODE_WIDTH + INTERFACE_COLUMN_GAP));
+        const y = containerTop
+          + INTERFACE_LANE_PADDING_Y
+          + (INTERFACE_NODE_HEIGHT / 2)
+          + (rowIndex * (INTERFACE_NODE_HEIGHT + INTERFACE_ROW_GAP));
+        const states: string[] = [];
+        const isSelectedInterface = Boolean(selectedInterfaceId && item.interface_id === selectedInterfaceId);
+        const isRelatedInterface = !isSelectedInterface && (
+          (effectiveSelectedNodeId ? item.req_ids.includes(effectiveSelectedNodeId) : false)
+          || activeInterfaceIds.has(item.interface_id)
+        );
+        if (selectedInterfaceId && item.interface_id === selectedInterfaceId) {
+          states.push("selected");
+        } else if (isRelatedInterface) {
+          states.push("related");
         }
-        const related = activeRequirementIds.has(reqId) || activeInterfaceIds.has(item.interface_id);
-        interfaceEdges.push({
-          id: `trace:${reqId}->${item.interface_id}`,
-          source: reqId,
-          target: item.interface_id,
-          type: "cubic-horizontal",
-          states: hasHighlight && related ? ["related"] : [],
+
+        interfaceNodes.push({
+          id: item.interface_id,
+          type: "rect",
+          states,
           style: {
-            stroke: "#c8d2df",
-            lineWidth: 1.15,
-            lineDash: [5, 4],
-            opacity: 0,
+            x,
+            y,
+            size: [INTERFACE_NODE_WIDTH, INTERFACE_NODE_HEIGHT],
+            radius: 10,
+            fill: laneVisual.fill,
+            stroke: laneVisual.stroke,
+            lineWidth: 1.35,
+            shadowColor: "rgba(0, 0, 0, 0)",
+            shadowBlur: 0,
+            shadowOffsetX: 0,
+            shadowOffsetY: 0,
+            labelText: `${item.interface_id}\n${parseInterfaceNodeTitle(item)}`,
+            labelFill: "#142031",
+            labelFontFamily: nodeLabelFontFamily(),
+            labelFontSize: 14.75,
+            labelFontWeight: 650,
+            labelLineHeight: 19,
+            labelWordWrap: true,
+            labelMaxWidth: "80%",
+            labelPlacement: "center",
+            labelOffsetY: 2,
           },
           data: {
-            kind: "requirement-interface",
-          },
+            kind: "interface",
+            interfaceId: item.interface_id,
+            lane,
+            requirementId: item.req_ids[0] ?? null,
+            interfaceItem: item,
+          } satisfies FactoryNodeMeta,
+        });
+        includeBounds(interfaceBounds, x, y, INTERFACE_NODE_WIDTH, INTERFACE_NODE_HEIGHT);
+
+        item.req_ids.forEach((reqId) => {
+          if (!requirementIndexById.has(reqId)) {
+            return;
+          }
+          const related = activeRequirementIds.has(reqId) || activeInterfaceIds.has(item.interface_id);
+          interfaceEdges.push({
+            id: `trace:${reqId}->${item.interface_id}`,
+            source: reqId,
+            target: item.interface_id,
+            type: "cubic-horizontal",
+            states: hasHighlight && related ? ["related"] : [],
+            style: {
+              stroke: "#c8d2df",
+              lineWidth: 1.2,
+              lineDash: [5, 4],
+              opacity: 0.04,
+              endArrow: true,
+              endArrowType: "vee",
+              endArrowFill: "#c8d2df",
+              endArrowStroke: "#c8d2df",
+              endArrowSize: 12,
+            },
+            data: {
+              kind: "requirement-interface",
+            },
+          });
         });
       });
+
+      interfaceLaneTop = containerTop + containerHeight + INTERFACE_SECTION_GAP;
+    });
+  }
+
+  if (showTests) {
+    TEST_LANE_ORDERS.forEach((lane) => {
+      const laneItems = testBuckets.get(lane) ?? [];
+      const laneVisual = testLaneStyle(lane);
+      const preferredColumns = resolveTestPreferredColumns(laneItems.length);
+      const testAvailableWidth = testSectionWidth;
+      const columns = Math.max(1, Math.min(laneItems.length || 1, preferredColumns));
+      const rowCount = Math.max(1, Math.ceil(laneItems.length / columns));
+      const containerHeight = Math.max(
+        LANE_CONTAINER_MIN_HEIGHT,
+        (INTERFACE_LANE_PADDING_Y * 2)
+          + (rowCount * TEST_NODE_HEIGHT)
+          + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
+      );
+      const headerY = testLaneTop + 10;
+      const containerTop = testLaneTop + INTERFACE_LANE_HEADER_GAP;
+      const containerCenterY = containerTop + (containerHeight / 2);
+      const containerCenterX = testSectionStartX + (testAvailableWidth / 2);
+
+      testNodes.push({
+        id: `test-lane-container:${lane}`,
+        type: "rect",
+        style: {
+          x: containerCenterX,
+          y: containerCenterY,
+          size: [testAvailableWidth, containerHeight],
+          radius: 16,
+          fill: laneVisual.fill,
+          fillOpacity: 0.42,
+          stroke: laneVisual.stroke,
+          strokeOpacity: 0.44,
+          lineWidth: 1.1,
+          lineDash: [7, 6],
+        },
+        states: [],
+        data: {
+          kind: "lane-container",
+          lane,
+        } satisfies FactoryNodeMeta,
+      });
+      includeBounds(testBounds, containerCenterX, containerCenterY, testAvailableWidth, containerHeight);
+
+      testNodes.push({
+        id: `test-lane-header:${lane}`,
+        type: "rect",
+        style: {
+          x: testSectionStartX + 44,
+          y: headerY,
+          size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
+          radius: 8,
+          fill: laneVisual.accent,
+          stroke: laneVisual.accent,
+          labelText: lane === "e2e" ? "E2E" : lane.toUpperCase(),
+          labelFill: "#ffffff",
+          labelFontFamily: nodeLabelFontFamily(),
+          labelFontSize: 12.5,
+          labelFontWeight: 700,
+          labelPlacement: "center",
+          lineWidth: 1,
+        },
+        states: [],
+        data: {
+          kind: "lane-header",
+          lane,
+        } satisfies FactoryNodeMeta,
+      });
+      includeBounds(testBounds, testSectionStartX + 44, headerY, LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT);
+
+      laneItems.forEach((item, itemIndex) => {
+        const rowIndex = Math.floor(itemIndex / columns);
+        const columnIndex = itemIndex % columns;
+        const x = testSectionStartX
+          + INTERFACE_LANE_PADDING_X
+          + (TEST_NODE_WIDTH / 2)
+          + (columnIndex * (TEST_NODE_WIDTH + INTERFACE_COLUMN_GAP));
+        const y = containerTop
+          + INTERFACE_LANE_PADDING_Y
+          + (TEST_NODE_HEIGHT / 2)
+          + (rowIndex * (TEST_NODE_HEIGHT + INTERFACE_ROW_GAP));
+        const states: string[] = [];
+        const isSelectedTest = Boolean(selectedTestId && item.test_id === selectedTestId);
+        const isRelatedTest = !isSelectedTest && (
+          (effectiveSelectedNodeId ? item.req_id === effectiveSelectedNodeId : false)
+          || activeTestIds.has(item.test_id)
+        );
+        if (selectedTestId && item.test_id === selectedTestId) {
+          states.push("selected");
+        } else if (isRelatedTest) {
+          states.push("related");
+        }
+
+        testNodes.push({
+          id: `test:${item.test_id}`,
+          type: "rect",
+          states,
+          style: {
+            x,
+            y,
+            size: [TEST_NODE_WIDTH, TEST_NODE_HEIGHT],
+            radius: 10,
+            fill: laneVisual.fill,
+            stroke: item.status === "failed" ? "#dc2626" : item.status === "passed" ? "#16a34a" : laneVisual.stroke,
+            lineWidth: 1.35,
+            shadowColor: "rgba(0, 0, 0, 0)",
+            shadowBlur: 0,
+            shadowOffsetX: 0,
+            shadowOffsetY: 0,
+            labelText: `${item.test_id}\n${parseTestNodeTitle(item)}`,
+            labelFill: "#142031",
+            labelFontFamily: nodeLabelFontFamily(),
+            labelFontSize: 13.5,
+            labelFontWeight: 650,
+            labelLineHeight: 18,
+            labelWordWrap: true,
+            labelMaxWidth: "82%",
+            labelPlacement: "center",
+            labelOffsetY: 2,
+          },
+          data: {
+            kind: "test",
+            testId: item.test_id,
+            lane,
+            requirementId: item.req_id,
+            testItem: item,
+          } satisfies FactoryNodeMeta,
+        });
+        includeBounds(testBounds, x, y, TEST_NODE_WIDTH, TEST_NODE_HEIGHT);
+
+        if (requirementIndexById.has(item.req_id)) {
+          const related = activeRequirementIds.has(item.req_id) || activeTestIds.has(item.test_id);
+          testEdges.push({
+            id: `test-trace:${item.req_id}->${item.test_id}`,
+            source: item.req_id,
+            target: `test:${item.test_id}`,
+            type: "cubic-horizontal",
+            states: hasHighlight && related ? ["related"] : [],
+            style: {
+              stroke: "#c8d2df",
+              lineWidth: 1.2,
+              lineDash: [5, 4],
+              opacity: 0.04,
+              endArrow: true,
+              endArrowType: "vee",
+              endArrowFill: "#c8d2df",
+              endArrowStroke: "#c8d2df",
+              endArrowSize: 12,
+            },
+            data: {
+              kind: "requirement-test",
+            },
+          });
+        }
+      });
+
+      testLaneTop = containerTop + containerHeight + INTERFACE_SECTION_GAP;
+    });
+  }
+
+  if (!hasBounds(interfaceBounds)) {
+    includeBoundsFromRect(
+      interfaceBounds,
+      interfaceSectionStartX,
+      TOP_MARGIN + INTERFACE_LANE_HEADER_GAP,
+      interfaceSectionWidth,
+      LANE_CONTAINER_MIN_HEIGHT,
+    );
+  }
+  if (!hasBounds(testBounds)) {
+    includeBoundsFromRect(
+      testBounds,
+      testSectionStartX,
+      TOP_MARGIN + INTERFACE_LANE_HEADER_GAP,
+      testSectionWidth,
+      LANE_CONTAINER_MIN_HEIGHT,
+    );
+  }
+
+  const contentTop = Math.min(requirementBounds.top, interfaceBounds.top, testBounds.top);
+  const contentBottom = Math.max(requirementBounds.bottom, interfaceBounds.bottom, testBounds.bottom);
+  const sectionTop = contentTop - SECTION_FRAME_PADDING_TOP;
+  const sectionBottom = contentBottom + SECTION_FRAME_PADDING_BOTTOM;
+  const sectionHeight = Math.max(320, sectionBottom - sectionTop);
+
+  const resolveFrameBox = (bounds: Bounds) => {
+    const contentWidth = bounds.right - bounds.left;
+    const widthWithPadding = Math.max(SECTION_MIN_WIDTH, contentWidth + (SECTION_FRAME_PADDING_X * 2));
+    const centerX = (bounds.left + bounds.right) / 2;
+    return {
+      left: centerX - (widthWithPadding / 2),
+      width: widthWithPadding,
+    };
+  };
+
+  const requirementFrame = resolveFrameBox(requirementBounds);
+  const interfaceFrame = resolveFrameBox(interfaceBounds);
+  const testFrame = resolveFrameBox(testBounds);
+  const requirementSectionStyle = sectionFrameStyle("requirements");
+  const interfaceSectionStyle = sectionFrameStyle("interfaces");
+  const testSectionStyle = sectionFrameStyle("tests");
+
+  [
+    {
+      id: "section-frame:requirements",
+      left: requirementFrame.left,
+      width: requirementFrame.width,
+      title: "Requirements - Raw Material",
+      style: requirementSectionStyle,
+    },
+    {
+      id: "section-frame:interfaces",
+      left: interfaceFrame.left,
+      width: interfaceFrame.width,
+      title: "Interfaces - Product",
+      style: interfaceSectionStyle,
+    },
+    {
+      id: "section-frame:tests",
+      left: testFrame.left,
+      width: testFrame.width,
+      title: "Tests - Product",
+      style: testSectionStyle,
+    },
+  ].forEach((section) => {
+    sectionNodes.push({
+      id: section.id,
+      type: "rect",
+      style: {
+        x: section.left + (section.width / 2),
+        y: sectionTop + (sectionHeight / 2),
+        size: [section.width, sectionHeight],
+        radius: 24,
+        fill: section.style.fill,
+        fillOpacity: 0.44,
+        stroke: section.style.stroke,
+        strokeOpacity: 0.52,
+        lineWidth: 1.6,
+        lineDash: [10, 8],
+      },
+      states: [],
+      data: {
+        kind: "section-frame",
+      } satisfies FactoryNodeMeta,
     });
 
-    laneTop = containerTop + containerHeight + INTERFACE_SECTION_GAP;
+    sectionNodes.push({
+      id: section.id.replace("section-frame", "section-header"),
+      type: "rect",
+      style: {
+        x: section.left + 28 + (SECTION_HEADER_WIDTH / 2),
+        y: sectionTop + 24,
+        size: [SECTION_HEADER_WIDTH, SECTION_HEADER_HEIGHT],
+        radius: 10,
+        fill: section.style.accent,
+        stroke: section.style.accent,
+        lineWidth: 1,
+        labelText: section.title,
+        labelFill: "#ffffff",
+        labelFontFamily: nodeLabelFontFamily(),
+        labelFontSize: 12.8,
+        labelFontWeight: 700,
+        labelPlacement: "center",
+      },
+      states: [],
+      data: {
+        kind: "section-header",
+      } satisfies FactoryNodeMeta,
+    });
   });
 
-  buildInterfaceRelationPairs(interfaces).forEach((pair) => {
-    const sourceActive = activeInterfaceIds.has(pair.source);
-    const targetActive = activeInterfaceIds.has(pair.target);
-    const showRelation = selectedInterfaceId
-      ? (sourceActive || targetActive)
-      : (sourceActive && targetActive);
+  const flowOriginX = requirementFrame.left + requirementFrame.width + 18;
+  const interfaceFlowTargetX = interfaceFrame.left - 18;
+  const testFlowTargetX = testFrame.left - 18;
+  const interfaceFlowY = sectionTop + 110;
+  const testFlowY = sectionTop + 168;
+  const flowLabelX = flowOriginX + Math.max(72, Math.min(FLOW_LANE_WIDTH, (interfaceFlowTargetX - flowOriginX) / 2));
+  const flowLabelY = sectionTop + 138;
 
-    interfaceRelationEdges.push({
-      id: pair.id,
-      source: pair.source,
-      target: pair.target,
-      type: "cubic-horizontal",
-      states: hasHighlight && showRelation ? ["related"] : [],
+  [
+    { id: "flow-anchor:req-interface", x: flowOriginX, y: interfaceFlowY },
+    { id: "flow-anchor:req-test", x: flowOriginX, y: testFlowY },
+    { id: "flow-anchor:interface", x: interfaceFlowTargetX, y: interfaceFlowY },
+    { id: "flow-anchor:test", x: testFlowTargetX, y: testFlowY },
+  ].forEach((anchor) => {
+    flowNodes.push({
+      id: anchor.id,
+      type: "circle",
       style: {
-        stroke: "#6d28d9",
-        lineWidth: 2.1,
-        lineDash: [10, 6],
-        opacity: 0,
+        x: anchor.x,
+        y: anchor.y,
+        size: 6,
+        fill: "#f59e0b",
+        fillOpacity: 0,
+        stroke: "#f59e0b",
+        strokeOpacity: 0,
+      },
+      states: [],
+      data: {
+        kind: "flow-anchor",
+      } satisfies FactoryNodeMeta,
+    });
+  });
+
+  flowNodes.push({
+    id: "flow-label:pipeline",
+    type: "rect",
+    style: {
+      x: flowLabelX,
+      y: flowLabelY,
+      size: [FLOW_LABEL_WIDTH, FLOW_LABEL_HEIGHT],
+      radius: 16,
+      fill: "#f59e0b",
+      fillOpacity: 0.92,
+      stroke: "#d97706",
+      lineWidth: 1.2,
+      labelText: "Factory Pipeline",
+      labelFill: "#ffffff",
+      labelFontFamily: nodeLabelFontFamily(),
+      labelFontSize: 12.5,
+      labelFontWeight: 700,
+      labelPlacement: "center",
+    },
+    states: [],
+    data: {
+      kind: "flow-label",
+    } satisfies FactoryNodeMeta,
+  });
+
+  [
+    {
+      id: "factory-flow:requirements->interfaces",
+      source: "flow-anchor:req-interface",
+      target: "flow-anchor:interface",
+    },
+    {
+      id: "factory-flow:requirements->tests",
+      source: "flow-anchor:req-test",
+      target: "flow-anchor:test",
+    },
+  ].forEach((edge) => {
+    flowEdges.push({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: "cubic-horizontal",
+      style: {
+        stroke: "#f59e0b",
+        lineWidth: 3,
+        opacity: 0.72,
+        lineDash: [12, 6],
         endArrow: true,
         endArrowType: "vee",
-        endArrowFill: "#6d28d9",
-        endArrowStroke: "#6d28d9",
-        endArrowSize: 14,
+        endArrowFill: "#f59e0b",
+        endArrowStroke: "#f59e0b",
+        endArrowSize: 15,
       },
+      states: [],
       data: {
-        kind: "interface-call" satisfies FactoryEdgeKind,
+        kind: "factory-flow" satisfies FactoryEdgeKind,
       },
     });
   });
 
-  const selectedRequirementForHierarchy = effectiveSelectedNodeId ?? selectedInterface?.req_ids[0] ?? null;
+  if (showInterfaces) {
+    interfaceRelationPairs.forEach((pair) => {
+      const sourceActive = activeInterfaceIds.has(pair.source);
+      const targetActive = activeInterfaceIds.has(pair.target);
+      const showRelation = selectedInterfaceId
+        ? (sourceActive || targetActive)
+        : (sourceActive && targetActive);
+
+      interfaceRelationEdges.push({
+        id: pair.id,
+        source: pair.source,
+        target: pair.target,
+        type: "cubic-horizontal",
+        states: hasHighlight && showRelation ? ["related"] : [],
+        style: {
+          stroke: "#6d28d9",
+          lineWidth: 2.3,
+          lineDash: [10, 6],
+          opacity: 0.06,
+          endArrow: true,
+          endArrowType: "vee",
+          endArrowFill: "#6d28d9",
+          endArrowStroke: "#6d28d9",
+          endArrowSize: 14,
+        },
+        data: {
+          kind: "interface-call" satisfies FactoryEdgeKind,
+        },
+      });
+    });
+  }
+
+  const selectedRequirementForHierarchy = effectiveSelectedNodeId ?? selectedInterface?.req_ids[0] ?? selectedTest?.req_id ?? null;
   if (selectedRequirementForHierarchy) {
     requirementEdges.forEach((edge) => {
       const sourceId = String(edge.source);
@@ -556,13 +1203,13 @@ function buildGraphModel({
 
   return {
     data: {
-      nodes: [...requirementNodes, ...interfaceNodes],
-      edges: [...requirementEdges, ...interfaceEdges, ...interfaceRelationEdges],
+      nodes: [...sectionNodes, ...flowNodes, ...requirementNodes, ...interfaceNodes, ...testNodes],
+      edges: [...flowEdges, ...requirementEdges, ...interfaceEdges, ...testEdges, ...interfaceRelationEdges],
     },
   };
 }
 
-export default function SubmissionFactoryCanvas({
+const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, SubmissionFactoryCanvasProps>(function SubmissionFactoryCanvas({
   tree,
   selectedNodeId,
   selectionActive = false,
@@ -570,10 +1217,13 @@ export default function SubmissionFactoryCanvas({
   nodeStates = {},
   allTraceability,
   onRequestAllTraceability,
+  showInterfaces = true,
+  showTests = true,
   selectedTraceabilityId,
   selectedTraceabilityKind,
   onSelectInterface,
-}: SubmissionFactoryCanvasProps) {
+  onSelectTest,
+}, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const requestIssuedRef = useRef(false);
@@ -581,13 +1231,37 @@ export default function SubmissionFactoryCanvas({
   const callbacksRef = useRef({
     onSelectNode,
     onSelectInterface,
+    onSelectTest,
   });
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
   callbacksRef.current = {
     onSelectNode,
     onSelectInterface,
+    onSelectTest,
   };
+  const zoomIn = useCallback(() => {
+    const graph = graphRef.current;
+    if (!graph) {
+      return;
+    }
+    void graph.zoomTo(graph.getZoom() * 1.15);
+  }, []);
+  const zoomOut = useCallback(() => {
+    const graph = graphRef.current;
+    if (!graph) {
+      return;
+    }
+    void graph.zoomTo(graph.getZoom() / 1.15);
+  }, []);
+  const fitView = useCallback(() => {
+    void graphRef.current?.fitView({ when: "always" });
+  }, []);
+  useImperativeHandle(ref, () => ({
+    zoomIn,
+    zoomOut,
+    fitView,
+  }), [fitView, zoomIn, zoomOut]);
 
   useEffect(() => {
     if (allTraceability || requestIssuedRef.current || !onRequestAllTraceability) {
@@ -623,13 +1297,15 @@ export default function SubmissionFactoryCanvas({
       tree,
       nodeStates,
       allTraceability,
+      showInterfaces,
+      showTests,
       selectedNodeId,
       selectionActive,
       selectedTraceabilityId,
       selectedTraceabilityKind,
       width: viewport.width || 1400,
     }),
-    [allTraceability, nodeStates, selectedNodeId, selectedTraceabilityId, selectedTraceabilityKind, selectionActive, tree, viewport.width],
+    [allTraceability, nodeStates, selectedNodeId, selectedTraceabilityId, selectedTraceabilityKind, selectionActive, showInterfaces, showTests, tree, viewport.width],
   );
 
   useEffect(() => {
@@ -648,7 +1324,14 @@ export default function SubmissionFactoryCanvas({
         }
         const datum = graph.getNodeData(targetId);
         const meta = (datum.data ?? {}) as FactoryNodeMeta;
-        if (meta.kind === "lane-header" || meta.kind === "lane-container") {
+        if (
+          meta.kind === "lane-header"
+          || meta.kind === "lane-container"
+          || meta.kind === "section-frame"
+          || meta.kind === "section-header"
+          || meta.kind === "flow-anchor"
+          || meta.kind === "flow-label"
+        ) {
           callbacksRef.current.onSelectNode(null);
           return;
         }
@@ -662,6 +1345,15 @@ export default function SubmissionFactoryCanvas({
             requirementNodeId: meta.interfaceItem.req_ids[0] ?? null,
             filePath: meta.interfaceItem.file_path,
             firstLine: meta.interfaceItem.first_line,
+          });
+          return;
+        }
+        if (meta.kind === "test" && meta.testItem) {
+          callbacksRef.current.onSelectTest?.({
+            id: meta.testItem.test_id,
+            requirementNodeId: meta.testItem.req_id ?? null,
+            filePath: meta.testItem.file_path,
+            firstLine: meta.testItem.first_line,
           });
         }
       });
@@ -684,59 +1376,65 @@ export default function SubmissionFactoryCanvas({
             style: (datum: NodeData) => ({ ...(datum.style ?? {}) }),
             state: {
               selected: {
-                halo: true,
-                haloLineWidth: 20,
-                haloStroke: "#10b981",
-                haloStrokeOpacity: 0.28,
-                stroke: "#00a07c",
-                lineWidth: 4.4,
-                shadowColor: "rgba(0, 160, 124, 0.34)",
-                shadowBlur: 30,
+                fill: (datum: NodeData) => resolveSelectedNodeFill((datum.data ?? {}) as FactoryNodeMeta),
+                stroke: (datum: NodeData) => resolveNodeAccent((datum.data ?? {}) as FactoryNodeMeta),
+                lineWidth: 4.8,
+                labelFill: "#0f172a",
+                shadowColor: "rgba(0, 0, 0, 0)",
+                shadowBlur: 0,
                 shadowOffsetX: 0,
-                shadowOffsetY: 8,
+                shadowOffsetY: 0,
                 opacity: 1,
               },
               related: {
-                halo: true,
-                haloLineWidth: 10,
-                haloStroke: "#3a7afe",
-                haloStrokeOpacity: 0.14,
-                stroke: "#3a7afe",
-                lineWidth: 2.7,
-                shadowColor: "rgba(58, 122, 254, 0.12)",
-                shadowBlur: 14,
+                fill: (datum: NodeData) => resolveRelatedNodeFill((datum.data ?? {}) as FactoryNodeMeta),
+                stroke: (datum: NodeData) => resolveNodeAccent((datum.data ?? {}) as FactoryNodeMeta),
+                lineWidth: 3.1,
+                labelFill: "#0f172a",
+                shadowColor: "rgba(0, 0, 0, 0)",
+                shadowBlur: 0,
+                shadowOffsetX: 0,
+                shadowOffsetY: 0,
                 opacity: 1,
               },
-          },
+            },
           },
           edge: {
             type: (datum: EdgeData) => String(datum.type ?? "line"),
             style: (datum: EdgeData) => ({ ...(datum.style ?? {}) }),
             state: {
-            related: {
-              stroke: (datum: EdgeData) => {
-                const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                return kind === "interface-call" ? "#6d28d9" : "#0f766e";
-              },
-              lineWidth: (datum: EdgeData) => {
-                const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                return kind === "interface-call" ? 2.5 : 1.7;
-              },
-              opacity: (datum: EdgeData) => {
-                const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                return kind === "interface-call" ? 0.88 : 0.72;
-              },
-              endArrowFill: (datum: EdgeData) => {
-                const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                return kind === "interface-call" ? "#6d28d9" : undefined;
-              },
-              endArrowStroke: (datum: EdgeData) => {
-                const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
-                return kind === "interface-call" ? "#6d28d9" : undefined;
+              related: {
+                stroke: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return resolveEdgeHighlightColor(kind);
+                },
+                lineWidth: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return kind === "interface-call" ? 3.2 : 2.8;
+                },
+                lineDash: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return kind === "interface-call" ? [12, 6] : [8, 4];
+                },
+                opacity: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return kind === "interface-call" ? 0.98 : 0.92;
+                },
+                endArrowFill: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return resolveEdgeHighlightColor(kind);
+                },
+                endArrowStroke: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return resolveEdgeHighlightColor(kind);
+                },
+                endArrowSize: (datum: EdgeData) => {
+                  const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
+                  return kind === "interface-call" ? 16 : 14;
+                },
               },
             },
           },
-        },
           behaviors: ["drag-canvas", "zoom-canvas"],
         });
         bindGraphEvents(graph);
@@ -774,15 +1472,13 @@ export default function SubmissionFactoryCanvas({
   return (
     <div className="submission-factory-canvas-shell">
       <RequirementStateLegend />
-      <div className="submission-factory-canvas-hint">
-        <span className="submission-factory-pill">Requirements</span>
-        <span className="submission-factory-pill accent">Architecture</span>
-        <span className="submission-factory-copy">Select a requirement or interface to highlight its linked nodes.</span>
-      </div>
       <div ref={hostRef} className="submission-factory-canvas-host" />
       {!allTraceability ? (
-        <div className="submission-factory-canvas-status">Loading interface layers...</div>
+        <div className="submission-factory-canvas-status">Loading traceability layers...</div>
       ) : null}
     </div>
   );
-}
+});
+
+export default SubmissionFactoryCanvas;
+

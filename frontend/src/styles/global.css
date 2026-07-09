@@ -3962,6 +3962,10 @@ button {
   margin-bottom: 12px;
 }
 
+.submission-canvas-floating-toolbar {
+  z-index: 8;
+}
+
 .submission-side-tab {
   border: none;
   background: transparent;
@@ -6174,6 +6178,12 @@ button {
   padding-left: 16px;
   padding-right: 16px;
   white-space: nowrap;
+}
+
+.create-task-toolbar-btn.active {
+  border-color: rgba(0, 126, 101, 0.34);
+  background: rgba(0, 126, 101, 0.12);
+  color: #0a6b57;
 }
 
 .create-task-toolbar-primary {
