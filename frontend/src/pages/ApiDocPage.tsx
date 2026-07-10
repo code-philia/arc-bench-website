@@ -128,7 +128,6 @@ function OverviewPage() {
           <code> requirements.txt </code>, then invokes <code>main.py</code> with the requirement directory and output
           workspace arguments already filled in by the runner.
         </p>
-        <CodeBlock source={uploadContractExample} />
       </section>
 
       <section className="api-doc-section-block">
