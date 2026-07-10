@@ -1,0 +1,37 @@
+[
+    {
+        "type": "click",
+        "package": "com.arcbench.mintcalc",
+        "target": {
+            "text": "5"
+        }
+    },
+    {
+        "type": "click",
+        "package": "com.arcbench.mintcalc",
+        "target": {
+            "text": "*"
+        }
+    },
+    {
+        "type": "click",
+        "package": "com.arcbench.mintcalc",
+        "target": {
+            "text": "5"
+        }
+    },
+    {
+        "type": "click",
+        "package": "com.arcbench.mintcalc",
+        "target": {
+            "text": "="
+        }
+    },
+    {
+        "type": "visible",
+        "package": "com.arcbench.mintcalc",
+        "target": {
+            "text": "25"
+        }
+    }
+]
