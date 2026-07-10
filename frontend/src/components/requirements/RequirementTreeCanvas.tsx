@@ -17,7 +17,7 @@ import { Tooltip } from "antd";
 
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ForwardedRef } from "react";
 
 import {
   BaseEdge,
@@ -115,11 +115,14 @@ type RequirementTreeCanvasProps = {
   focusNodeId?: string | null;
   pulseNodeId?: string | null;
   showLegend?: boolean;
+  showCanvasToolbar?: boolean;
   detailTestId?: string;
   autoFitOnTreeChange?: boolean;
   traceabilityNodes?: TraceabilityCanvasPayload | null;
   showInterfaces?: boolean;
   showTests?: boolean;
+  onShowInterfacesChange?: (show: boolean) => void;
+  onShowTestsChange?: (show: boolean) => void;
   allTraceability?: SubmissionTraceabilityPayload | null;
   onRequestAllTraceability?: () => void;
   onTraceabilityOverlayChange?: (payload: { showInterfaces: boolean; showTests: boolean }) => void;
@@ -132,6 +135,16 @@ type RequirementTreeCanvasProps = {
     filePath: string;
     firstLine: string | null;
   }) => void;
+};
+
+export type RequirementTreeCanvasHandle = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitView: () => void;
+};
+
+type TreeCanvasInnerProps = RequirementTreeCanvasProps & {
+  canvasRef: ForwardedRef<RequirementTreeCanvasHandle>;
 };
 
 const NODE_WIDTH = 244;
@@ -293,6 +306,10 @@ function average(values: number[]): number {
     return 0;
   }
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function resolveToggleState(current: boolean, next: boolean | ((current: boolean) => boolean)): boolean {
+  return typeof next === "function" ? next(current) : next;
 }
 
 function alignRequirementCenters(
@@ -1203,14 +1220,20 @@ function TreeCanvasInner({
   focusNodeId = null,
   pulseNodeId = null,
   showLegend = false,
+  showCanvasToolbar = true,
   detailTestId,
   autoFitOnTreeChange = true,
   traceabilityNodes = null,
+  showInterfaces: showInterfacesProp,
+  showTests: showTestsProp,
+  onShowInterfacesChange,
+  onShowTestsChange,
   allTraceability = null,
   onRequestAllTraceability,
   onTraceabilityOverlayChange,
   onTraceabilityNodeClick,
-}: RequirementTreeCanvasProps) {
+  canvasRef,
+}: TreeCanvasInnerProps) {
   const reactFlow = useReactFlow();
   const storeApi = useStoreApi();
   const lastFocusKeyRef = useRef<string | null>(null);
@@ -1227,8 +1250,24 @@ function TreeCanvasInner({
   const [dependencyConnectionActive, setDependencyConnectionActive] = useState(false);
   const [clickConnectionSourceId, setClickConnectionSourceId] = useState<string | null>(null);
   const [showDependencies, setShowDependencies] = useState(mode === "editable");
-  const [showInterfaces, setShowInterfaces] = useState(false);
-  const [showTests, setShowTests] = useState(false);
+  const [showInterfacesInternal, setShowInterfacesInternal] = useState(false);
+  const [showTestsInternal, setShowTestsInternal] = useState(false);
+  const showInterfaces = showInterfacesProp ?? showInterfacesInternal;
+  const showTests = showTestsProp ?? showTestsInternal;
+  const setShowInterfaces = useCallback((next: boolean | ((current: boolean) => boolean)) => {
+    const resolved = resolveToggleState(showInterfaces, next);
+    if (showInterfacesProp === undefined) {
+      setShowInterfacesInternal(resolved);
+    }
+    onShowInterfacesChange?.(resolved);
+  }, [onShowInterfacesChange, showInterfaces, showInterfacesProp]);
+  const setShowTests = useCallback((next: boolean | ((current: boolean) => boolean)) => {
+    const resolved = resolveToggleState(showTests, next);
+    if (showTestsProp === undefined) {
+      setShowTestsInternal(resolved);
+    }
+    onShowTestsChange?.(resolved);
+  }, [onShowTestsChange, showTests, showTestsProp]);
   const handleMeasuredTraceabilityHeightChange = useCallback((nodeId: string, height: number) => {
     if (!nodeId || !Number.isFinite(height)) {
       return;
@@ -1462,6 +1501,20 @@ function TreeCanvasInner({
     }
     lastFocusKeyRef.current = `${focusNodeId}:${pulseNodeId ?? ""}`;
   }, [focusNodeId, pulseNodeId]);
+  const handleZoomIn = useCallback(() => {
+    reactFlow.zoomIn({ duration: 180 });
+  }, [reactFlow]);
+  const handleZoomOut = useCallback(() => {
+    reactFlow.zoomOut({ duration: 180 });
+  }, [reactFlow]);
+  const handleFitView = useCallback(() => {
+    reactFlow.fitView({ padding: 0.22, duration: 260, maxZoom: 1.15 });
+  }, [reactFlow]);
+  useImperativeHandle(canvasRef, () => ({
+    zoomIn: handleZoomIn,
+    zoomOut: handleZoomOut,
+    fitView: handleFitView,
+  }), [canvasRef, handleFitView, handleZoomIn, handleZoomOut]);
   const detailContent = selectedNode
     ? (renderDetailContent ? renderDetailContent(selectedNode) : <RequirementNodeDetailContent node={selectedNode} mode="readonly" />)
     : null;
@@ -1520,6 +1573,7 @@ function TreeCanvasInner({
   return (
     <div className={`requirement-tree-layout detail-${detailPlacement}`}>
       <div className="requirement-tree-canvas-region">
+        {showCanvasToolbar ? (
         <div className="task-flow-toolbar">
           {mode === "editable" ? (
             <>
@@ -1547,21 +1601,17 @@ function TreeCanvasInner({
             </>
           ) : null}
           <Tooltip title="Zoom in">
-            <button type="button" className="icon-tool-btn" onClick={() => reactFlow.zoomIn({ duration: 180 })}>
+            <button type="button" className="icon-tool-btn" onClick={handleZoomIn}>
               <PlusOutlined />
             </button>
           </Tooltip>
           <Tooltip title="Zoom out">
-            <button type="button" className="icon-tool-btn" onClick={() => reactFlow.zoomOut({ duration: 180 })}>
+            <button type="button" className="icon-tool-btn" onClick={handleZoomOut}>
               <MinusOutlined />
             </button>
           </Tooltip>
           <Tooltip title="Center graph">
-            <button
-              type="button"
-              className="icon-tool-btn"
-              onClick={() => reactFlow.fitView({ padding: 0.22, duration: 260, maxZoom: 1.15 })}
-            >
+            <button type="button" className="icon-tool-btn" onClick={handleFitView}>
               <RadarChartOutlined />
             </button>
           </Tooltip>
@@ -1594,6 +1644,7 @@ function TreeCanvasInner({
             </button>
           </Tooltip>
         </div>
+        ) : null}
         <div
           className="task-flow-shell"
           onMouseMoveCapture={(event) => {
@@ -1786,10 +1837,12 @@ function TreeCanvasInner({
   );
 }
 
-export default function RequirementTreeCanvas(props: RequirementTreeCanvasProps) {
+const RequirementTreeCanvas = forwardRef<RequirementTreeCanvasHandle, RequirementTreeCanvasProps>(function RequirementTreeCanvas(props, ref) {
   return (
     <ReactFlowProvider>
-      <TreeCanvasInner {...props} />
+      <TreeCanvasInner {...props} canvasRef={ref} />
     </ReactFlowProvider>
   );
-}
+});
+
+export default RequirementTreeCanvas;

@@ -1,6 +1,9 @@
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MinusOutlined,
+  PlusOutlined,
+  RadarChartOutlined,
   SaveOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
@@ -12,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
-import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
+import RequirementTreeCanvas, { type RequirementTreeCanvasHandle } from "../components/requirements/RequirementTreeCanvas";
 import { api } from "../lib/api";
 import {
   appendSiblingNode,
@@ -55,6 +58,7 @@ export default function CreateTaskPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const uploadRef = useRef<HTMLInputElement | null>(null);
+  const canvasRef = useRef<RequirementTreeCanvasHandle | null>(null);
   const initialPreviewWidth =
     typeof window === "undefined"
       ? 560
@@ -68,6 +72,8 @@ export default function CreateTaskPage() {
   const [previewWidth, setPreviewWidth] = useState(initialPreviewWidth);
   const [isResizingPreview, setIsResizingPreview] = useState(false);
   const [taskDraft, setTaskDraft] = useState<UserTaskDraft | null>(null);
+  const [showInterfaces, setShowInterfaces] = useState(false);
+  const [showTests, setShowTests] = useState(false);
   const [createForm, setCreateForm] = useState<CreateTaskFormState>({
     title: "My Custom Task",
     taskType: "web",
@@ -276,6 +282,29 @@ export default function CreateTaskPage() {
             <button type="button" className="btn-outline create-task-toolbar-btn" onClick={handleSave}>
               <SaveOutlined /> Export Docs
             </button>
+            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => canvasRef.current?.zoomOut()}>
+              <MinusOutlined /> Zoom Out
+            </button>
+            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => canvasRef.current?.zoomIn()}>
+              <PlusOutlined /> Zoom In
+            </button>
+            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => canvasRef.current?.fitView()}>
+              <RadarChartOutlined /> Center
+            </button>
+            <button
+              type="button"
+              className={`btn-outline create-task-toolbar-btn${showInterfaces ? " active" : ""}`}
+              onClick={() => setShowInterfaces((current) => !current)}
+            >
+              IF Interface
+            </button>
+            <button
+              type="button"
+              className={`btn-outline create-task-toolbar-btn${showTests ? " active" : ""}`}
+              onClick={() => setShowTests((current) => !current)}
+            >
+              T Test
+            </button>
             <button type="button" className="btn-primary create-task-toolbar-primary" onClick={() => setIsCreateModalOpen(true)}>
               Create Task
             </button>
@@ -329,6 +358,7 @@ export default function CreateTaskPage() {
 
           <section className="create-task-editor-panel create-task-editor-panel-locked">
             <RequirementTreeCanvas
+              ref={canvasRef}
               tree={tree}
               selectedNodeId={selectedNodeId}
               onSelectNode={(nodeId) => {
@@ -347,6 +377,10 @@ export default function CreateTaskPage() {
               onConnectDependency={handleConnectDependency}
               taskAssets={draftTaskAssets}
               autoFitOnTreeChange={false}
+              showInterfaces={showInterfaces}
+              showTests={showTests}
+              onShowInterfacesChange={setShowInterfaces}
+              onShowTestsChange={setShowTests}
               renderDetailContent={(node) => (
                 <RequirementNodeDetailContent
                   node={node}

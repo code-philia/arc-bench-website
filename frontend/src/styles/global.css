@@ -3962,6 +3962,10 @@ button {
   margin-bottom: 12px;
 }
 
+.submission-canvas-floating-toolbar {
+  z-index: 8;
+}
+
 .submission-side-tab {
   border: none;
   background: transparent;
@@ -6176,6 +6180,12 @@ button {
   white-space: nowrap;
 }
 
+.create-task-toolbar-btn.active {
+  border-color: rgba(0, 126, 101, 0.34);
+  background: rgba(0, 126, 101, 0.12);
+  color: #0a6b57;
+}
+
 .create-task-toolbar-primary {
   width: auto;
   min-width: 148px;
@@ -6459,6 +6469,72 @@ button {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+}
+
+.submission-factory-canvas-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 16% 20%, rgba(148, 163, 184, 0.08) 0%, rgba(148, 163, 184, 0.03) 20%, transparent 42%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.025) 0%, transparent 100%);
+}
+
+.submission-factory-canvas-host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.submission-factory-canvas-hint {
+  position: absolute;
+  top: 12px;
+  left: 210px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.submission-factory-pill {
+  padding: 4px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #425466;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.submission-factory-pill.accent {
+  border-color: rgba(15, 118, 110, 0.28);
+  color: #0f766e;
+  background: rgba(236, 253, 250, 0.96);
+}
+
+.submission-factory-copy {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.submission-factory-canvas-status {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: rgba(255, 255, 255, 0.94);
+  color: #64748b;
+  font-family: var(--mono);
+  font-size: 0.72rem;
 }
 
 .requirement-tree-layout {
