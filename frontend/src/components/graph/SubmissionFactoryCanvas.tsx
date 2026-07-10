@@ -87,8 +87,8 @@ const INTERFACE_NODE_WIDTH = 204;
 const INTERFACE_NODE_HEIGHT = 88;
 const TEST_NODE_WIDTH = 196;
 const TEST_NODE_HEIGHT = 90;
-const LANE_HEADER_WIDTH = 92;
-const LANE_HEADER_HEIGHT = 30;
+const LANE_HEADER_WIDTH = 160;
+const LANE_HEADER_HEIGHT = 40;
 const LANE_CONTAINER_MIN_HEIGHT = 88;
 const LEFT_MARGIN = 72;
 const TOP_MARGIN = 78;
@@ -145,13 +145,13 @@ function interfaceLaneFromType(value: string): InterfaceLane {
 function interfaceLaneStyle(lane: InterfaceLane) {
   switch (lane) {
     case "ui":
-      return { fill: "#eff6ff", stroke: "#2563eb", accent: "#2563eb" };
+      return { fill: "rgba(78, 164, 199, 0.2)", stroke: "#264653", accent: "#264653" };
     case "api":
-      return { fill: "#ecfeff", stroke: "#0f766e", accent: "#0f766e" };
+      return { fill: "rgba(42, 157, 143, 0.2)", stroke: "#2a9d8f", accent: "#2a9d8f" };
     case "func":
-      return { fill: "#fff7ed", stroke: "#c2410c", accent: "#c2410c" };
+      return { fill: "rgba(244, 162, 97, 0.2)", stroke: "#f4a261", accent: "#f4a261" };
     case "db":
-      return { fill: "#f5f3ff", stroke: "#6d28d9", accent: "#6d28d9" };
+      return { fill: "rgba(149, 118, 201, 0.2)", stroke: "#9576c9", accent: "#9576c9" };
   }
 }
 
@@ -165,11 +165,11 @@ function testLaneFromType(value: string): TestLane {
 function testLaneStyle(lane: TestLane) {
   switch (lane) {
     case "unit":
-      return { fill: "#f5f3ff", stroke: "#7c3aed", accent: "#7c3aed" };
+      return { fill: "rgba(71, 111, 149, 0.5)", stroke: "#476f95", accent: "#476f95" };
     case "integration":
-      return { fill: "#ecfeff", stroke: "#0891b2", accent: "#0891b2" };
+      return { fill: "rgba(117, 147, 175, 0.5)", stroke: "#7593af", accent: "#7593af" };
     case "e2e":
-      return { fill: "#fef2f2", stroke: "#dc2626", accent: "#dc2626" };
+      return { fill: "rgba(163, 183, 202, 0.5)", stroke: "#a3b7ca", accent: "#a3b7ca" };
   }
 }
 
@@ -181,6 +181,16 @@ function testResultFill(status: SubmissionTraceabilityTest["status"]) {
     return "#fdecec";
   }
   return "#f3f4f6";
+}
+
+function testResultStroke(status: SubmissionTraceabilityTest["status"]) {
+  if (status === "passed") {
+    return "#16a34a";
+  }
+  if (status === "failed") {
+    return "#dc2626";
+  }
+  return "#9ca3af";
 }
 
 function nodeLabelFontFamily() {
@@ -200,7 +210,7 @@ function resolveNodeAccent(meta: FactoryNodeMeta | undefined) {
 function resolveNodeHighlightFill(datum: NodeData) {
   const meta = (datum.data ?? {}) as FactoryNodeMeta;
   const style = (datum.style ?? {}) as { stroke?: string };
-  if (meta.kind === "requirement" && style.stroke) {
+  if ((meta.kind === "requirement" || meta.kind === "test") && style.stroke) {
     return style.stroke;
   }
   return resolveNodeAccent(meta);
@@ -238,13 +248,13 @@ function resolveNodeHighlightLabelLineHeight(datum: NodeData, scale: number): nu
 
 function resolveEdgeHighlightColor(kind: FactoryEdgeKind | string) {
   if (kind === "factory-flow") {
-    return "#f59e0b";
+    return "#f09b07";
   }
   if (kind === "interface-call") {
-    return "#7c3aed";
+    return "#000000";
   }
   if (kind === "requirement-test") {
-    return "#ea580c";
+    return "#0011ff";
   }
   return "#0f766e";
 }
@@ -695,8 +705,9 @@ function buildGraphModel({
           + (rowCount * INTERFACE_NODE_HEIGHT)
           + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
       );
-      const headerY = interfaceLaneTop + 10;
       const containerTop = interfaceLaneTop + INTERFACE_LANE_HEADER_GAP;
+      const headerX = interfaceSectionStartX + (LANE_HEADER_WIDTH / 2);
+      const headerY = containerTop - (LANE_HEADER_HEIGHT / 2);
       const containerCenterY = containerTop + (containerHeight / 2);
       const containerCenterX = interfaceSectionStartX + (interfaceAvailableWidth / 2);
 
@@ -727,7 +738,7 @@ function buildGraphModel({
         id: `lane-header:${lane}`,
         type: "rect",
         style: {
-          x: interfaceSectionStartX + 44,
+          x: headerX,
           y: headerY,
           size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
           radius: 8,
@@ -736,9 +747,14 @@ function buildGraphModel({
           labelText: lane.toUpperCase(),
           labelFill: "#ffffff",
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 20,
-          labelFontWeight: 700,
+          labelFontSize: 25,
+          labelFontWeight: 600,
+          labelLineHeight: LANE_HEADER_HEIGHT,
           labelPlacement: "center",
+          labelTextAlign: "center",
+          labelTextBaseline: "middle",
+          labelOffsetX: 0,
+          labelOffsetY: 0,
           lineWidth: 1,
         },
         states: [],
@@ -747,7 +763,7 @@ function buildGraphModel({
           lane,
         } satisfies FactoryNodeMeta,
       });
-      includeBounds(interfaceBounds, interfaceSectionStartX + 44, headerY, LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT);
+      includeBounds(interfaceBounds, headerX, headerY, LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT);
 
       laneItems.forEach((item, itemIndex) => {
         const rowIndex = Math.floor(itemIndex / columns);
@@ -856,8 +872,9 @@ function buildGraphModel({
           + (rowCount * TEST_NODE_HEIGHT)
           + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
       );
-      const headerY = testLaneTop + 10;
       const containerTop = testLaneTop + INTERFACE_LANE_HEADER_GAP;
+      const headerX = testSectionStartX + (LANE_HEADER_WIDTH / 2);
+      const headerY = containerTop - (LANE_HEADER_HEIGHT / 2);
       const containerCenterY = containerTop + (containerHeight / 2);
       const containerCenterX = testSectionStartX + (testAvailableWidth / 2);
 
@@ -888,7 +905,7 @@ function buildGraphModel({
         id: `test-lane-header:${lane}`,
         type: "rect",
         style: {
-          x: testSectionStartX + 44,
+          x: headerX,
           y: headerY,
           size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
           radius: 8,
@@ -899,7 +916,12 @@ function buildGraphModel({
           labelFontFamily: nodeLabelFontFamily(),
           labelFontSize: 20,
           labelFontWeight: 700,
+          labelLineHeight: LANE_HEADER_HEIGHT,
           labelPlacement: "center",
+          labelTextAlign: "center",
+          labelTextBaseline: "middle",
+          labelOffsetX: 0,
+          labelOffsetY: 0,
           lineWidth: 1,
         },
         states: [],
@@ -908,7 +930,7 @@ function buildGraphModel({
           lane,
         } satisfies FactoryNodeMeta,
       });
-      includeBounds(testBounds, testSectionStartX + 44, headerY, LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT);
+      includeBounds(testBounds, headerX, headerY, LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT);
 
       laneItems.forEach((item, itemIndex) => {
         const rowIndex = Math.floor(itemIndex / columns);
@@ -943,7 +965,7 @@ function buildGraphModel({
             size: [TEST_NODE_WIDTH, TEST_NODE_HEIGHT],
             radius: 10,
             fill: testResultFill(item.status),
-            stroke: laneVisual.stroke,
+            stroke: testResultStroke(item.status),
             lineWidth: 1.5,
             shadowColor: "rgba(0, 0, 0, 0)",
             shadowBlur: 0,
@@ -1047,21 +1069,21 @@ function buildGraphModel({
       id: "section-frame:requirements",
       left: requirementFrame.left,
       width: requirementFrame.width,
-      title: "Raw Material: Requirements",
+      title: "Requirements",
       style: requirementSectionStyle,
     },
     {
       id: "section-frame:interfaces",
       left: interfaceFrame.left,
       width: interfaceFrame.width,
-      title: "Product: Interfaces",
+      title: "Interfaces",
       style: interfaceSectionStyle,
     },
     {
       id: "section-frame:tests",
       left: testFrame.left,
       width: testFrame.width,
-      title: "Product: Tests",
+      title: "Tests",
       style: testSectionStyle,
     },
   ].forEach((section) => {
