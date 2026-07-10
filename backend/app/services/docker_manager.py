@@ -15,16 +15,17 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_daemon_error(exc)) from exc
 
-    def ensure_image(self, log_callback=None) -> None:
+    def ensure_image(self, *, requirement_category: str, log_callback=None) -> None:
+        image_name, context_dir = self._resolve_runner_config(requirement_category)
         needs_build = False
         try:
-            image = self.client.images.get(self.settings.runner_image)
-            if self._is_image_stale(image):
+            image = self.client.images.get(image_name)
+            if self._is_image_stale(image, context_dir=context_dir):
                 needs_build = True
                 if log_callback is not None:
-                    log_callback(f"Runner source newer than image, rebuilding: {self.settings.runner_image}")
+                    log_callback(f"Runner source newer than image, rebuilding: {image_name}")
             elif log_callback is not None:
-                log_callback(f"Using existing runner image: {self.settings.runner_image}")
+                log_callback(f"Using existing runner image: {image_name}")
         except ImageNotFound:
             needs_build = True
 
@@ -33,11 +34,12 @@ class DockerManager:
 
         try:
             if log_callback is not None:
-                log_callback(f"Building runner image: {self.settings.runner_image}")
+                log_callback(f"Building runner image: {image_name}")
+            project_root = context_dir.parents[2]
             _, build_logs = self.client.images.build(
-                path=str(self.settings.runner_context_dir.parents[2]),
-                dockerfile=str(self.settings.runner_context_dir.relative_to(self.settings.runner_context_dir.parents[2]) / "Dockerfile"),
-                tag=self.settings.runner_image,
+                path=str(project_root),
+                dockerfile=str(context_dir.relative_to(project_root) / "Dockerfile"),
+                tag=image_name,
                 rm=True,
                 pull=False,
                 nocache=False,
@@ -58,11 +60,11 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
 
-    def _is_image_stale(self, image) -> bool:
+    def _is_image_stale(self, image, *, context_dir: Path) -> bool:
         source_paths = [
-            self.settings.runner_context_dir / "run_submission.py",
-            self.settings.runner_context_dir / "Dockerfile",
-            self.settings.builtin_arc_agent_dist_dir / "arc_agent-0.1.0-py3-none-any.whl",
+            context_dir / "run_submission.py",
+            context_dir / "Dockerfile",
+            self.settings.builtin_arc_agent_dist_dir / "arc_agent-0.1.0-py3-none-any.whl"
         ]
         if any(not path.exists() for path in source_paths):
             return False
@@ -85,12 +87,14 @@ class DockerManager:
         submission_id: str,
         workspace_path: str | Path,
         *,
+        requirement_category: str,
         agent_source: str = "upload",
         github_email: str | None = None,
         github_username: str | None = None,
         log_callback=None,
     ):
-        self.ensure_image(log_callback=log_callback)
+        image_name, _ = self._resolve_runner_config(requirement_category)
+        self.ensure_image(requirement_category=requirement_category, log_callback=log_callback)
         builtin_openai_base_url = self.settings.builtin_openai_base_url or self.settings.builtin_openai_api_base_url or ""
         builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
         builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
@@ -106,21 +110,28 @@ class DockerManager:
             "VISUAL_BASE_URL": builtin_visual_base_url,
             "VISUAL_MODEL": self.settings.builtin_visual_model or "",
             "ARC_DEBUG": str(self.settings.builtin_debug_mode),
+            "ARCBENCH_REQUIREMENT_CATEGORY": requirement_category,
         }
         if agent_source == "builtin_arc_agent":
             if github_email and github_email.strip():
                 environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
             if github_username and github_username.strip():
                 environment["ARC_GIT_USER_NAME"] = github_username.strip()
+        container_kwargs = {
+            "image": image_name,
+            "name": f"arcbench-{submission_id}",
+            "detach": True,
+            "environment": environment,
+            "volumes": {str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
+            "mem_limit": self._resolve_memory_limit(requirement_category),
+            "nano_cpus": self._resolve_cpu_limit(requirement_category) * 1_000_000_000,
+            "working_dir": "/workspace",
+        }
+        if requirement_category == "mobile":
+            container_kwargs["devices"] = ["/dev/kvm:/dev/kvm"]
+            container_kwargs["privileged"] = True
         return self.client.containers.create(
-            self.settings.runner_image,
-            name=f"arcbench-{submission_id}",
-            detach=True,
-            environment=environment,
-            volumes={str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
-            mem_limit=self.settings.runner_memory_limit,
-            nano_cpus=self.settings.runner_cpu_limit * 1_000_000_000,
-            working_dir="/workspace",
+            **container_kwargs,
         )
 
     @staticmethod
@@ -214,3 +225,18 @@ class DockerManager:
                 parts.append(progress)
             return " ".join(parts).strip()
         return ""
+
+    def _resolve_runner_config(self, requirement_category: str) -> tuple[str, Path]:
+        if requirement_category == "mobile":
+            return self.settings.mobile_runner_image, self.settings.mobile_runner_context_dir
+        return self.settings.runner_image, self.settings.runner_context_dir
+
+    def _resolve_cpu_limit(self, requirement_category: str) -> int:
+        if requirement_category == "mobile":
+            return self.settings.mobile_runner_cpu_limit
+        return self.settings.runner_cpu_limit
+
+    def _resolve_memory_limit(self, requirement_category: str) -> str:
+        if requirement_category == "mobile":
+            return self.settings.mobile_runner_memory_limit
+        return self.settings.runner_memory_limit
