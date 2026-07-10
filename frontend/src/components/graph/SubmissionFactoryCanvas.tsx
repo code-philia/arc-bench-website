@@ -105,7 +105,7 @@ const INTERFACE_LANE_HEADER_GAP = 22;
 const SECTION_FRAME_PADDING_X = 44;
 const SECTION_FRAME_PADDING_TOP = 64;
 const SECTION_FRAME_PADDING_BOTTOM = 42;
-const SECTION_HEADER_HEIGHT = 44;
+const SECTION_HEADER_HEIGHT = 100;
 const SECTION_MIN_WIDTH = 344;
 const FLOW_LANE_WIDTH = 108;
 const INTERFACE_LANE_ORDERS: InterfaceLane[] = ["ui", "api", "func", "db"];
@@ -130,9 +130,7 @@ function requirementStateStyle(state: RequirementVisualState | undefined, nodeTy
     case "test-failed":
       return { fill: "#fff2f2", stroke: "#d76565" };
     default:
-      return nodeType === "ATOMIC"
-        ? { fill: "#fffaf0", stroke: "#c39b39" }
-        : { fill: "#ffffff", stroke: "#8f9baa" };
+      return { fill: "#ffffff", stroke: "#8f9baa" };
   }
 }
 
@@ -218,6 +216,24 @@ function resolveNodeHighlightSize(datum: NodeData, scale: number): number | [num
     return baseSize * scale;
   }
   return baseSize;
+}
+
+function resolveNodeHighlightLabelFontSize(datum: NodeData, scale: number): number | undefined {
+  const style = (datum.style ?? {}) as { labelFontSize?: number };
+  const baseSize = style.labelFontSize;
+  if (typeof baseSize === "number") {
+    return baseSize * scale;
+  }
+  return baseSize;
+}
+
+function resolveNodeHighlightLabelLineHeight(datum: NodeData, scale: number): number | undefined {
+  const style = (datum.style ?? {}) as { labelLineHeight?: number };
+  const baseLineHeight = style.labelLineHeight;
+  if (typeof baseLineHeight === "number") {
+    return baseLineHeight * scale;
+  }
+  return baseLineHeight;
 }
 
 function resolveEdgeHighlightColor(kind: FactoryEdgeKind | string) {
@@ -477,11 +493,11 @@ function buildGraphModel({
         labelText: buildNodeLabelText(node.data.id, truncateLabel(node.data.name, 42)),
         labelFill: "#16202a",
         labelFontFamily: nodeLabelFontFamily(),
-        labelFontSize: 16.25,
+        labelFontSize: 22,
         labelFontWeight: 700,
-        labelLineHeight: 23,
+        labelLineHeight: 26,
         labelWordWrap: true,
-        labelMaxWidth: "78%",
+        labelMaxWidth: "82%",
         labelPlacement: "center",
         labelOffsetY: 2,
       },
@@ -720,7 +736,7 @@ function buildGraphModel({
           labelText: lane.toUpperCase(),
           labelFill: "#ffffff",
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 12.5,
+          labelFontSize: 20,
           labelFontWeight: 700,
           labelPlacement: "center",
           lineWidth: 1,
@@ -775,11 +791,11 @@ function buildGraphModel({
             labelText: buildNodeLabelText(item.interface_id, parseInterfaceNodeTitle(item)),
             labelFill: "#142031",
             labelFontFamily: nodeLabelFontFamily(),
-            labelFontSize: 15.25,
+            labelFontSize: 20,
             labelFontWeight: 700,
-            labelLineHeight: 21,
+            labelLineHeight: 24,
             labelWordWrap: true,
-            labelMaxWidth: "78%",
+            labelMaxWidth: "82%",
             labelPlacement: "center",
             labelOffsetY: 1,
           },
@@ -881,7 +897,7 @@ function buildGraphModel({
           labelText: lane === "e2e" ? "E2E" : lane.toUpperCase(),
           labelFill: "#ffffff",
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 12.5,
+          labelFontSize: 20,
           labelFontWeight: 700,
           labelPlacement: "center",
           lineWidth: 1,
@@ -936,11 +952,11 @@ function buildGraphModel({
             labelText: buildNodeLabelText(item.test_id, parseTestNodeTitle(item), item.first_line),
             labelFill: "#142031",
             labelFontFamily: nodeLabelFontFamily(),
-            labelFontSize: 14.5,
+            labelFontSize: 20,
             labelFontWeight: 700,
-            labelLineHeight: 19.5,
+            labelLineHeight: 22,
             labelWordWrap: true,
-            labelMaxWidth: "78%",
+            labelMaxWidth: "82%",
             labelPlacement: "center",
             labelOffsetY: 0,
           },
@@ -1031,21 +1047,21 @@ function buildGraphModel({
       id: "section-frame:requirements",
       left: requirementFrame.left,
       width: requirementFrame.width,
-      title: "Requirements - Raw Material",
+      title: "Raw Material: Requirements",
       style: requirementSectionStyle,
     },
     {
       id: "section-frame:interfaces",
       left: interfaceFrame.left,
       width: interfaceFrame.width,
-      title: "Interfaces - Product",
+      title: "Product: Interfaces",
       style: interfaceSectionStyle,
     },
     {
       id: "section-frame:tests",
       left: testFrame.left,
       width: testFrame.width,
-      title: "Tests - Product",
+      title: "Product: Tests",
       style: testSectionStyle,
     },
   ].forEach((section) => {
@@ -1056,7 +1072,7 @@ function buildGraphModel({
         x: section.left + (section.width / 2),
         y: sectionTop + (sectionHeight / 2),
         size: [section.width, sectionHeight],
-        radius: 24,
+        radius: 0,
         fill: section.style.fill,
         fillOpacity: 0.44,
         stroke: section.style.stroke,
@@ -1077,15 +1093,16 @@ function buildGraphModel({
         x: section.left + (section.width / 2),
         y: sectionTop - 2,
         size: [section.width, SECTION_HEADER_HEIGHT],
-        radius: 12,
+        radius: 0,
         fill: section.style.accent,
         stroke: section.style.stroke,
-        lineWidth: 1.4,
+        lineWidth: 1.2,
         labelText: section.title,
-        labelFill: "#111111",
-        labelFontFamily: "'SimHei', 'Microsoft YaHei', sans-serif",
-        labelFontSize: 16,
-        labelFontWeight: 700,
+        labelFill: "#4c4c4c",
+        labelFontFamily: "'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif",
+        labelFontSize: 60,
+        labelFontWeight: 500,
+        labelLineHeight: 120,
         labelPlacement: "center",
       },
       states: [],
@@ -1098,6 +1115,7 @@ function buildGraphModel({
   const assemblyFlowY = sectionTop + (sectionHeight / 2);
   const flowOriginX = requirementFrame.left + requirementFrame.width + 18;
   const interfaceFlowTargetX = interfaceFrame.left - 18;
+  const flowIconX = flowOriginX + ((interfaceFlowTargetX - flowOriginX) / 2);
 
   [
     { id: "flow-anchor:req-interface", x: flowOriginX, y: assemblyFlowY },
@@ -1122,6 +1140,26 @@ function buildGraphModel({
     });
   });
 
+  flowNodes.push({
+    id: "flow-label:arrow",
+    type: "triangle",
+    style: {
+      x: flowIconX,
+      y: assemblyFlowY,
+      size: 42,
+      direction: "right",
+      fill: "l(0) 0:#1d4ed8 0.5:#38bdf8 1:#0f766e",
+      stroke: "#60a5fa",
+      lineWidth: 1.2,
+      shadowColor: "rgba(56, 189, 248, 0.22)",
+      shadowBlur: 10,
+    },
+    states: [],
+    data: {
+      kind: "flow-label",
+    } satisfies FactoryNodeMeta,
+  });
+
   flowEdges.push({
     id: "factory-flow:requirements->interfaces",
     source: "flow-anchor:req-interface",
@@ -1132,11 +1170,7 @@ function buildGraphModel({
       lineWidth: 8,
       opacity: 0.9,
       lineDash: [22, 10],
-      endArrow: true,
-      endArrowType: "vee",
-      endArrowFill: "#0f766e",
-      endArrowStroke: "#0f766e",
-      endArrowSize: 22,
+      endArrow: false,
     },
     states: [],
     data: {
@@ -1366,6 +1400,9 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 size: (datum: NodeData) => resolveNodeHighlightSize(datum, 1.1),
                 lineWidth: 4.4,
                 labelFill: "#ffffff",
+                labelFontSize: (datum: NodeData) => resolveNodeHighlightLabelFontSize(datum, 1.16),
+                labelLineHeight: (datum: NodeData) => resolveNodeHighlightLabelLineHeight(datum, 1.16),
+                labelFontWeight: 800,
                 shadowColor: "rgba(0, 0, 0, 0)",
                 shadowBlur: 0,
                 shadowOffsetX: 0,
@@ -1378,6 +1415,9 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 size: (datum: NodeData) => resolveNodeHighlightSize(datum, 1.06),
                 lineWidth: 3.4,
                 labelFill: "#ffffff",
+                labelFontSize: (datum: NodeData) => resolveNodeHighlightLabelFontSize(datum, 1.08),
+                labelLineHeight: (datum: NodeData) => resolveNodeHighlightLabelLineHeight(datum, 1.08),
+                labelFontWeight: 760,
                 shadowColor: "rgba(0, 0, 0, 0)",
                 shadowBlur: 0,
                 shadowOffsetX: 0,
