@@ -3930,10 +3930,15 @@ button {
 }
 
 .playground-submission-side-panel-body {
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
 }
 
 .traceability-panel {
