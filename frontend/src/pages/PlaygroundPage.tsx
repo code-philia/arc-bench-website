@@ -67,6 +67,7 @@ export default function PlaygroundPage() {
   }, []);
 
   const webTaskCount = useMemo(() => requirements.filter((item) => item.category === "web").length, [requirements]);
+  const mobileTaskCount = useMemo(() => requirements.filter((item) => item.category === "mobile").length, [requirements]);
 
   return (
     <div className="page playground-page">
@@ -123,7 +124,14 @@ export default function PlaygroundPage() {
               <div className="playground-bank-title">Task Bank</div>
               <div className="playground-bank-list">
                 {taskBankItems.map((item) => {
-                  const countText = item.key === "web" && !loading ? `${webTaskCount} tasks` : null;
+                  let countText: string | null = null;
+                  if (!loading) {
+                    if (item.key === "web") {
+                      countText = `${webTaskCount} tasks`;
+                    } else if (item.key === "mobile") {
+                      countText = `${mobileTaskCount} tasks`;
+                    }
+                  }
 
                   if (item.disabled) {
                     return (

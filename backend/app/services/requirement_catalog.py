@@ -120,15 +120,19 @@ class RequirementCatalogService:
         return rows
 
     def _iter_catalog_sources(self) -> list[tuple[str, Path, Path, Path]]:
+        if self.catalog_name == "playground":
+            return self._iter_app_sources(self.requirements_root.parent.parent)
         if self.catalog_name != "competition":
             return [("web", self.requirements_root, self.tests_root, self.templates_root)]
 
-        competition_root = self.requirements_root.parent.parent
-        if not competition_root.exists():
+        return self._iter_app_sources(self.requirements_root.parent.parent)
+
+    def _iter_app_sources(self, app_catalog_root: Path) -> list[tuple[str, Path, Path, Path]]:
+        if not app_catalog_root.exists():
             return []
 
         sources: list[tuple[str, Path, Path, Path]] = []
-        for app_root in sorted(competition_root.iterdir()):
+        for app_root in sorted(app_catalog_root.iterdir()):
             if not app_root.is_dir() or not app_root.name.endswith("app"):
                 continue
             sources.append(
