@@ -33,19 +33,47 @@ class AgentStarterService:
             """
             from __future__ import annotations
 
+            import argparse
             import os
             from pathlib import Path
 
             from arcbench_agent_runtime import AgentRuntime
 
 
-            def resolve_requirements_dir() -> Path:
-                task_dir = Path(os.environ.get("ARCBENCH_TASK_DIR", "/workspace/task"))
-                return task_dir
+            def parse_args() -> argparse.Namespace:
+                parser = argparse.ArgumentParser(description="Run the ARC-Bench starter agent.")
+                parser.add_argument(
+                    "requirement_path",
+                    nargs="?",
+                    default=os.environ.get("ARCBENCH_TASK_DIR", "/workspace/task"),
+                    help="Requirement directory containing requirements.yaml.",
+                )
+                parser.add_argument(
+                    "--output-dir",
+                    default=os.environ.get("ARCBENCH_OUTPUT_DIR", "/workspace/template"),
+                    help="Output workspace directory.",
+                )
+                parser.add_argument(
+                    "--app-type",
+                    choices=["web", "android"],
+                    default="web",
+                    help="Application type for runtime context.",
+                )
+                parser.add_argument(
+                    "--web-port",
+                    type=int,
+                    default=int(os.environ.get("ARCBENCH_WEB_PORT", "3000")),
+                    help="Backend port for generated web applications.",
+                )
+                return parser.parse_args()
 
 
-            def resolve_output_dir() -> Path:
-                return Path(os.environ.get("ARCBENCH_OUTPUT_DIR", "/workspace/template"))
+            def resolve_requirements_dir(path: str) -> Path:
+                return Path(path).resolve()
+
+
+            def resolve_output_dir(path: str) -> Path:
+                return Path(path).resolve()
 
 
             def run_agent(runtime: AgentRuntime, requirements_dir: Path, output_dir: Path) -> None:
@@ -75,9 +103,10 @@ class AgentStarterService:
 
 
             def main() -> int:
+                args = parse_args()
                 runtime = AgentRuntime.from_env()
-                requirements_dir = resolve_requirements_dir()
-                output_dir = resolve_output_dir()
+                requirements_dir = resolve_requirements_dir(args.requirement_path)
+                output_dir = resolve_output_dir(args.output_dir)
                 run_agent(runtime, requirements_dir, output_dir)
                 return 0
 
@@ -179,6 +208,8 @@ class AgentStarterService:
             - requirements live under `/workspace/task`
             - output project should be written into `/workspace/template`
             - runner events should be written to `/workspace/artifacts/runner-events.jsonl`
+            - the runner launches `python3 main.py /workspace/task --output-dir /workspace/template --app-type {task_type if task_type in {"web", "android"} else "web"}`
+            - for web tasks, the runner also appends `--web-port 3000`
             """
         ).strip() + "\n"
         archive.writestr("README.md", content)

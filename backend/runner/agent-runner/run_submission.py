@@ -453,19 +453,6 @@ def resolve_python_agent_entrypoint() -> Path:
         return entrypoint
     raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
 
-
-def is_arc_agent_submission(entrypoint: Path) -> bool:
-    if not (SUBMISSION_DIR / "agent_workflow.py").is_file():
-        return False
-    if not (SUBMISSION_DIR / "app_types").is_dir():
-        return False
-    try:
-        source = entrypoint.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return False
-    return "ARCWorkflowManager" in source and '"requirement_path"' in source
-
-
 def map_task_category_to_app_type(category: str) -> str:
     normalized = str(category or "").strip().lower()
     if normalized in {"android", "mobile", "mobileapp", "mobile_app"}:
@@ -475,9 +462,6 @@ def map_task_category_to_app_type(category: str) -> str:
 
 def build_generation_agent_command(entrypoint: Path) -> list[str]:
     command = ["python3", entrypoint.name]
-    if not is_arc_agent_submission(entrypoint):
-        return command
-
     spec = read_spec()
     task_payload = spec.get("task") if isinstance(spec, dict) else {}
     category = ""
@@ -495,7 +479,7 @@ def build_generation_agent_command(entrypoint: Path) -> list[str]:
     )
     if app_type == "web":
         command.extend(["--web-port", str(WEB_APP_PORT)])
-    append_debug_log(f"Detected arc-agent submission, launching with fixed args: {' '.join(command)}")
+    append_debug_log(f"Launching generation agent with standardized args: {' '.join(command)}")
     return command
 
 

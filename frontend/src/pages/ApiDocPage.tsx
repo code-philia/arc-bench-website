@@ -121,6 +121,17 @@ function OverviewPage() {
       </section>
 
       <section className="api-doc-section-block">
+        <h2>Upload Entry Contract</h2>
+        <p>
+          Every uploaded Python agent is started with the same fixed CLI shape. ArcBench expects
+          <code> main.py </code> and <code> requirements.txt </code> at the zip root, installs dependencies from
+          <code> requirements.txt </code>, then invokes <code>main.py</code> with the requirement directory and output
+          workspace arguments already filled in by the runner.
+        </p>
+        <CodeBlock source={uploadContractExample} />
+      </section>
+
+      <section className="api-doc-section-block">
         <h2>What The Frontend Does</h2>
         <table className="api-doc-table">
           <thead>

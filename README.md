@@ -67,3 +67,18 @@ The website will be available at:
 ```bash
 http://127.0.0.1:8000
 ```
+
+## 3. Uploaded Agent Contract
+
+ARC Bench executes uploaded Python agents with a fixed CLI contract. Your zip bundle must place these files at the archive root:
+
+- `main.py`
+- `requirements.txt`
+
+At runtime, the runner installs dependencies from `requirements.txt`, then launches:
+
+```bash
+python3 main.py /workspace/task --output-dir /workspace/template --app-type web --web-port 3000
+```
+
+If your agent uses the ArcBench SDK, call `AgentRuntime.from_env()` and write progress through the SDK instead of constructing event payloads manually.
