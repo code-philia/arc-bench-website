@@ -1430,6 +1430,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [editableReloadToken, setEditableReloadToken] = useState(0);
   const executionPaused = submission?.status === "PAUSED";
   const executionPausePending = submission?.status === "PAUSE_REQUESTED";
+  const hasSubmission = submission !== null;
   const quickStart = useQuickStart();
   const useQuickStartSubmission = quickStart.active && quickStart.isSubmissionRouteMatch(submissionId);
   const activeSelectedNodeId = useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
@@ -1661,7 +1662,7 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     void loadPreviewStatus(previewStatus !== null);
-  }, [submissionId, submission?.status]);
+  }, [submissionId, hasSubmission]);
 
   useEffect(() => {
     if (!previewStatus?.available) {
@@ -1677,7 +1678,7 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     void refreshCommitHistory(commitHistory !== null).catch(() => undefined);
-  }, [submissionId, submission?.status]);
+  }, [submissionId, hasSubmission]);
 
   useEffect(() => {
     if (!submissionId || !submission) {

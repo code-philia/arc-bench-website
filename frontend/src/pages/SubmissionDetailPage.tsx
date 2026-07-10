@@ -45,6 +45,7 @@ export default function SubmissionDetailPage() {
   const previewUrl = api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
   const previewAvailable = previewStatus?.available ?? false;
+  const hasSubmission = submission !== null;
 
   const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
     available: false,
@@ -194,7 +195,7 @@ export default function SubmissionDetailPage() {
       return;
     }
     void loadPreviewStatus(previewStatus !== null);
-  }, [submissionId, submission?.status]);
+  }, [submissionId, hasSubmission]);
 
   if (loading) {
     return (

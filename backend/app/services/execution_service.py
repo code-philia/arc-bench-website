@@ -81,7 +81,6 @@ class ExecutionService:
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
         processed_runner_event_count = 0
-        last_known_workspace_head_oid: str | None = None
         pause_notified = False
         pause_signal_sent = False
         pause_requested_at: float | None = None
@@ -100,18 +99,8 @@ class ExecutionService:
                 failure_reason=reason,
             )
 
-        def resolve_workspace_head_oid() -> str | None:
-            project_root = workspace_path / "template"
-            git_dir = project_root / ".git"
-            if not project_root.is_dir() or not git_dir.exists():
-                return None
-            try:
-                return submission_service._run_git(project_root, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
-            except RuntimeError:
-                return None
-
         def import_runner_events() -> list[dict]:
-            nonlocal last_known_workspace_head_oid, processed_runner_event_count
+            nonlocal processed_runner_event_count
             runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
             if not runner_events_path.exists():
                 return []
@@ -158,15 +147,7 @@ class ExecutionService:
                     emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
 
-            head_changed = False
-            latest_head_oid = resolve_workspace_head_oid()
-            if latest_head_oid and latest_head_oid != last_known_workspace_head_oid:
-                head_changed = True
-                last_known_workspace_head_oid = latest_head_oid
-
-            if head_changed:
-                refresh_flags["commit_history"] = True
-                refresh_flags["preview"] = True
+            if refresh_flags["preview"]:
                 HostDemoPreviewService.mark_stale(submission_id)
             if refresh_flags["traceability_selected"] or refresh_flags["traceability_all"]:
                 snapshot_updated = self.artifact_service.refresh_traceability_snapshot_for_workspace(
@@ -233,7 +214,6 @@ class ExecutionService:
                 runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
                 if runner_events_path.exists():
                     processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
-                last_known_workspace_head_oid = resolve_workspace_head_oid()
                 emit_event("deploy_agent", "Reusing rewound workspace")
                 debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")
                 emit_event("deploy_agent", "Existing workspace is ready", status="success")
@@ -243,7 +223,6 @@ class ExecutionService:
                 debug_log = DebugLogService(workspace_path)
                 debug_log.append("backend", f"Workspace assembled at {workspace_path}")
                 emit_event("deploy_agent", "Workspace assembled", status="success")
-                last_known_workspace_head_oid = resolve_workspace_head_oid()
             stdout_path = workspace_path / "artifacts" / "stdout.log"
             stderr_path = workspace_path / "artifacts" / "stderr.log"
             result_path = workspace_path / "artifacts" / "result.json"
