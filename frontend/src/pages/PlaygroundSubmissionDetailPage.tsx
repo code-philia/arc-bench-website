@@ -662,6 +662,7 @@ function SubmissionFilePanel({
   refreshCommitHistory,
   refreshTraceabilityForCurrentView,
   selectedNodeId,
+  workspaceRefreshToken,
 }: {
   panelMode: "workspace" | "diff";
   source: SubmissionSourcePayload | null;
@@ -679,6 +680,7 @@ function SubmissionFilePanel({
   refreshCommitHistory: (silent?: boolean) => Promise<SubmissionCommitHistoryPayload>;
   refreshTraceabilityForCurrentView: () => void;
   selectedNodeId: string | null;
+  workspaceRefreshToken: number;
 }) {
   const codeViewRef = useRef<HTMLPreElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -694,12 +696,17 @@ function SubmissionFilePanel({
   const [newTestId, setNewTestId] = useState("");
   const [newTestType, setNewTestType] = useState("Unit");
   const [selectedNodeIdForTest, setSelectedNodeIdForTest] = useState<string | null>(null);
-  const showInlineLoading = loading && Boolean(source);
   const isPaused = submission?.status === "PAUSED";
   const codeGrammar = resolveCodeGrammar(taskType);
   const isDiffPanel = panelMode === "diff";
-  const diffSource = isDiffPanel && source?.kind === "diff" ? source : null;
-  const fileSource = !isDiffPanel && source?.kind === "file" ? source : null;
+  const [cachedFileSource, setCachedFileSource] = useState<SubmissionSourcePayload | null>(null);
+  const [cachedDiffSource, setCachedDiffSource] = useState<SubmissionSourcePayload | null>(null);
+  const latestDiffSource = source?.kind === "diff" ? source : null;
+  const latestFileSource = source?.kind === "file" ? source : null;
+  const diffSource = isDiffPanel ? (latestDiffSource ?? cachedDiffSource) : null;
+  const fileSource = !isDiffPanel ? (latestFileSource ?? cachedFileSource) : null;
+  const relevantSource = isDiffPanel ? diffSource : fileSource;
+  const showInlineLoading = loading && Boolean(relevantSource);
   const effectiveFileContent = isEditing ? fileContent : (fileSource?.content ?? "");
   const lines = useMemo(() => codeLines(effectiveFileContent), [effectiveFileContent]);
   const highlightedLine = formatLineNumber(fileSource?.first_line ?? 1);
@@ -707,6 +714,18 @@ function SubmissionFilePanel({
     () => lines.map((line) => tokenizeCodeLine(line, codeGrammar)),
     [codeGrammar, lines],
   );
+
+  useEffect(() => {
+    setWorkspaceFiles([]);
+    setWorkspaceFilesLoading(false);
+    setSelectedFilePath(null);
+    setFileContent("");
+    setIsEditing(false);
+    setUnsavedChanges(false);
+    setExpandedDirs(new Set());
+    setCachedFileSource(null);
+    setCachedDiffSource(null);
+  }, [submissionId]);
 
   const loadWorkspaceFiles = async () => {
     if (!submissionId) {
@@ -731,8 +750,21 @@ function SubmissionFilePanel({
   };
 
   useEffect(() => {
+    if (source?.kind === "file") {
+      setCachedFileSource(source);
+      return;
+    }
+    if (source?.kind === "diff") {
+      setCachedDiffSource(source);
+    }
+  }, [source]);
+
+  useEffect(() => {
+    if (isDiffPanel) {
+      return;
+    }
     loadWorkspaceFiles();
-  }, [submissionId]);
+  }, [isDiffPanel, submissionId, workspaceRefreshToken]);
 
   useEffect(() => {
     if (!fileSource?.file_path) {
@@ -826,7 +858,7 @@ function SubmissionFilePanel({
     codeViewRef.current.scrollTop = scrollTop;
   }, [source]);
 
-  if (loading && !source) {
+  if (loading && !relevantSource) {
     return <div className="ide-empty-state">Loading source...</div>;
   }
 
@@ -1420,6 +1452,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [source, setSource] = useState<SubmissionSourcePayload | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
   const [commitHistory, setCommitHistory] = useState<SubmissionCommitHistoryPayload | null>(null);
   const [commitHistoryLoading, setCommitHistoryLoading] = useState(false);
   const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
@@ -1615,6 +1648,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setShowTests(true);
     setSource(null);
     setSourceError(null);
+    setWorkspaceRefreshToken(0);
     setCommitHistory(null);
     setCommitHistoryError(null);
     setSelectedCommitOid(null);
@@ -1725,6 +1759,7 @@ export default function PlaygroundSubmissionDetailPage() {
         void refreshSubmissionLogs().catch(() => undefined);
       }
       if (event.refresh.commit_history) {
+        setWorkspaceRefreshToken((current) => current + 1);
         void refreshCommitHistory(true).catch(() => undefined);
       }
       if (event.refresh.preview) {
@@ -2712,7 +2747,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 Canvas is not available.
               </div>
             ) : null}
-            {activeTab === "file" ? (
+            <div style={{ flex: 1, minHeight: 0, display: activeTab === "file" ? "block" : "none" }}>
               <SubmissionFilePanel
                 panelMode="workspace"
                 source={source}
@@ -2730,8 +2765,10 @@ export default function PlaygroundSubmissionDetailPage() {
                 refreshCommitHistory={refreshCommitHistory}
                 refreshTraceabilityForCurrentView={refreshTraceabilityForCurrentView}
                 selectedNodeId={activeSelectedNodeId}
+                workspaceRefreshToken={workspaceRefreshToken}
               />
-            ) : activeTab === "diff" ? (
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: activeTab === "diff" ? "block" : "none" }}>
               <SubmissionFilePanel
                 panelMode="diff"
                 source={source}
@@ -2749,8 +2786,10 @@ export default function PlaygroundSubmissionDetailPage() {
                 refreshCommitHistory={refreshCommitHistory}
                 refreshTraceabilityForCurrentView={refreshTraceabilityForCurrentView}
                 selectedNodeId={activeSelectedNodeId}
+                workspaceRefreshToken={workspaceRefreshToken}
               />
-            ) : activeTab === "results" ? (
+            </div>
+            {activeTab === "results" ? (
               <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>
                 <SubmissionResultCard submission={submission} />
               </div>
