@@ -175,6 +175,16 @@ function testLaneStyle(lane: TestLane) {
   }
 }
 
+function testResultFill(status: SubmissionTraceabilityTest["status"]) {
+  if (status === "passed") {
+    return "#eaf8ef";
+  }
+  if (status === "failed") {
+    return "#fdecec";
+  }
+  return "#f3f4f6";
+}
+
 function nodeLabelFontFamily() {
   return "'Aptos', 'Segoe UI', 'Helvetica Neue', sans-serif";
 }
@@ -491,9 +501,9 @@ function buildGraphModel({
       target: link.target.data.id,
       type: "cubic-horizontal",
       style: {
-        stroke: "#d0d8e3",
-        lineWidth: 1.35,
-        opacity: 0.9,
+        stroke: "#a9b8ca",
+        lineWidth: 2.05,
+        opacity: 0.98,
       },
       states: [],
       data: {
@@ -916,9 +926,9 @@ function buildGraphModel({
             y,
             size: [TEST_NODE_WIDTH, TEST_NODE_HEIGHT],
             radius: 10,
-            fill: laneVisual.fill,
+            fill: testResultFill(item.status),
             stroke: laneVisual.stroke,
-            lineWidth: 1.35,
+            lineWidth: 1.5,
             shadowColor: "rgba(0, 0, 0, 0)",
             shadowBlur: 0,
             shadowOffsetX: 0,

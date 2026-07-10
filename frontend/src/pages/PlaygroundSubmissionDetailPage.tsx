@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { MinusOutlined, PlusOutlined, RadarChartOutlined } from "@ant-design/icons";
+import { DownOutlined, MinusOutlined, PlusOutlined, RadarChartOutlined, UpOutlined } from "@ant-design/icons";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
@@ -1696,7 +1696,6 @@ export default function PlaygroundSubmissionDetailPage() {
       return;
     }
     if (!traceabilityOverlayVisible && !canvasNeedsAllTraceability) {
-      setAllTraceability(null);
       return;
     }
     void refreshAllTraceability().catch(() => undefined);
@@ -1782,6 +1781,8 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     return findNodeById(tree, activeSelectedNodeId);
   }, [activeSelectedNodeId, tree]);
+  const factoryDetailNode = submission?.status !== "PAUSED" && factorySelectionActive ? selectedNode : null;
+  const factoryDetailExpanded = useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded;
 
   useEffect(() => {
     if (!submissionId || !submission) {
@@ -1864,6 +1865,9 @@ export default function PlaygroundSubmissionDetailPage() {
       setFocusNodeId(newest.node_id);
       setPulseNodeId(newest.node_id);
     }
+    setFactorySelectionActive(true);
+    setSelectedTraceabilityKind(null);
+    setSelectedTraceabilityId(null);
     const timer = window.setTimeout(
       () => setPulseNodeId((current) => (current === newest.node_id ? null : current)),
       1400,
@@ -2455,7 +2459,8 @@ export default function PlaygroundSubmissionDetailPage() {
                   flex: 1,
                   position: "relative",
                   overflow: "hidden",
-                  display: activeTab === "canvas" ? "block" : "none",
+                  display: activeTab === "canvas" ? "flex" : "none",
+                  flexDirection: "column",
                 }}
               >
                 <div className="task-flow-toolbar submission-canvas-floating-toolbar">
@@ -2601,61 +2606,103 @@ export default function PlaygroundSubmissionDetailPage() {
                     ) : undefined}
                   />
                 ) : (
-                  <SubmissionFactoryCanvas
-                    ref={factoryCanvasRef}
-                    key={`factory-canvas:${submissionId}`}
-                    tree={tree}
-                    selectedNodeId={factorySelectionActive ? activeSelectedNodeId : null}
-                    selectionActive={factorySelectionActive}
-                    onSelectNode={(nodeId) => {
-                      setSelectedNodeId(nodeId);
-                      setFactorySelectionActive(Boolean(nodeId));
-                      setSelectedTraceabilityKind(null);
-                      setSelectedTraceabilityId(null);
-                      setFocusNodeId(nodeId);
-                      setPulseNodeId(null);
-                      if (useQuickStartSubmission) {
-                        quickStart.setSelectedNode(nodeId);
-                      }
-                    }}
-                    nodeStates={nodeStates}
-                    allTraceability={allTraceability}
-                    onRequestAllTraceability={() => {
-                      void refreshAllTraceability().catch(() => undefined);
-                    }}
-                    showInterfaces={showInterfaces}
-                    showTests={showTests}
-                    selectedTraceabilityId={selectedTraceabilityId}
-                    selectedTraceabilityKind={selectedTraceabilityKind}
-                    onSelectInterface={({ id, requirementNodeId }) => {
-                      setFactorySelectionActive(true);
-                      const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
-                      if (targetNodeId) {
-                        setSelectedNodeId(targetNodeId);
-                        setFocusNodeId(targetNodeId);
-                        if (useQuickStartSubmission) {
-                          quickStart.setSelectedNode(targetNodeId);
-                        }
-                      }
-                      setSelectedTraceabilityKind("interface");
-                      setSelectedTraceabilityId(id);
-                      setSidebarTab("traceability");
-                    }}
-                    onSelectTest={({ id, requirementNodeId }) => {
-                      setFactorySelectionActive(true);
-                      const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
-                      if (targetNodeId) {
-                        setSelectedNodeId(targetNodeId);
-                        setFocusNodeId(targetNodeId);
-                        if (useQuickStartSubmission) {
-                          quickStart.setSelectedNode(targetNodeId);
-                        }
-                      }
-                      setSelectedTraceabilityKind("test");
-                      setSelectedTraceabilityId(id);
-                      setSidebarTab("traceability");
-                    }}
-                  />
+                  <>
+                    <div style={{ flex: "1 1 auto", minHeight: 0 }}>
+                      <SubmissionFactoryCanvas
+                        ref={factoryCanvasRef}
+                        key={`factory-canvas:${submissionId}`}
+                        tree={tree}
+                        selectedNodeId={factorySelectionActive ? activeSelectedNodeId : null}
+                        selectionActive={factorySelectionActive}
+                        onSelectNode={(nodeId) => {
+                          setSelectedNodeId(nodeId);
+                          setFactorySelectionActive(Boolean(nodeId));
+                          setSelectedTraceabilityKind(null);
+                          setSelectedTraceabilityId(null);
+                          setFocusNodeId(nodeId);
+                          setPulseNodeId(null);
+                          if (useQuickStartSubmission) {
+                            quickStart.setSelectedNode(nodeId);
+                          }
+                        }}
+                        nodeStates={nodeStates}
+                        allTraceability={allTraceability}
+                        onRequestAllTraceability={() => {
+                          void refreshAllTraceability().catch(() => undefined);
+                        }}
+                        showInterfaces={showInterfaces}
+                        showTests={showTests}
+                        selectedTraceabilityId={selectedTraceabilityId}
+                        selectedTraceabilityKind={selectedTraceabilityKind}
+                        onSelectInterface={({ id, requirementNodeId }) => {
+                          setFactorySelectionActive(true);
+                          const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
+                          if (targetNodeId) {
+                            setSelectedNodeId(targetNodeId);
+                            setFocusNodeId(targetNodeId);
+                            if (useQuickStartSubmission) {
+                              quickStart.setSelectedNode(targetNodeId);
+                            }
+                          }
+                          setSelectedTraceabilityKind("interface");
+                          setSelectedTraceabilityId(id);
+                          setSidebarTab("traceability");
+                        }}
+                        onSelectTest={({ id, requirementNodeId }) => {
+                          setFactorySelectionActive(true);
+                          const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
+                          if (targetNodeId) {
+                            setSelectedNodeId(targetNodeId);
+                            setFocusNodeId(targetNodeId);
+                            if (useQuickStartSubmission) {
+                              quickStart.setSelectedNode(targetNodeId);
+                            }
+                          }
+                          setSelectedTraceabilityKind("test");
+                          setSelectedTraceabilityId(id);
+                          setSidebarTab("traceability");
+                        }}
+                      />
+                    </div>
+                    {factoryDetailNode ? (
+                      <div
+                        data-quickstart-id="quickstart-submission-node-detail"
+                        className={`create-task-detail-drawer detail-placement-bottom ${factoryDetailExpanded ? "expanded" : "collapsed"}`}
+                      >
+                        <div className="create-task-detail-top">
+                          <div>
+                            <strong>{factoryDetailNode.id}</strong>
+                            <span>{factoryDetailNode.name}</span>
+                          </div>
+                          <div className="create-task-detail-actions">
+                            <div className={`task-node-chip ${factoryDetailNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
+                              {factoryDetailNode.type}
+                            </div>
+                            <button
+                              type="button"
+                              className="icon-only-btn"
+                              onClick={() => {
+                                const nextExpanded = !factoryDetailExpanded;
+                                setDetailExpanded(nextExpanded);
+                                if (useQuickStartSubmission) {
+                                  quickStart.setDetailExpanded(nextExpanded);
+                                }
+                              }}
+                            >
+                              {factoryDetailExpanded ? <DownOutlined /> : <UpOutlined />}
+                            </button>
+                          </div>
+                        </div>
+                        {factoryDetailExpanded ? (
+                          <RequirementNodeDetailContent
+                            node={factoryDetailNode}
+                            mode="readonly"
+                            taskAssets={submissionTaskAssets}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}
