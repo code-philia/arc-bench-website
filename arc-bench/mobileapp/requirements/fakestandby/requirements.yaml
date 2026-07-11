@@ -4,135 +4,135 @@ type: FOLDER
 description: An app that simulates fake standby mode and provides settings for exit behavior, quick access, security, startup automation, visual appearance, and project website access.
 dependencies: []
 children:
-- id: REQ-1
-  name: Configure Exit And Security
-  type: FOLDER
-  description: The app shall allow users to configure how fake standby is exited and to control related quick-access and security settings from the settings list.
-  dependencies: []
-  children:
-  - id: REQ-1.1
-    name: Open The Escape Methods Dialog
-    type: ATOMIC
-    description: The app shall allow users to open the escape-method selection dialog from the settings list.
+  - id: REQ-1
+    name: Configure Exit And Security
+    type: FOLDER
+    description: The app shall allow users to configure how fake standby is exited and to control related quick-access and security settings from the settings list.
     dependencies: []
+    children:
+      - id: REQ-1.1
+        name: Open The Escape Methods Dialog
+        type: ATOMIC
+        description: The app shall allow users to open the escape-method selection dialog from the settings list.
+        dependencies: []
+        scenarios:
+          - name: Open Escape Methods
+            steps:
+              - keyword: GIVEN
+                content: The settings list is visible.
+              - keyword: WHEN
+                content: The user taps the entry with resource-id "android:id/title" and text "Escape methods".
+              - keyword: THEN
+                content: The app opens a dialog for choosing an escape method.
+      - id: REQ-1.2
+        name: Choose An Escape Method
+        type: ATOMIC
+        description: The app shall allow users to choose an available escape method for exiting fake standby from the selection dialog.
+        dependencies:
+      - REQ-1.1
     scenarios:
-    - name: Open Escape Methods
-      steps:
-      - keyword: GIVEN
-        content: The settings list is visible.
-      - keyword: WHEN
-        content: The user taps the entry with resource-id "android:id/title" and text "Escape methods".
-      - keyword: THEN
-        content: The app opens a dialog for choosing an escape method.
-  - id: REQ-1.2
-    name: Choose An Escape Method
-    type: ATOMIC
-    description: The app shall allow users to choose an available escape method for exiting fake standby from the selection dialog.
-    dependencies:
-    - REQ-1.1
+      - name: Select The Four Touch Option
+        steps:
+          - keyword: GIVEN
+            content: The escape-method dialog is open.
+          - keyword: WHEN
+            content: The user taps the option with resource-id "android:id/text1" and text "Tap the screen with 4 or more simultaneous touches".
+          - keyword: THEN
+            content: The four-touch escape method is selected in the dialog.
+      - id: REQ-1.3
+        name: Confirm The Escape Method Selection
+        type: ATOMIC
+        description: The app shall allow users to confirm the currently selected escape method and save it for fake standby.
+        dependencies:
+      - REQ-1.2
     scenarios:
-    - name: Select The Four Touch Option
-      steps:
-      - keyword: GIVEN
-        content: The escape-method dialog is open.
-      - keyword: WHEN
-        content: The user taps the option with resource-id "android:id/text1" and text "Tap the screen with 4 or more simultaneous touches".
-      - keyword: THEN
-        content: The four-touch escape method is selected in the dialog.
-  - id: REQ-1.3
-    name: Confirm The Escape Method Selection
-    type: ATOMIC
-    description: The app shall allow users to confirm the currently selected escape method and save it for fake standby.
-    dependencies:
-    - REQ-1.2
-    scenarios:
-    - name: Confirm The Selected Escape Method
-      steps:
-      - keyword: GIVEN
-        content: The four-touch escape option is selected in the escape-method dialog.
-      - keyword: WHEN
-        content: The user taps the confirmation button with resource-id "android:id/button1" and text "OK".
-      - keyword: THEN
-        content: The selected escape method is saved and the dialog closes.
-  - id: REQ-1.4
-    name: Toggle The Persistent Start Notification
-    type: ATOMIC
-    description: The app shall allow users to toggle the persistent notification used to start fake standby quickly.
+      - name: Confirm The Selected Escape Method
+        steps:
+          - keyword: GIVEN
+            content: The four-touch escape option is selected in the escape-method dialog.
+          - keyword: WHEN
+            content: The user taps the confirmation button with resource-id "android:id/button1" and text "OK".
+          - keyword: THEN
+            content: The selected escape method is saved and the dialog closes.
+      - id: REQ-1.4
+        name: Toggle The Persistent Start Notification
+        type: ATOMIC
+        description: The app shall allow users to toggle the persistent notification used to start fake standby quickly.
+        dependencies: []
+        scenarios:
+          - name: Toggle The Start Notification Preference
+            steps:
+              - keyword: GIVEN
+                content: The settings list is visible.
+              - keyword: WHEN
+                content: The user taps the preference with resource-id "android:id/title" and text "Always show a notification to start the fake standby".
+              - keyword: THEN
+                content: The persistent notification setting changes state.
+      - id: REQ-1.5
+        name: Enable Secure Mode
+        type: ATOMIC
+        description: The app shall allow users to enable secure mode for fake standby from the settings list.
+        dependencies: []
+        scenarios:
+          - name: Turn On Secure Mode
+            steps:
+              - keyword: GIVEN
+                content: The settings list is visible.
+              - keyword: WHEN
+                content: The user taps the preference with resource-id "android:id/title" and text "Secure mode".
+              - keyword: THEN
+                content: Secure mode is enabled for fake standby.
+  - id: REQ-2
+    name: Configure Startup And Appearance
+    type: FOLDER
+    description: The app shall allow users to control whether fake standby starts automatically and whether the standby display uses inverted colors.
     dependencies: []
-    scenarios:
-    - name: Toggle The Start Notification Preference
-      steps:
-      - keyword: GIVEN
-        content: The settings list is visible.
-      - keyword: WHEN
-        content: The user taps the preference with resource-id "android:id/title" and text "Always show a notification to start the fake standby".
-      - keyword: THEN
-        content: The persistent notification setting changes state.
-  - id: REQ-1.5
-    name: Enable Secure Mode
-    type: ATOMIC
-    description: The app shall allow users to enable secure mode for fake standby from the settings list.
+    children:
+      - id: REQ-2.1
+        name: Toggle Start On Boot
+        type: ATOMIC
+        description: The app shall allow users to toggle whether fake standby starts automatically after device reboot.
+        dependencies: []
+        scenarios:
+          - name: Change The Start On Boot Setting
+            steps:
+              - keyword: GIVEN
+                content: The settings screen for package "android.jonas.fakestandby" is open.
+              - keyword: WHEN
+                content: The user taps the option with resource-id "android:id/title" and text "Start fake standby on boot".
+              - keyword: THEN
+                content: The automatic-start setting changes state.
+      - id: REQ-2.2
+        name: Toggle Invert Color
+        type: ATOMIC
+        description: The app shall allow users to toggle color inversion for the fake standby view.
+        dependencies: []
+        scenarios:
+          - name: Change The Invert Color Setting
+            steps:
+              - keyword: GIVEN
+                content: The settings screen for package "android.jonas.fakestandby" is open.
+              - keyword: WHEN
+                content: The user taps the option with resource-id "android:id/title" and text "Invert color".
+              - keyword: THEN
+                content: The color inversion setting changes state.
+  - id: REQ-3
+    name: Access Project Information
+    type: FOLDER
+    description: The app shall provide a shortcut that opens the project's website from the main list.
     dependencies: []
-    scenarios:
-    - name: Turn On Secure Mode
-      steps:
-      - keyword: GIVEN
-        content: The settings list is visible.
-      - keyword: WHEN
-        content: The user taps the preference with resource-id "android:id/title" and text "Secure mode".
-      - keyword: THEN
-        content: Secure mode is enabled for fake standby.
-- id: REQ-2
-  name: Configure Startup And Appearance
-  type: FOLDER
-  description: The app shall allow users to control whether fake standby starts automatically and whether the standby display uses inverted colors.
-  dependencies: []
-  children:
-  - id: REQ-2.1
-    name: Toggle Start On Boot
-    type: ATOMIC
-    description: The app shall allow users to toggle whether fake standby starts automatically after device reboot.
-    dependencies: []
-    scenarios:
-    - name: Change The Start On Boot Setting
-      steps:
-      - keyword: GIVEN
-        content: The settings screen for package "android.jonas.fakestandby" is open.
-      - keyword: WHEN
-        content: The user taps the option with resource-id "android:id/title" and text "Start fake standby on boot".
-      - keyword: THEN
-        content: The automatic-start setting changes state.
-  - id: REQ-2.2
-    name: Toggle Invert Color
-    type: ATOMIC
-    description: The app shall allow users to toggle color inversion for the fake standby view.
-    dependencies: []
-    scenarios:
-    - name: Change The Invert Color Setting
-      steps:
-      - keyword: GIVEN
-        content: The settings screen for package "android.jonas.fakestandby" is open.
-      - keyword: WHEN
-        content: The user taps the option with resource-id "android:id/title" and text "Invert color".
-      - keyword: THEN
-        content: The color inversion setting changes state.
-- id: REQ-3
-  name: Access Project Information
-  type: FOLDER
-  description: The app shall provide a shortcut that opens the project's website from the main list.
-  dependencies: []
-  children:
-  - id: REQ-3.1
-    name: Open The Project Website
-    type: ATOMIC
-    description: The app shall allow users to open the project website by tapping the dedicated list item.
-    dependencies: []
-    scenarios:
-    - name: Visit The Project Website
-      steps:
-      - keyword: GIVEN
-        content: The list item with resource-id "android:id/title" and text "Visit the project website" is visible.
-      - keyword: WHEN
-        content: The user taps "Visit the project website".
-      - keyword: THEN
-        content: The project webpage opens in the default browser or an in-app web view.
+    children:
+      - id: REQ-3.1
+        name: Open The Project Website
+        type: ATOMIC
+        description: The app shall allow users to open the project website by tapping the dedicated list item.
+        dependencies: []
+        scenarios:
+          - name: Visit The Project Website
+            steps:
+              - keyword: GIVEN
+                content: The list item with resource-id "android:id/title" and text "Visit the project website" is visible.
+              - keyword: WHEN
+                content: The user taps "Visit the project website".
+              - keyword: THEN
+                content: The project webpage opens in the default browser or an in-app web view.

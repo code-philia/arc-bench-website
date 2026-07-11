@@ -4,244 +4,244 @@ type: FOLDER
 description: A currency conversion app that lets users switch the active base currency, manage visible currencies and calculation values, inspect and refresh exchange-rate data, and configure display-related preferences.
 dependencies: []
 children:
-- id: REQ-1
-  name: Convert With Different Base Currencies
-  type: FOLDER
-  description: The app shall allow users to choose a visible currency as the active base currency so the conversion context updates across the supported currencies list.
-  dependencies: []
-  children:
-  - id: REQ-1.1
-    name: Select A Visible Base Currency
-    type: ATOMIC
-    description: The app shall allow users to tap a visible currency entry to make it the current base currency.
+  - id: REQ-1
+    name: Convert With Different Base Currencies
+    type: FOLDER
+    description: The app shall allow users to choose a visible currency as the active base currency so the conversion context updates across the supported currencies list.
     dependencies: []
+    children:
+      - id: REQ-1.1
+        name: Select A Visible Base Currency
+        type: ATOMIC
+        description: The app shall allow users to tap a visible currency entry to make it the current base currency.
+        dependencies: []
+        scenarios:
+          - name: Select USD As The Base Currency
+            steps:
+              - keyword: GIVEN
+                content: The currency list is visible and selectable rows use resource-id "org.billthefarmer.currency:id/name".
+              - keyword: WHEN
+                content: The user taps the entry with text "USD".
+              - keyword: THEN
+                content: United States Dollar becomes the active base currency.
+      - id: REQ-1.2
+        name: Switch The Base Currency Repeatedly
+        type: ATOMIC
+        description: The app shall allow users to switch the active base currency from one visible currency to another and update the displayed conversion context each time.
+        dependencies:
+      - REQ-1.1
     scenarios:
-    - name: Select USD As The Base Currency
-      steps:
-      - keyword: GIVEN
-        content: The currency list is visible and selectable rows use resource-id "org.billthefarmer.currency:id/name".
-      - keyword: WHEN
-        content: The user taps the entry with text "USD".
-      - keyword: THEN
-        content: United States Dollar becomes the active base currency.
-  - id: REQ-1.2
-    name: Switch The Base Currency Repeatedly
-    type: ATOMIC
-    description: The app shall allow users to switch the active base currency from one visible currency to another and update the displayed conversion context each time.
-    dependencies:
-    - REQ-1.1
-    scenarios:
-    - name: Switch From USD To GBP And CAD
-      steps:
-      - keyword: GIVEN
-        content: The currency list is visible and USD is currently selected as the base currency.
-      - keyword: WHEN
-        content: The user taps the row with text "GBP" and then taps the row with text "CAD", both using resource-id "org.billthefarmer.currency:id/name".
-      - keyword: THEN
-        content: The active base currency changes first to GBP and then to CAD, and the displayed conversions follow the current selection.
-- id: REQ-2
-  name: Manage Currency List And Calculation Value
-  type: FOLDER
-  description: The app shall allow users to add visible currencies, select currencies for list management, remove selected entries, trigger an overflow update, and set the base amount used for calculations.
-  dependencies: []
-  children:
-  - id: REQ-2.1
-    name: Open The Currency Picker
-    type: ATOMIC
-    description: The app shall allow users to open the currency picker used to add or activate visible currencies.
+      - name: Switch From USD To GBP And CAD
+        steps:
+          - keyword: GIVEN
+            content: The currency list is visible and USD is currently selected as the base currency.
+          - keyword: WHEN
+            content: The user taps the row with text "GBP" and then taps the row with text "CAD", both using resource-id "org.billthefarmer.currency:id/name".
+          - keyword: THEN
+            content: The active base currency changes first to GBP and then to CAD, and the displayed conversions follow the current selection.
+  - id: REQ-2
+    name: Manage Currency List And Calculation Value
+    type: FOLDER
+    description: The app shall allow users to add visible currencies, select currencies for list management, remove selected entries, trigger an overflow update, and set the base amount used for calculations.
     dependencies: []
+    children:
+      - id: REQ-2.1
+        name: Open The Currency Picker
+        type: ATOMIC
+        description: The app shall allow users to open the currency picker used to add or activate visible currencies.
+        dependencies: []
+        scenarios:
+          - name: Open The Currency Picker
+            steps:
+              - keyword: GIVEN
+                content: The visible currency list is open.
+              - keyword: WHEN
+                content: The user taps the add action with resource-id "org.billthefarmer.currency:id/action_add".
+              - keyword: THEN
+                content: The app opens the currency picker.
+      - id: REQ-2.2
+        name: Add A Currency To The Visible List
+        type: ATOMIC
+        description: The app shall allow users to choose a currency from the picker so it becomes available in the visible list.
+        dependencies:
+      - REQ-2.1
     scenarios:
-    - name: Open The Currency Picker
-      steps:
-      - keyword: GIVEN
-        content: The visible currency list is open.
-      - keyword: WHEN
-        content: The user taps the add action with resource-id "org.billthefarmer.currency:id/action_add".
-      - keyword: THEN
-        content: The app opens the currency picker.
-  - id: REQ-2.2
-    name: Add A Currency To The Visible List
-    type: ATOMIC
-    description: The app shall allow users to choose a currency from the picker so it becomes available in the visible list.
-    dependencies:
-    - REQ-2.1
+      - name: Add AUD From The Currency Picker
+        steps:
+          - keyword: GIVEN
+            content: The currency picker is open.
+          - keyword: WHEN
+            content: The user taps the picker entry with resource-id "org.billthefarmer.currency:id/name" and text "AUD".
+          - keyword: THEN
+            content: Australian Dollar is added or activated in the visible currency list.
+      - id: REQ-2.3
+        name: Select A Currency For Management
+        type: ATOMIC
+        description: The app shall allow users to long-press a visible currency so it becomes selected for list-management actions.
+        dependencies: []
+        scenarios:
+          - name: Select USD For Management
+            steps:
+              - keyword: GIVEN
+                content: The visible currency list contains an entry with resource-id "org.billthefarmer.currency:id/name" and text "USD".
+              - keyword: WHEN
+                content: The user long-presses the "USD" row.
+              - keyword: THEN
+                content: The USD entry becomes selected for a management action.
+      - id: REQ-2.4
+        name: Remove A Selected Currency
+        type: ATOMIC
+        description: The app shall allow users to remove a currently selected currency from the visible list.
+        dependencies:
+      - REQ-2.3
     scenarios:
-    - name: Add AUD From The Currency Picker
-      steps:
-      - keyword: GIVEN
-        content: The currency picker is open.
-      - keyword: WHEN
-        content: The user taps the picker entry with resource-id "org.billthefarmer.currency:id/name" and text "AUD".
-      - keyword: THEN
-        content: Australian Dollar is added or activated in the visible currency list.
-  - id: REQ-2.3
-    name: Select A Currency For Management
-    type: ATOMIC
-    description: The app shall allow users to long-press a visible currency so it becomes selected for list-management actions.
+      - name: Remove The Selected USD Entry
+        steps:
+          - keyword: GIVEN
+            content: The "USD" currency entry is selected for management.
+          - keyword: WHEN
+            content: The user taps the remove action with resource-id "org.billthefarmer.currency:id/action_remove".
+          - keyword: THEN
+            content: The selected USD entry is removed from the list.
+      - id: REQ-2.5
+        name: Open The Overflow Menu
+        type: ATOMIC
+        description: The app shall allow users to open the overflow menu that contains additional currency-list actions.
+        dependencies: []
+        scenarios:
+          - name: Open More Options
+            steps:
+              - keyword: GIVEN
+                content: The currency list screen is open.
+              - keyword: WHEN
+                content: The user taps the button with content-desc "More options".
+              - keyword: THEN
+                content: The overflow menu opens with additional commands.
+      - id: REQ-2.6
+        name: Trigger Rate Update From Overflow
+        type: ATOMIC
+        description: The app shall allow users to start an update of currency-rate data from the overflow menu.
+        dependencies:
+      - REQ-2.5
+    scenarios:
+      - name: Trigger Update From Menu
+        steps:
+          - keyword: GIVEN
+            content: The overflow menu is open.
+          - keyword: WHEN
+            content: The user taps the menu item with resource-id "android:id/title" and text "Update".
+          - keyword: THEN
+            content: The app starts refreshing exchange-rate data.
+      - id: REQ-2.7
+        name: Set The Calculation Amount
+        type: ATOMIC
+        description: The app shall allow users to enter and confirm a base amount for calculating visible conversions.
+        dependencies: []
+        scenarios:
+          - name: Set The Base Amount To 1000
+            steps:
+              - keyword: GIVEN
+                content: The amount field is available on the currency list screen.
+              - keyword: WHEN
+                content: The user enters "1000" into the field with resource-id "org.billthefarmer.currency:id/value" and confirms with the positive button using resource-id "android:id/button1" and text "OK".
+              - keyword: THEN
+                content: The app applies 1000 as the calculation amount and updates the visible conversions.
+  - id: REQ-3
+    name: Inspect And Refresh Exchange Rates
+    type: FOLDER
+    description: The app shall provide visible exchange-rate status feedback and a dedicated manual refresh control for the latest rate data.
     dependencies: []
-    scenarios:
-    - name: Select USD For Management
-      steps:
-      - keyword: GIVEN
-        content: The visible currency list contains an entry with resource-id "org.billthefarmer.currency:id/name" and text "USD".
-      - keyword: WHEN
-        content: The user long-presses the "USD" row.
-      - keyword: THEN
-        content: The USD entry becomes selected for a management action.
-  - id: REQ-2.4
-    name: Remove A Selected Currency
-    type: ATOMIC
-    description: The app shall allow users to remove a currently selected currency from the visible list.
-    dependencies:
-    - REQ-2.3
-    scenarios:
-    - name: Remove The Selected USD Entry
-      steps:
-      - keyword: GIVEN
-        content: The "USD" currency entry is selected for management.
-      - keyword: WHEN
-        content: The user taps the remove action with resource-id "org.billthefarmer.currency:id/action_remove".
-      - keyword: THEN
-        content: The selected USD entry is removed from the list.
-  - id: REQ-2.5
-    name: Open The Overflow Menu
-    type: ATOMIC
-    description: The app shall allow users to open the overflow menu that contains additional currency-list actions.
+    children:
+      - id: REQ-3.1
+        name: Inspect The Current Rate Status
+        type: ATOMIC
+        description: The app shall provide a status indicator that users can tap to inspect the current rate-update state.
+        dependencies: []
+        scenarios:
+          - name: Tap The OK Status Indicator
+            steps:
+              - keyword: GIVEN
+                content: A status element with resource-id "org.billthefarmer.currency:id/status" and text "OK" is visible.
+              - keyword: WHEN
+                content: The user taps the status indicator.
+              - keyword: THEN
+                content: The app affirms that the current update state is OK.
+      - id: REQ-3.2
+        name: Refresh Rates With The Refresh Action
+        type: ATOMIC
+        description: The app shall allow users to manually refresh exchange-rate data by using the dedicated refresh action.
+        dependencies: []
+        scenarios:
+          - name: Refresh Rates With The Toolbar Action
+            steps:
+              - keyword: GIVEN
+                content: The currency list screen is open.
+              - keyword: WHEN
+                content: The user taps the refresh action with resource-id "org.billthefarmer.currency:id/action_refresh".
+              - keyword: THEN
+                content: The app begins updating currency information with the latest available rates.
+  - id: REQ-4
+    name: Configure Currency Preferences
+    type: FOLDER
+    description: The app shall provide a settings flow where users can access roaming behavior and choose how many fraction digits are displayed for currency values.
     dependencies: []
+    children:
+      - id: REQ-4.1
+        name: Open The Settings Screen
+        type: ATOMIC
+        description: The app shall allow users to navigate to the settings list from the app interface.
+        dependencies: []
+        scenarios:
+          - name: Navigate To Settings
+            steps:
+              - keyword: GIVEN
+                content: The current screen shows a top app bar button with content-desc "Navigate up".
+              - keyword: WHEN
+                content: The user taps "Navigate up" and then taps the entry with resource-id "android:id/title" and text "Settings".
+              - keyword: THEN
+                content: The settings list opens.
+      - id: REQ-4.2
+        name: Access The Roaming Preference
+        type: ATOMIC
+        description: The app shall allow users to open or toggle the roaming-related update preference from the settings list.
+        dependencies:
+      - REQ-4.1
     scenarios:
-    - name: Open More Options
-      steps:
-      - keyword: GIVEN
-        content: The currency list screen is open.
-      - keyword: WHEN
-        content: The user taps the button with content-desc "More options".
-      - keyword: THEN
-        content: The overflow menu opens with additional commands.
-  - id: REQ-2.6
-    name: Trigger Rate Update From Overflow
-    type: ATOMIC
-    description: The app shall allow users to start an update of currency-rate data from the overflow menu.
-    dependencies:
-    - REQ-2.5
+      - name: Open The Roaming Preference
+        steps:
+          - keyword: GIVEN
+            content: The settings list is open.
+          - keyword: WHEN
+            content: The user taps the preference with resource-id "android:id/title" and text "Roaming".
+          - keyword: THEN
+            content: The roaming-related preference is exposed or toggled.
+      - id: REQ-4.3
+        name: Open The Fraction Digits Selector
+        type: ATOMIC
+        description: The app shall allow users to open the fraction-digit chooser from the settings list.
+        dependencies:
+      - REQ-4.1
     scenarios:
-    - name: Trigger Update From Menu
-      steps:
-      - keyword: GIVEN
-        content: The overflow menu is open.
-      - keyword: WHEN
-        content: The user taps the menu item with resource-id "android:id/title" and text "Update".
-      - keyword: THEN
-        content: The app starts refreshing exchange-rate data.
-  - id: REQ-2.7
-    name: Set The Calculation Amount
-    type: ATOMIC
-    description: The app shall allow users to enter and confirm a base amount for calculating visible conversions.
-    dependencies: []
+      - name: Open The Fraction Digits Dialog
+        steps:
+          - keyword: GIVEN
+            content: The settings list is open.
+          - keyword: WHEN
+            content: The user taps the preference with resource-id "android:id/title" and text "Fraction digits".
+          - keyword: THEN
+            content: The fraction-digit chooser opens.
+      - id: REQ-4.4
+        name: Select Four Fraction Digits
+        type: ATOMIC
+        description: The app shall allow users to choose a fraction-digit precision option for displayed currency values.
+        dependencies:
+      - REQ-4.3
     scenarios:
-    - name: Set The Base Amount To 1000
-      steps:
-      - keyword: GIVEN
-        content: The amount field is available on the currency list screen.
-      - keyword: WHEN
-        content: The user enters "1000" into the field with resource-id "org.billthefarmer.currency:id/value" and confirms with the positive button using resource-id "android:id/button1" and text "OK".
-      - keyword: THEN
-        content: The app applies 1000 as the calculation amount and updates the visible conversions.
-- id: REQ-3
-  name: Inspect And Refresh Exchange Rates
-  type: FOLDER
-  description: The app shall provide visible exchange-rate status feedback and a dedicated manual refresh control for the latest rate data.
-  dependencies: []
-  children:
-  - id: REQ-3.1
-    name: Inspect The Current Rate Status
-    type: ATOMIC
-    description: The app shall provide a status indicator that users can tap to inspect the current rate-update state.
-    dependencies: []
-    scenarios:
-    - name: Tap The OK Status Indicator
-      steps:
-      - keyword: GIVEN
-        content: A status element with resource-id "org.billthefarmer.currency:id/status" and text "OK" is visible.
-      - keyword: WHEN
-        content: The user taps the status indicator.
-      - keyword: THEN
-        content: The app affirms that the current update state is OK.
-  - id: REQ-3.2
-    name: Refresh Rates With The Refresh Action
-    type: ATOMIC
-    description: The app shall allow users to manually refresh exchange-rate data by using the dedicated refresh action.
-    dependencies: []
-    scenarios:
-    - name: Refresh Rates With The Toolbar Action
-      steps:
-      - keyword: GIVEN
-        content: The currency list screen is open.
-      - keyword: WHEN
-        content: The user taps the refresh action with resource-id "org.billthefarmer.currency:id/action_refresh".
-      - keyword: THEN
-        content: The app begins updating currency information with the latest available rates.
-- id: REQ-4
-  name: Configure Currency Preferences
-  type: FOLDER
-  description: The app shall provide a settings flow where users can access roaming behavior and choose how many fraction digits are displayed for currency values.
-  dependencies: []
-  children:
-  - id: REQ-4.1
-    name: Open The Settings Screen
-    type: ATOMIC
-    description: The app shall allow users to navigate to the settings list from the app interface.
-    dependencies: []
-    scenarios:
-    - name: Navigate To Settings
-      steps:
-      - keyword: GIVEN
-        content: The current screen shows a top app bar button with content-desc "Navigate up".
-      - keyword: WHEN
-        content: The user taps "Navigate up" and then taps the entry with resource-id "android:id/title" and text "Settings".
-      - keyword: THEN
-        content: The settings list opens.
-  - id: REQ-4.2
-    name: Access The Roaming Preference
-    type: ATOMIC
-    description: The app shall allow users to open or toggle the roaming-related update preference from the settings list.
-    dependencies:
-    - REQ-4.1
-    scenarios:
-    - name: Open The Roaming Preference
-      steps:
-      - keyword: GIVEN
-        content: The settings list is open.
-      - keyword: WHEN
-        content: The user taps the preference with resource-id "android:id/title" and text "Roaming".
-      - keyword: THEN
-        content: The roaming-related preference is exposed or toggled.
-  - id: REQ-4.3
-    name: Open The Fraction Digits Selector
-    type: ATOMIC
-    description: The app shall allow users to open the fraction-digit chooser from the settings list.
-    dependencies:
-    - REQ-4.1
-    scenarios:
-    - name: Open The Fraction Digits Dialog
-      steps:
-      - keyword: GIVEN
-        content: The settings list is open.
-      - keyword: WHEN
-        content: The user taps the preference with resource-id "android:id/title" and text "Fraction digits".
-      - keyword: THEN
-        content: The fraction-digit chooser opens.
-  - id: REQ-4.4
-    name: Select Four Fraction Digits
-    type: ATOMIC
-    description: The app shall allow users to choose a fraction-digit precision option for displayed currency values.
-    dependencies:
-    - REQ-4.3
-    scenarios:
-    - name: Apply Four Fraction Digits
-      steps:
-      - keyword: GIVEN
-        content: The fraction-digit chooser is open.
-      - keyword: WHEN
-        content: The user taps the option with resource-id "android:id/text1" and text "Four fraction digits".
-      - keyword: THEN
-        content: Currency values are displayed with four fraction digits.
+      - name: Apply Four Fraction Digits
+        steps:
+          - keyword: GIVEN
+            content: The fraction-digit chooser is open.
+          - keyword: WHEN
+            content: The user taps the option with resource-id "android:id/text1" and text "Four fraction digits".
+          - keyword: THEN
+            content: Currency values are displayed with four fraction digits.

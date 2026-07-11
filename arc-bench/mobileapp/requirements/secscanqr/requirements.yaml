@@ -4,172 +4,172 @@ type: FOLDER
 description: A QR and barcode utility app that supports scanning, code generation from multiple inputs, saving and sharing generated results, reviewing saved items, and standard Android navigation patterns.
 dependencies: []
 children:
-- id: REQ-1
-  name: Scan Codes And Navigate
-  type: FOLDER
-  description: The app shall provide a scan entry point and support navigation between sections and screens through bottom navigation, the Android Back action, and the app bar Up action.
-  dependencies: []
-  children:
-  - id: REQ-1.1
-    name: Open Scanner Interface
-    type: ATOMIC
-    description: The app shall allow users to open the QR scanner from the scan entry point.
+  - id: REQ-1
+    name: Scan Codes And Navigate
+    type: FOLDER
+    description: The app shall provide a scan entry point and support navigation between sections and screens through bottom navigation, the Android Back action, and the app bar Up action.
     dependencies: []
+    children:
+      - id: REQ-1.1
+        name: Open Scanner Interface
+        type: ATOMIC
+        description: The app shall allow users to open the QR scanner from the scan entry point.
+        dependencies: []
+        scenarios:
+          - name: Open The Scanner From Scan
+            steps:
+              - keyword: GIVEN
+                content: The SecScanQR app is open.
+              - keyword: WHEN
+                content: The user taps the scanning entry point with text "Scan".
+              - keyword: THEN
+                content: The QR scanner interface opens.
+      - id: REQ-1.2
+        name: Switch Sections With Bottom Navigation
+        type: ATOMIC
+        description: The app shall allow users to switch to another section by tapping a bottom navigation item.
+        dependencies:
+      - REQ-1.1
     scenarios:
-    - name: Open The Scanner From Scan
-      steps:
-      - keyword: GIVEN
-        content: The SecScanQR app is open.
-      - keyword: WHEN
-        content: The user taps the scanning entry point with text "Scan".
-      - keyword: THEN
-        content: The QR scanner interface opens.
-  - id: REQ-1.2
-    name: Switch Sections With Bottom Navigation
-    type: ATOMIC
-    description: The app shall allow users to switch to another section by tapping a bottom navigation item.
-    dependencies:
-    - REQ-1.1
-    scenarios:
-    - name: Change Sections From The Scanner
-      steps:
-      - keyword: GIVEN
-        content: The scanner interface is open.
-      - keyword: WHEN
-        content: The user taps the bottom navigation label with resource-id "de.t_dankworth.secscanqr:id/largeLabel".
-      - keyword: THEN
-        content: The app opens the section associated with the selected bottom navigation item.
-  - id: REQ-1.3
-    name: Return With System Back
-    type: ATOMIC
-    description: The app shall allow users to return to the previous screen by invoking the Android system Back action.
+      - name: Change Sections From The Scanner
+        steps:
+          - keyword: GIVEN
+            content: The scanner interface is open.
+          - keyword: WHEN
+            content: The user taps the bottom navigation label with resource-id "de.t_dankworth.secscanqr:id/largeLabel".
+          - keyword: THEN
+            content: The app opens the section associated with the selected bottom navigation item.
+      - id: REQ-1.3
+        name: Return With System Back
+        type: ATOMIC
+        description: The app shall allow users to return to the previous screen by invoking the Android system Back action.
+        dependencies: []
+        scenarios:
+          - name: Go Back From A Secondary Screen
+            steps:
+              - keyword: GIVEN
+                content: The user is on a secondary screen in package "de.t_dankworth.secscanqr".
+              - keyword: WHEN
+                content: The user performs the Android system Back action.
+              - keyword: THEN
+                content: The app returns to the previous screen.
+      - id: REQ-1.4
+        name: Navigate Up To Parent Screen
+        type: ATOMIC
+        description: The app shall allow users to move one level up in the current navigation hierarchy by using the app bar navigation control.
+        dependencies: []
+        scenarios:
+          - name: Return To A Parent View With Navigate Up
+            steps:
+              - keyword: GIVEN
+                content: The user is viewing a sub-screen that shows an app bar navigation control.
+              - keyword: WHEN
+                content: The user taps the control with content description "Navigate up".
+              - keyword: THEN
+                content: The current sub-screen closes and the parent view is shown.
+  - id: REQ-2
+    name: Generate Save Share And Review Codes
+    type: FOLDER
+    description: The app shall allow users to open the generator area, create QR codes and barcodes from supported inputs, save generated outputs, share barcodes, and review saved results in history.
     dependencies: []
+    children:
+      - id: REQ-2.1
+        name: Open Generator Menu
+        type: ATOMIC
+        description: The app shall allow users to open the generator menu from the main navigation.
+        dependencies: []
+        scenarios:
+          - name: Open The Generate Section
+            steps:
+              - keyword: GIVEN
+                content: The app is open.
+              - keyword: WHEN
+                content: The user taps the entry with text "Generate".
+              - keyword: THEN
+                content: The generator menu is displayed.
+      - id: REQ-2.2
+        name: Generate And Save Text QR Codes
+        type: ATOMIC
+        description: The app shall allow users to create a QR code from text input and save the generated result.
+        dependencies:
+      - REQ-2.1
     scenarios:
-    - name: Go Back From A Secondary Screen
-      steps:
-      - keyword: GIVEN
-        content: The user is on a secondary screen in package "de.t_dankworth.secscanqr".
-      - keyword: WHEN
-        content: The user performs the Android system Back action.
-      - keyword: THEN
-        content: The app returns to the previous screen.
-  - id: REQ-1.4
-    name: Navigate Up To Parent Screen
-    type: ATOMIC
-    description: The app shall allow users to move one level up in the current navigation hierarchy by using the app bar navigation control.
-    dependencies: []
+      - name: Generate And Save A Text QR Code
+        steps:
+          - keyword: GIVEN
+            content: The generator menu is open.
+          - keyword: WHEN
+            content: The user selects "Convert text into a QR-Code", enters "Hello" into "de.t_dankworth.secscanqr:id/txtQR", taps "GENERATE" on "de.t_dankworth.secscanqr:id/btnGenerateText", and then taps the save control "de.t_dankworth.secscanqr:id/btnSave".
+          - keyword: THEN
+            content: A QR preview is generated and the text-based QR code is saved.
+      - id: REQ-2.3
+        name: Generate And Save Geo QR Codes
+        type: ATOMIC
+        description: The app shall allow users to create a QR code from geo coordinates and save the generated result.
+        dependencies:
+      - REQ-2.1
     scenarios:
-    - name: Return To A Parent View With Navigate Up
-      steps:
-      - keyword: GIVEN
-        content: The user is viewing a sub-screen that shows an app bar navigation control.
-      - keyword: WHEN
-        content: The user taps the control with content description "Navigate up".
-      - keyword: THEN
-        content: The current sub-screen closes and the parent view is shown.
-- id: REQ-2
-  name: Generate Save Share And Review Codes
-  type: FOLDER
-  description: The app shall allow users to open the generator area, create QR codes and barcodes from supported inputs, save generated outputs, share barcodes, and review saved results in history.
-  dependencies: []
-  children:
-  - id: REQ-2.1
-    name: Open Generator Menu
-    type: ATOMIC
-    description: The app shall allow users to open the generator menu from the main navigation.
-    dependencies: []
+      - name: Generate And Save A Geo QR Code
+        steps:
+          - keyword: GIVEN
+            content: The generator menu is open.
+          - keyword: WHEN
+            content: The user selects "Create a QR-Code in the format of a geo location", enters 43.73 into "de.t_dankworth.secscanqr:id/tfLatitude", enters 10.73 into "de.t_dankworth.secscanqr:id/tfLongtitude", taps "GENERATE", and then taps "de.t_dankworth.secscanqr:id/btnSave".
+          - keyword: THEN
+            content: A geo QR preview is generated and the geo QR code is saved.
+      - id: REQ-2.4
+        name: Generate Refresh Save And Share Barcodes
+        type: ATOMIC
+        description: The app shall allow users to generate a barcode from text, refresh the preview after editing the value, save the result, and open the platform share sheet.
+        dependencies:
+      - REQ-2.1
     scenarios:
-    - name: Open The Generate Section
-      steps:
-      - keyword: GIVEN
-        content: The app is open.
-      - keyword: WHEN
-        content: The user taps the entry with text "Generate".
-      - keyword: THEN
-        content: The generator menu is displayed.
-  - id: REQ-2.2
-    name: Generate And Save Text QR Codes
-    type: ATOMIC
-    description: The app shall allow users to create a QR code from text input and save the generated result.
-    dependencies:
-    - REQ-2.1
+      - name: Generate A Barcode From Text
+        steps:
+          - keyword: GIVEN
+            content: The generator menu is open.
+          - keyword: WHEN
+            content: The user selects "Create different kinds of Barcodes", enters "Hello" into "de.t_dankworth.secscanqr:id/tfBarcode", and taps "de.t_dankworth.secscanqr:id/btnGenerateBarcode".
+          - keyword: THEN
+            content: A barcode preview is generated for the entered text value.
+      - name: Refresh The Barcode Preview
+        steps:
+          - keyword: GIVEN
+            content: The barcode generator screen is open and a barcode preview has already been generated.
+          - keyword: WHEN
+            content: The user replaces the value in "de.t_dankworth.secscanqr:id/tfBarcode" with "1" and taps "de.t_dankworth.secscanqr:id/btnGenerateBarcode" again.
+          - keyword: THEN
+            content: The barcode preview is refreshed for the updated input value.
+      - name: Save A Generated Barcode
+        steps:
+          - keyword: GIVEN
+            content: A generated barcode preview is visible on the barcode generator screen.
+          - keyword: WHEN
+            content: The user taps the button with text "SAVE".
+          - keyword: THEN
+            content: The generated barcode is saved.
+      - name: Share And Dismiss A Generated Barcode
+        steps:
+          - keyword: GIVEN
+            content: A generated barcode preview is visible on the barcode generator screen.
+          - keyword: WHEN
+            content: The user taps the button with text "SHARE" and dismisses the Android share sheet with the system Back action in package "android".
+          - keyword: THEN
+            content: The platform share sheet is opened and then dismissed, returning the user to the app.
+      - id: REQ-2.5
+        name: Review Saved Codes In History
+        type: ATOMIC
+        description: The app shall allow users to open the history section and review previously saved QR codes and barcodes.
+        dependencies:
+      - REQ-2.2
+      - REQ-2.3
+      - REQ-2.4
     scenarios:
-    - name: Generate And Save A Text QR Code
-      steps:
-      - keyword: GIVEN
-        content: The generator menu is open.
-      - keyword: WHEN
-        content: The user selects "Convert text into a QR-Code", enters "Hello" into "de.t_dankworth.secscanqr:id/txtQR", taps "GENERATE" on "de.t_dankworth.secscanqr:id/btnGenerateText", and then taps the save control "de.t_dankworth.secscanqr:id/btnSave".
-      - keyword: THEN
-        content: A QR preview is generated and the text-based QR code is saved.
-  - id: REQ-2.3
-    name: Generate And Save Geo QR Codes
-    type: ATOMIC
-    description: The app shall allow users to create a QR code from geo coordinates and save the generated result.
-    dependencies:
-    - REQ-2.1
-    scenarios:
-    - name: Generate And Save A Geo QR Code
-      steps:
-      - keyword: GIVEN
-        content: The generator menu is open.
-      - keyword: WHEN
-        content: The user selects "Create a QR-Code in the format of a geo location", enters 43.73 into "de.t_dankworth.secscanqr:id/tfLatitude", enters 10.73 into "de.t_dankworth.secscanqr:id/tfLongtitude", taps "GENERATE", and then taps "de.t_dankworth.secscanqr:id/btnSave".
-      - keyword: THEN
-        content: A geo QR preview is generated and the geo QR code is saved.
-  - id: REQ-2.4
-    name: Generate Refresh Save And Share Barcodes
-    type: ATOMIC
-    description: The app shall allow users to generate a barcode from text, refresh the preview after editing the value, save the result, and open the platform share sheet.
-    dependencies:
-    - REQ-2.1
-    scenarios:
-    - name: Generate A Barcode From Text
-      steps:
-      - keyword: GIVEN
-        content: The generator menu is open.
-      - keyword: WHEN
-        content: The user selects "Create different kinds of Barcodes", enters "Hello" into "de.t_dankworth.secscanqr:id/tfBarcode", and taps "de.t_dankworth.secscanqr:id/btnGenerateBarcode".
-      - keyword: THEN
-        content: A barcode preview is generated for the entered text value.
-    - name: Refresh The Barcode Preview
-      steps:
-      - keyword: GIVEN
-        content: The barcode generator screen is open and a barcode preview has already been generated.
-      - keyword: WHEN
-        content: The user replaces the value in "de.t_dankworth.secscanqr:id/tfBarcode" with "1" and taps "de.t_dankworth.secscanqr:id/btnGenerateBarcode" again.
-      - keyword: THEN
-        content: The barcode preview is refreshed for the updated input value.
-    - name: Save A Generated Barcode
-      steps:
-      - keyword: GIVEN
-        content: A generated barcode preview is visible on the barcode generator screen.
-      - keyword: WHEN
-        content: The user taps the button with text "SAVE".
-      - keyword: THEN
-        content: The generated barcode is saved.
-    - name: Share And Dismiss A Generated Barcode
-      steps:
-      - keyword: GIVEN
-        content: A generated barcode preview is visible on the barcode generator screen.
-      - keyword: WHEN
-        content: The user taps the button with text "SHARE" and dismisses the Android share sheet with the system Back action in package "android".
-      - keyword: THEN
-        content: The platform share sheet is opened and then dismissed, returning the user to the app.
-  - id: REQ-2.5
-    name: Review Saved Codes In History
-    type: ATOMIC
-    description: The app shall allow users to open the history section and review previously saved QR codes and barcodes.
-    dependencies:
-    - REQ-2.2
-    - REQ-2.3
-    - REQ-2.4
-    scenarios:
-    - name: Review Generated Codes In History
-      steps:
-      - keyword: GIVEN
-        content: Text QR codes, geo QR codes, or barcodes have been generated and saved.
-      - keyword: WHEN
-        content: The user returns to the main view and taps the entry with text "History".
-      - keyword: THEN
-        content: The saved items list opens and shows the newly generated codes for review.
+      - name: Review Generated Codes In History
+        steps:
+          - keyword: GIVEN
+            content: Text QR codes, geo QR codes, or barcodes have been generated and saved.
+          - keyword: WHEN
+            content: The user returns to the main view and taps the entry with text "History".
+          - keyword: THEN
+            content: The saved items list opens and shows the newly generated codes for review.

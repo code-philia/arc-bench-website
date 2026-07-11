@@ -4,65 +4,65 @@ type: FOLDER
 description: A calculator app that performs basic arithmetic operations, including addition, subtraction, multiplication, and division.
 dependencies: []
 children:
-- id: REQ-1
-  name: Basic Arithmetic Operations
-  type: FOLDER
-  description: The calculator shall allow users to enter numbers and arithmetic operators through calculator buttons and compute results after pressing the equals button.
-  dependencies: []
-  children:
-  - id: REQ-1.1
-    name: Addition
-    type: ATOMIC
-    description: The calculator shall support addition and display the computed sum after the user presses the equals button.
+  - id: REQ-1
+    name: Basic Arithmetic Operations
+    type: FOLDER
+    description: The calculator shall allow users to enter numbers and arithmetic operators through calculator buttons and compute results after pressing the equals button.
     dependencies: []
-    scenarios:
-    - name: Add Two Numbers
-      steps:
-      - keyword: GIVEN
-        content: The calculator is open and ready for input.
-      - keyword: WHEN
-        content: The user presses "1", then "+", then "5", and finally "=".
-      - keyword: THEN
-        content: The calculator displays "6".
-  - id: REQ-1.2
-    name: Subtraction
-    type: ATOMIC
-    description: The calculator shall support subtraction and display the computed difference after the user presses the equals button.
-    dependencies: []
-    scenarios:
-    - name: Subtract Two Numbers
-      steps:
-      - keyword: GIVEN
-        content: The calculator is open and ready for input.
-      - keyword: WHEN
-        content: The user presses "9", then "-", then "2", and finally "=".
-      - keyword: THEN
-        content: The calculator displays "7".
-  - id: REQ-1.3
-    name: Multiplication
-    type: ATOMIC
-    description: The calculator shall support multiplication and display the computed product after the user presses the equals button.
-    dependencies: []
-    scenarios:
-    - name: Multiply Two Numbers
-      steps:
-      - keyword: GIVEN
-        content: The calculator is open and ready for input.
-      - keyword: WHEN
-        content: The user presses "5", then "*", then "5", and finally "=".
-      - keyword: THEN
-        content: The calculator displays "25".
-  - id: REQ-1.4
-    name: Division
-    type: ATOMIC
-    description: The calculator shall support division and display the computed quotient after the user presses the equals button.
-    dependencies: []
-    scenarios:
-    - name: Divide Two Numbers
-      steps:
-      - keyword: GIVEN
-        content: The calculator is open and ready for input.
-      - keyword: WHEN
-        content: The user presses "6", then "/", then "2", and finally "=".
-      - keyword: THEN
-        content: The calculator displays "3".
+    children:
+      - id: REQ-1.1
+        name: Addition
+        type: ATOMIC
+        description: The calculator shall support addition and display the computed sum after the user presses the equals button.
+        dependencies: []
+        scenarios:
+          - name: Add Two Numbers
+            steps:
+              - keyword: GIVEN
+                content: The calculator is open and ready for input.
+              - keyword: WHEN
+                content: The user presses "1", then "+", then "5", and finally "=".
+              - keyword: THEN
+                content: The calculator displays "6".
+      - id: REQ-1.2
+        name: Subtraction
+        type: ATOMIC
+        description: The calculator shall support subtraction and display the computed difference after the user presses the equals button.
+        dependencies: []
+        scenarios:
+          - name: Subtract Two Numbers
+            steps:
+              - keyword: GIVEN
+                content: The calculator is open and ready for input.
+              - keyword: WHEN
+                content: The user presses "9", then "-", then "2", and finally "=".
+              - keyword: THEN
+                content: The calculator displays "7".
+      - id: REQ-1.3
+        name: Multiplication
+        type: ATOMIC
+        description: The calculator shall support multiplication and display the computed product after the user presses the equals button.
+        dependencies: []
+        scenarios:
+          - name: Multiply Two Numbers
+            steps:
+              - keyword: GIVEN
+                content: The calculator is open and ready for input.
+              - keyword: WHEN
+                content: The user presses "5", then "*", then "5", and finally "=".
+              - keyword: THEN
+                content: The calculator displays "25".
+      - id: REQ-1.4
+        name: Division
+        type: ATOMIC
+        description: The calculator shall support division and display the computed quotient after the user presses the equals button.
+        dependencies: []
+        scenarios:
+          - name: Divide Two Numbers
+            steps:
+              - keyword: GIVEN
+                content: The calculator is open and ready for input.
+              - keyword: WHEN
+                content: The user presses "6", then "/", then "2", and finally "=".
+              - keyword: THEN
+                content: The calculator displays "3".

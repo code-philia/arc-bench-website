@@ -4,118 +4,118 @@ type: FOLDER
 description: An app for recording audio, managing saved recordings, and configuring recording parameters such as audio format and sample rate.
 dependencies: []
 children:
-- id: REQ-1
-  name: Record And Manage Audio
-  type: FOLDER
-  description: The app shall allow users to start a recording, stop and save it, open a saved recording, rename it, and share it.
-  dependencies: []
-  children:
-  - id: REQ-1.1
-    name: Start Stop And Save Recording
-    type: ATOMIC
-    description: The app shall allow users to start a new audio recording and stop it to save the recording.
+  - id: REQ-1
+    name: Record And Manage Audio
+    type: FOLDER
+    description: The app shall allow users to start a recording, stop and save it, open a saved recording, rename it, and share it.
     dependencies: []
+    children:
+      - id: REQ-1.1
+        name: Start Stop And Save Recording
+        type: ATOMIC
+        description: The app shall allow users to start a new audio recording and stop it to save the recording.
+        dependencies: []
+        scenarios:
+          - name: Record And Save An Audio Clip
+            steps:
+              - keyword: GIVEN
+                content: The Audio Recorder app is open.
+              - keyword: WHEN
+                content: The user taps the record action (resource-id "com.github.axet.audiorecorder:id/fab") and then taps the done action (resource-id "com.github.axet.audiorecorder:id/recording_done").
+              - keyword: THEN
+                content: The recording is saved and appears in the recordings list.
+      - id: REQ-1.2
+        name: Open A Recording
+        type: ATOMIC
+        description: The app shall allow users to open a saved recording by tapping its title entry in the recordings list.
+        dependencies:
+      - REQ-1.1
     scenarios:
-    - name: Record And Save An Audio Clip
-      steps:
-      - keyword: GIVEN
-        content: The Audio Recorder app is open.
-      - keyword: WHEN
-        content: The user taps the record action (resource-id "com.github.axet.audiorecorder:id/fab") and then taps the done action (resource-id "com.github.axet.audiorecorder:id/recording_done").
-      - keyword: THEN
-        content: The recording is saved and appears in the recordings list.
-  - id: REQ-1.2
-    name: Open A Recording
-    type: ATOMIC
-    description: The app shall allow users to open a saved recording by tapping its title entry in the recordings list.
-    dependencies:
-    - REQ-1.1
+      - name: Open A Saved Recording
+        steps:
+          - keyword: GIVEN
+            content: A recording exists in the recordings list.
+          - keyword: WHEN
+            content: The user taps the recording title entry (resource-id "com.github.axet.audiorecorder:id/recording_title").
+          - keyword: THEN
+            content: The app opens the selected recording.
+      - id: REQ-1.3
+        name: Rename Recording
+        type: ATOMIC
+        description: The app shall allow users to rename a recording by opening the edit action, entering a new title, and confirming the change.
+        dependencies:
+      - REQ-1.2
     scenarios:
-    - name: Open A Saved Recording
-      steps:
-      - keyword: GIVEN
-        content: A recording exists in the recordings list.
-      - keyword: WHEN
-        content: The user taps the recording title entry (resource-id "com.github.axet.audiorecorder:id/recording_title").
-      - keyword: THEN
-        content: The app opens the selected recording.
-  - id: REQ-1.3
-    name: Rename Recording
-    type: ATOMIC
-    description: The app shall allow users to rename a recording by opening the edit action, entering a new title, and confirming the change.
-    dependencies:
-    - REQ-1.2
+      - name: Rename A Recording To KK
+        steps:
+          - keyword: GIVEN
+            content: The recording playback/details screen is open.
+          - keyword: WHEN
+            content: The user taps the edit control (resource-id "com.github.axet.audiorecorder:id/recording_player_edit"), enters "KK" into the dialog input (resource-id "com.github.axet.audiorecorder:id/custom"), and confirms with the positive button (resource-id "android:id/button1").
+          - keyword: THEN
+            content: The recording title is updated to "KK".
+      - id: REQ-1.4
+        name: Share Recording
+        type: ATOMIC
+        description: The app shall allow users to share a recording from the playback/details screen using the share action.
+        dependencies:
+      - REQ-1.2
     scenarios:
-    - name: Rename A Recording To KK
-      steps:
-      - keyword: GIVEN
-        content: The recording playback/details screen is open.
-      - keyword: WHEN
-        content: The user taps the edit control (resource-id "com.github.axet.audiorecorder:id/recording_player_edit"), enters "KK" into the dialog input (resource-id "com.github.axet.audiorecorder:id/custom"), and confirms with the positive button (resource-id "android:id/button1").
-      - keyword: THEN
-        content: The recording title is updated to "KK".
-  - id: REQ-1.4
-    name: Share Recording
-    type: ATOMIC
-    description: The app shall allow users to share a recording from the playback/details screen using the share action.
-    dependencies:
-    - REQ-1.2
-    scenarios:
-    - name: Share A Recording Using System Share Sheet
-      steps:
-      - keyword: GIVEN
-        content: The recording playback/details screen is open.
-      - keyword: WHEN
-        content: The user taps the share action (resource-id "com.github.axet.audiorecorder:id/recording_player_share").
-      - keyword: THEN
-        content: The Android system share interface is opened for the recording file.
-- id: REQ-2
-  name: Configure Recording Parameters
-  type: FOLDER
-  description: The app shall provide a navigable settings flow that leads to the main preferences screen, where users can configure audio format and sample rate for recording or playback.
-  dependencies: []
-  children:
-  - id: REQ-2.1
-    name: Open Settings Page
-    type: ATOMIC
-    description: The app shall allow users to navigate from the app interface to the main settings page where recording preferences are available.
+      - name: Share A Recording Using System Share Sheet
+        steps:
+          - keyword: GIVEN
+            content: The recording playback/details screen is open.
+          - keyword: WHEN
+            content: The user taps the share action (resource-id "com.github.axet.audiorecorder:id/recording_player_share").
+          - keyword: THEN
+            content: The Android system share interface is opened for the recording file.
+  - id: REQ-2
+    name: Configure Recording Parameters
+    type: FOLDER
+    description: The app shall provide a navigable settings flow that leads to the main preferences screen, where users can configure audio format and sample rate for recording or playback.
     dependencies: []
+    children:
+      - id: REQ-2.1
+        name: Open Settings Page
+        type: ATOMIC
+        description: The app shall allow users to navigate from the app interface to the main settings page where recording preferences are available.
+        dependencies: []
+        scenarios:
+          - name: Open Recording Settings
+            steps:
+              - keyword: GIVEN
+                content: The app is open.
+              - keyword: WHEN
+                content: The user navigates to settings by tapping an element with class "android.widget.ImageView", proceeds via a container with class "android.widget.RelativeLayout", selects a list entry header labeled by resource-id "android:id/title", uses another "android.widget.ImageView" to move through screens, and focuses the main preferences in an "android.widget.FrameLayout".
+              - keyword: THEN
+                content: The main settings page is open and ready for preference changes.
+      - id: REQ-2.2
+        name: Select Audio Format
+        type: ATOMIC
+        description: The app shall allow users to open the "Audio Format" setting and select an available format option.
+        dependencies:
+      - REQ-2.1
     scenarios:
-    - name: Open Recording Settings
-      steps:
-      - keyword: GIVEN
-        content: The app is open.
-      - keyword: WHEN
-        content: The user navigates to settings by tapping an element with class "android.widget.ImageView", proceeds via a container with class "android.widget.RelativeLayout", selects a list entry header labeled by resource-id "android:id/title", uses another "android.widget.ImageView" to move through screens, and focuses the main preferences in an "android.widget.FrameLayout".
-      - keyword: THEN
-        content: The main settings page is open and ready for preference changes.
-  - id: REQ-2.2
-    name: Select Audio Format
-    type: ATOMIC
-    description: The app shall allow users to open the "Audio Format" setting and select an available format option.
-    dependencies:
-    - REQ-2.1
+      - name: Change Audio Format In Settings
+        steps:
+          - keyword: GIVEN
+            content: The settings page is open.
+          - keyword: WHEN
+            content: The user opens the "Audio Format" preference labeled by resource-id "android:id/title" and selects an option row (resource-id "android:id/text1").
+          - keyword: THEN
+            content: The selected audio format option is applied.
+      - id: REQ-2.3
+        name: Set Sample Rate
+        type: ATOMIC
+        description: The app shall allow users to open the "Sample Rate" setting and select an available sample rate option.
+        dependencies:
+      - REQ-2.1
     scenarios:
-    - name: Change Audio Format In Settings
-      steps:
-      - keyword: GIVEN
-        content: The settings page is open.
-      - keyword: WHEN
-        content: The user opens the "Audio Format" preference labeled by resource-id "android:id/title" and selects an option row (resource-id "android:id/text1").
-      - keyword: THEN
-        content: The selected audio format option is applied.
-  - id: REQ-2.3
-    name: Set Sample Rate
-    type: ATOMIC
-    description: The app shall allow users to open the "Sample Rate" setting and select an available sample rate option.
-    dependencies:
-    - REQ-2.1
-    scenarios:
-    - name: Set Sample Rate To 22 kHz In Settings
-      steps:
-      - keyword: GIVEN
-        content: The settings page is open.
-      - keyword: WHEN
-        content: The user opens the "Sample Rate" preference labeled by resource-id "android:id/title" and selects the option row (resource-id "android:id/text1") with text "22 kHz".
-      - keyword: THEN
-        content: The sample rate is set to "22 kHz".
+      - name: Set Sample Rate To 22 kHz In Settings
+        steps:
+          - keyword: GIVEN
+            content: The settings page is open.
+          - keyword: WHEN
+            content: The user opens the "Sample Rate" preference labeled by resource-id "android:id/title" and selects the option row (resource-id "android:id/text1") with text "22 kHz".
+          - keyword: THEN
+            content: The sample rate is set to "22 kHz".

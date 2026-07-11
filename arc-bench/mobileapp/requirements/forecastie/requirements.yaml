@@ -4,145 +4,145 @@ type: FOLDER
 description: A weather app that presents today's and later forecasts, supports switching the forecast city, and allows users to configure temperature units from settings.
 dependencies: []
 children:
-- id: REQ-1
-  name: Browse Current And Future Forecasts
-  type: FOLDER
-  description: The app shall present the current day's weather on the main screen and provide navigation to future forecast periods.
-  dependencies: []
-  children:
-  - id: REQ-1.1
-    name: View Today's Weather
-    type: ATOMIC
-    description: The app shall show the current day's weather summary when the main forecast screen is opened.
+  - id: REQ-1
+    name: Browse Current And Future Forecasts
+    type: FOLDER
+    description: The app shall present the current day's weather on the main screen and provide navigation to future forecast periods.
     dependencies: []
+    children:
+      - id: REQ-1.1
+        name: View Today's Weather
+        type: ATOMIC
+        description: The app shall show the current day's weather summary when the main forecast screen is opened.
+        dependencies: []
+        scenarios:
+          - name: View Today Section On Launch
+            steps:
+              - keyword: GIVEN
+                content: The user opens the app.
+              - keyword: THEN
+                content: The current temperature is visible in resource-id "cz.martykan.forecastie:id/todayTemperature" and the text "TODAY" is shown.
+      - id: REQ-1.2
+        name: View Future Forecast Options
+        type: ATOMIC
+        description: The app shall display forecast period options for upcoming days on the main forecast screen.
+        dependencies: []
+        scenarios:
+          - name: Show Tomorrow And Later Options
+            steps:
+              - keyword: GIVEN
+                content: The user opens the main forecast screen.
+              - keyword: THEN
+                content: The texts "TOMORROW" and "LATER" are visible as forecast period options.
+      - id: REQ-1.3
+        name: Open Later Forecast View
+        type: ATOMIC
+        description: The app shall open a future forecast view when the user selects the later forecast option.
+        dependencies:
+      - REQ-1.2
     scenarios:
-    - name: View Today Section On Launch
-      steps:
-      - keyword: GIVEN
-        content: The user opens the app.
-      - keyword: THEN
-        content: The current temperature is visible in resource-id "cz.martykan.forecastie:id/todayTemperature" and the text "TODAY" is shown.
-  - id: REQ-1.2
-    name: View Future Forecast Options
-    type: ATOMIC
-    description: The app shall display forecast period options for upcoming days on the main forecast screen.
+      - name: Open The Later Forecast View
+        steps:
+          - keyword: GIVEN
+            content: The user is on the main weather screen where the "LATER" option is visible.
+          - keyword: WHEN
+            content: The user taps the "LATER" option.
+          - keyword: THEN
+            content: A later forecast view is shown and day temperatures are displayed in resource-id "cz.martykan.forecastie:id/itemTemperature".
+  - id: REQ-2
+    name: Switch Forecast City
+    type: FOLDER
+    description: The app shall display the active city and provide a search flow for switching the forecast to another city.
     dependencies: []
+    children:
+      - id: REQ-2.1
+        name: View Active City
+        type: ATOMIC
+        description: The app shall display the currently selected city on the main forecast screen.
+        dependencies: []
+        scenarios:
+          - name: View Default City
+            steps:
+              - keyword: GIVEN
+                content: The user opens the app.
+              - keyword: THEN
+                content: The currently selected city text is visible on the forecast screen.
+      - id: REQ-2.2
+        name: Open City Search
+        type: ATOMIC
+        description: The app shall provide a search action that opens the city search prompt from the main forecast screen.
+        dependencies: []
+        scenarios:
+          - name: Open The Search For City Prompt
+            steps:
+              - keyword: GIVEN
+                content: The user is on the main weather screen.
+              - keyword: WHEN
+                content: The user taps the search action with resource-id "cz.martykan.forecastie:id/action_search".
+              - keyword: THEN
+                content: A prompt with the text "Search for city" is displayed.
+      - id: REQ-2.3
+        name: Search And Switch City
+        type: ATOMIC
+        description: The app shall accept a city query and refresh the forecast for the selected city after the user confirms the search.
+        dependencies:
+      - REQ-2.2
     scenarios:
-    - name: Show Tomorrow And Later Options
-      steps:
-      - keyword: GIVEN
-        content: The user opens the main forecast screen.
-      - keyword: THEN
-        content: The texts "TOMORROW" and "LATER" are visible as forecast period options.
-  - id: REQ-1.3
-    name: Open Later Forecast View
-    type: ATOMIC
-    description: The app shall open a future forecast view when the user selects the later forecast option.
-    dependencies:
-    - REQ-1.2
-    scenarios:
-    - name: Open The Later Forecast View
-      steps:
-      - keyword: GIVEN
-        content: The user is on the main weather screen where the "LATER" option is visible.
-      - keyword: WHEN
-        content: The user taps the "LATER" option.
-      - keyword: THEN
-        content: A later forecast view is shown and day temperatures are displayed in resource-id "cz.martykan.forecastie:id/itemTemperature".
-- id: REQ-2
-  name: Switch Forecast City
-  type: FOLDER
-  description: The app shall display the active city and provide a search flow for switching the forecast to another city.
-  dependencies: []
-  children:
-  - id: REQ-2.1
-    name: View Active City
-    type: ATOMIC
-    description: The app shall display the currently selected city on the main forecast screen.
+      - name: Search And Switch To Beijing
+        steps:
+          - keyword: GIVEN
+            content: The city search prompt is open.
+          - keyword: WHEN
+            content: The user enters "beijing" in the search field identified by resource-id "cz.martykan.forecastie:id/customPanel" and confirms with "OK".
+          - keyword: THEN
+            content: The app updates to show the city text "Beijing, CN" and the current temperature is visible in resource-id "cz.martykan.forecastie:id/todayTemperature".
+  - id: REQ-3
+    name: Configure Temperature Units
+    type: FOLDER
+    description: The app shall provide a settings flow for choosing how forecast temperatures are displayed.
     dependencies: []
+    children:
+      - id: REQ-3.1
+        name: Open Settings Page
+        type: ATOMIC
+        description: The app shall allow users to open the settings screen from the overflow menu on the main forecast screen.
+        dependencies: []
+        scenarios:
+          - name: Open Settings From Overflow
+            steps:
+              - keyword: GIVEN
+                content: The user is on the main weather screen.
+              - keyword: WHEN
+                content: The user taps the overflow button with content-desc "More options" and selects "Settings".
+              - keyword: THEN
+                content: The settings screen is displayed.
+      - id: REQ-3.2
+        name: Open Temperature Unit Options
+        type: ATOMIC
+        description: The app shall allow users to open the temperature unit preference and view the available unit options.
+        dependencies:
+      - REQ-3.1
     scenarios:
-    - name: View Default City
-      steps:
-      - keyword: GIVEN
-        content: The user opens the app.
-      - keyword: THEN
-        content: The currently selected city text is visible on the forecast screen.
-  - id: REQ-2.2
-    name: Open City Search
-    type: ATOMIC
-    description: The app shall provide a search action that opens the city search prompt from the main forecast screen.
-    dependencies: []
+      - name: Open Temperature Unit Selection
+        steps:
+          - keyword: GIVEN
+            content: The settings screen is open.
+          - keyword: WHEN
+            content: The user taps "Temperature units".
+          - keyword: THEN
+            content: The options "Celsius", "Fahrenheit", and "Kelvin" are visible.
+      - id: REQ-3.3
+        name: Apply Temperature Unit Selection
+        type: ATOMIC
+        description: The app shall allow users to choose a temperature unit and apply that unit to the displayed forecast values.
+        dependencies:
+      - REQ-3.2
     scenarios:
-    - name: Open The Search For City Prompt
-      steps:
-      - keyword: GIVEN
-        content: The user is on the main weather screen.
-      - keyword: WHEN
-        content: The user taps the search action with resource-id "cz.martykan.forecastie:id/action_search".
-      - keyword: THEN
-        content: A prompt with the text "Search for city" is displayed.
-  - id: REQ-2.3
-    name: Search And Switch City
-    type: ATOMIC
-    description: The app shall accept a city query and refresh the forecast for the selected city after the user confirms the search.
-    dependencies:
-    - REQ-2.2
-    scenarios:
-    - name: Search And Switch To Beijing
-      steps:
-      - keyword: GIVEN
-        content: The city search prompt is open.
-      - keyword: WHEN
-        content: The user enters "beijing" in the search field identified by resource-id "cz.martykan.forecastie:id/customPanel" and confirms with "OK".
-      - keyword: THEN
-        content: The app updates to show the city text "Beijing, CN" and the current temperature is visible in resource-id "cz.martykan.forecastie:id/todayTemperature".
-- id: REQ-3
-  name: Configure Temperature Units
-  type: FOLDER
-  description: The app shall provide a settings flow for choosing how forecast temperatures are displayed.
-  dependencies: []
-  children:
-  - id: REQ-3.1
-    name: Open Settings Page
-    type: ATOMIC
-    description: The app shall allow users to open the settings screen from the overflow menu on the main forecast screen.
-    dependencies: []
-    scenarios:
-    - name: Open Settings From Overflow
-      steps:
-      - keyword: GIVEN
-        content: The user is on the main weather screen.
-      - keyword: WHEN
-        content: The user taps the overflow button with content-desc "More options" and selects "Settings".
-      - keyword: THEN
-        content: The settings screen is displayed.
-  - id: REQ-3.2
-    name: Open Temperature Unit Options
-    type: ATOMIC
-    description: The app shall allow users to open the temperature unit preference and view the available unit options.
-    dependencies:
-    - REQ-3.1
-    scenarios:
-    - name: Open Temperature Unit Selection
-      steps:
-      - keyword: GIVEN
-        content: The settings screen is open.
-      - keyword: WHEN
-        content: The user taps "Temperature units".
-      - keyword: THEN
-        content: The options "Celsius", "Fahrenheit", and "Kelvin" are visible.
-  - id: REQ-3.3
-    name: Apply Temperature Unit Selection
-    type: ATOMIC
-    description: The app shall allow users to choose a temperature unit and apply that unit to the displayed forecast values.
-    dependencies:
-    - REQ-3.2
-    scenarios:
-    - name: Change Temperature Unit To Kelvin
-      steps:
-      - keyword: GIVEN
-        content: The temperature unit options are open.
-      - keyword: WHEN
-        content: The user selects "Kelvin" and taps the button with content-desc "Navigate up" to return.
-      - keyword: THEN
-        content: The forecast temperatures are displayed in Kelvin, for example with a value like "294.3 K".
+      - name: Change Temperature Unit To Kelvin
+        steps:
+          - keyword: GIVEN
+            content: The temperature unit options are open.
+          - keyword: WHEN
+            content: The user selects "Kelvin" and taps the button with content-desc "Navigate up" to return.
+          - keyword: THEN
+            content: The forecast temperatures are displayed in Kelvin, for example with a value like "294.3 K".
