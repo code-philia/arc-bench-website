@@ -17,6 +17,7 @@ WORKSPACE_ROOT = Path("/workspace")
 SUBMISSION_DIR = WORKSPACE_ROOT / "submission"
 TEMPLATE_DIR = WORKSPACE_ROOT / "template"
 TASK_DIR = WORKSPACE_ROOT / "task"
+TASK_INFO_PATH = TASK_DIR / "task_info.json"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
 SDK_DIR = WORKSPACE_ROOT / "sdk"
 PROMPT_PATH = WORKSPACE_ROOT / "prompt" / "task_prompt.txt"
@@ -43,6 +44,8 @@ UI_DUMPS_DIR = DEVICE_DIR / "ui_dumps"
 LOGCAT_PATH = DEVICE_DIR / "logcat.txt"
 EVALUATION_DIR = ARTIFACTS_DIR / "evaluation"
 FUNCTIONAL_RESULTS_PATH = EVALUATION_DIR / "functional-results.json"
+WIDGET_RESULTS_PATH = EVALUATION_DIR / "widget-results.json"
+TEST_RESULTS_PATH = EVALUATION_DIR / "test-results.json"
 
 AGENT_SOURCE_UPLOAD = "upload"
 AGENT_SOURCE_BUILTIN = "builtin_arc_agent"
@@ -372,6 +375,35 @@ def read_spec() -> dict:
     return json.loads(SPEC_PATH.read_text(encoding="utf-8"))
 
 
+def read_task_info() -> dict:
+    if not TASK_INFO_PATH.exists():
+        raise RuntimeError("task_info.json is missing from the workspace task directory")
+    try:
+        payload = json.loads(TASK_INFO_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("task_info.json must be valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("task_info.json must contain a JSON object")
+    package_name = str(payload.get("package_name", "")).strip()
+    if not package_name:
+        raise RuntimeError("task_info.json is missing package_name")
+    permissions = payload.get("permissions", [])
+    if not isinstance(permissions, list):
+        raise RuntimeError("task_info.json permissions must be an array")
+    functional_test_num = payload.get("functional_test_num")
+    widget_test_num = payload.get("widget_test_num")
+    if not isinstance(functional_test_num, int) or functional_test_num < 0:
+        raise RuntimeError("task_info.json functional_test_num must be a non-negative integer")
+    if not isinstance(widget_test_num, int) or widget_test_num < 0:
+        raise RuntimeError("task_info.json widget_test_num must be a non-negative integer")
+    return {
+        "package_name": package_name,
+        "permissions": [str(item) for item in permissions],
+        "functional_test_num": functional_test_num,
+        "widget_test_num": widget_test_num,
+    }
+
+
 def resolve_agent_source(spec: dict) -> str:
     value = str(spec.get("agent_source", AGENT_SOURCE_UPLOAD)).strip()
     if value in {AGENT_SOURCE_UPLOAD, AGENT_SOURCE_BUILTIN}:
@@ -679,8 +711,8 @@ def build_android_app(stdout_file, stderr_file, spec: dict) -> dict:
     command = ["./gradlew", "--no-daemon", "assembleDebug"] if gradlew.exists() else ["gradle", "assembleDebug"]
     env = {
         **os.environ,
-        "ANDROID_HOME": str(android.get("sdk_root", "/opt/android")),
-        "ANDROID_SDK_ROOT": str(android.get("sdk_root", "/opt/android")),
+        "ANDROID_HOME": str(android["sdk_root"]),
+        "ANDROID_SDK_ROOT": str(android["sdk_root"]),
     }
 
     append_runner_event(step_key, "Building Android debug APK with Gradle")
@@ -709,7 +741,7 @@ def build_android_app(stdout_file, stderr_file, spec: dict) -> dict:
 
     package_name = resolve_package_name_from_output_metadata(
         output_metadata_path,
-        str(android.get("package_name_hint", "com.arcbench.generated")).strip() or "com.arcbench.generated",
+        str(android["package_name_hint"]).strip(),
     )
     metadata = {
         "success": True,
@@ -788,8 +820,12 @@ def collect_logcat(device_id: str | None) -> None:
 def better_compare(left: str, right: str) -> bool:
     left_text = str(left)
     right_text = str(right)
+    if left_text.strip() == right_text.strip():
+        return True
     pattern = re.compile(r"[^a-zA-Z0-9]")
-    if pattern.sub("", left_text).lower() == pattern.sub("", right_text).lower():
+    normalized_left = pattern.sub("", left_text).lower()
+    normalized_right = pattern.sub("", right_text).lower()
+    if normalized_left and normalized_right and normalized_left == normalized_right:
         return True
     try:
         return math.fabs(float(left_text) - float(right_text)) < 0.00001
@@ -882,6 +918,9 @@ class AndroidController:
     def click(self, x: int, y: int) -> None:
         self.device.shell(f"input tap {x} {y}")
 
+    def double_click(self, x: int, y: int) -> None:
+        self.device.double_click(x, y)
+
     def long_click(self, x: int, y: int, seconds: float = 2.0) -> None:
         self.device.shell(f"input swipe {x} {y} {x} {y} {int(seconds * 1000)}")
 
@@ -891,6 +930,15 @@ class AndroidController:
 
     def back(self) -> None:
         self.device.shell("input keyevent KEYCODE_BACK")
+
+    def home(self) -> None:
+        self.device.press("home")
+
+    def enter(self) -> None:
+        self.device.press("enter")
+
+    def swipe(self, fx: int, fy: int, tx: int, ty: int, duration_ms: int = 100) -> None:
+        self.device.shell(f"input swipe {fx} {fy} {tx} {ty} {duration_ms}")
 
     def shell(self, command: str):
         return self.device.shell(command)
@@ -919,6 +967,59 @@ def save_failure_artifacts(controller: AndroidController, test_id: str, raw_xml:
     }
 
 
+def _test_sort_key(path: Path) -> tuple[int, str]:
+    match = re.fullmatch(r"test(\d+)", path.stem)
+    if match:
+        return (int(match.group(1)), path.name)
+    return (10**9, path.name)
+
+
+def _sorted_json_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    return sorted((path for path in root.glob("*.json") if path.is_file()), key=_test_sort_key)
+
+
+def discover_test_paths(task_info: dict) -> tuple[list[Path], list[Path]]:
+    widget_dir = TESTS_DIR / "widget_tests"
+    functional_dir = TESTS_DIR / "functional_tests"
+    if not functional_dir.is_dir():
+        raise RuntimeError("Mobile tests must use AppForge layout: missing tests/functional_tests")
+    functional_paths = _sorted_json_files(functional_dir)
+    widget_paths = _sorted_json_files(widget_dir) if widget_dir.is_dir() else []
+    if len(functional_paths) != int(task_info["functional_test_num"]):
+        raise RuntimeError(
+            "functional_tests count does not match task_info.json: "
+            f"expected {task_info['functional_test_num']}, found {len(functional_paths)}"
+        )
+    if len(widget_paths) != int(task_info["widget_test_num"]):
+        raise RuntimeError(
+            "widget_tests count does not match task_info.json: "
+            f"expected {task_info['widget_test_num']}, found {len(widget_paths)}"
+        )
+    return widget_paths, functional_paths
+
+
+def load_widget_test(test_path: Path) -> dict:
+    payload = json.loads(test_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Mobile widget test must be a JSON object: {test_path.name}")
+    pre_condition = payload.get("pre_condition", [])
+    action = payload.get("action", {})
+    post_condition = payload.get("post_condition", [])
+    if not isinstance(pre_condition, list):
+        raise RuntimeError(f"Widget test pre_condition must be an array: {test_path.name}")
+    if not isinstance(action, dict):
+        raise RuntimeError(f"Widget test action must be an object: {test_path.name}")
+    if not isinstance(post_condition, list):
+        raise RuntimeError(f"Widget test post_condition must be an array: {test_path.name}")
+    return {
+        "pre_condition": pre_condition,
+        "action": action,
+        "post_condition": post_condition,
+    }
+
+
 def load_functional_test(test_path: Path) -> list[dict]:
     payload = json.loads(test_path.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
@@ -931,12 +1032,43 @@ def load_functional_test(test_path: Path) -> list[dict]:
     return normalized_steps
 
 
-class FunctionalEvaluator:
-    def __init__(self, device_id: str, apk_path: Path, package_name: str, permissions: list[str]) -> None:
+def parse_point(value) -> tuple[int, int] | None:
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        return int(value[0]), int(value[1])
+    if isinstance(value, dict) and "x" in value and "y" in value:
+        return int(value["x"]), int(value["y"])
+    return None
+
+
+def swipe_points_for_direction(node: ET.Element, direction: str) -> tuple[tuple[int, int], tuple[int, int]]:
+    bounds = str(node.attrib.get("bounds", ""))
+    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+    if match is None:
+        raise RuntimeError(f"Invalid node bounds for swipe target: {bounds}")
+    x1, y1, x2, y2 = [int(part) for part in match.groups()]
+    mid_x = (x1 + x2) // 2
+    mid_y = (y1 + y2) // 2
+    padding_x = max(10, (x2 - x1) // 4)
+    padding_y = max(10, (y2 - y1) // 4)
+    normalized_direction = direction.lower().strip() or "up"
+    if normalized_direction == "up":
+        return (mid_x, y2 - padding_y), (mid_x, y1 + padding_y)
+    if normalized_direction == "down":
+        return (mid_x, y1 + padding_y), (mid_x, y2 - padding_y)
+    if normalized_direction == "left":
+        return (x2 - padding_x, mid_y), (x1 + padding_x, mid_y)
+    if normalized_direction == "right":
+        return (x1 + padding_x, mid_y), (x2 - padding_x, mid_y)
+    raise RuntimeError(f"Unsupported swipe direction: {direction}")
+
+
+class MobileEvaluator:
+    def __init__(self, device_id: str, apk_path: Path, package_name: str, permissions: list[str], task_info: dict) -> None:
         self.device_id = device_id
         self.apk_path = apk_path
         self.package_name = package_name
         self.permissions = permissions
+        self.task_info = task_info
         self.controller = AndroidController(device_id, package_name)
 
     def init_env(self) -> None:
@@ -961,7 +1093,9 @@ class FunctionalEvaluator:
         return raw_xml, ET.fromstring(raw_xml)
 
     def perform_action(self, step: dict) -> tuple[bool, str]:
-        step_type = str(step.get("type", "")).strip()
+        step_type = str(step.get("type", "")).strip().lower()
+        if step_type == "none":
+            return True, ""
         if step_type == "wait":
             time.sleep(1.0)
             return True, ""
@@ -971,6 +1105,15 @@ class FunctionalEvaluator:
             return True, ""
         if step_type == "back":
             self.controller.back()
+            return True, ""
+        if step_type == "home":
+            self.controller.home()
+            return True, ""
+        if step_type == "enter":
+            self.controller.enter()
+            return True, ""
+        if step_type == "stop":
+            self.controller.stop_app()
             return True, ""
         if step_type == "adb_command":
             command_text = str(step.get("cmdline", "")).strip()
@@ -989,8 +1132,18 @@ class FunctionalEvaluator:
                 output = str(getattr(response, "output", "")).strip()
                 return False, output or f"adb_command failed with exit_code={exit_code}"
             return True, ""
+        if step_type == "swipe":
+            coords = step.get("coords")
+            coord_from = parse_point(step.get("coord_from"))
+            coord_to = parse_point(step.get("coord_to"))
+            if isinstance(coords, list) and len(coords) == 2:
+                coord_from = parse_point(coords[0])
+                coord_to = parse_point(coords[1])
+            if coord_from is not None and coord_to is not None:
+                self.controller.swipe(coord_from[0], coord_from[1], coord_to[0], coord_to[1])
+                return True, ""
 
-        target = step.get("target")
+        target = step.get("target", step.get("element"))
         if not isinstance(target, dict):
             return False, f"Step target must be an object for action type {step_type}"
         raw_xml, root = self.dump_hierarchy()
@@ -1001,21 +1154,29 @@ class FunctionalEvaluator:
         if step_type == "click":
             self.controller.click(x, y)
             return True, ""
+        if step_type == "doubleclick":
+            self.controller.double_click(x, y)
+            return True, ""
         if step_type == "longclick":
             self.controller.long_click(x, y)
             return True, ""
-        if step_type == "input":
+        if step_type in {"input", "text"}:
             message = str(step.get("message", "") or step.get("text", "")).strip()
             if not message:
                 return False, "input step is missing message"
             self.controller.click(x, y)
             self.controller.input_text(message, clear=True)
             return True, ""
+        if step_type == "swipe":
+            direction = str(step.get("direction", "up")).strip() or "up"
+            start, end = swipe_points_for_direction(node, direction)
+            self.controller.swipe(start[0], start[1], end[0], end[1])
+            return True, ""
         return False, f"Unsupported action type: {step_type}; last hierarchy snapshot length={len(raw_xml)}"
 
     def check_condition(self, step: dict) -> tuple[bool, str]:
-        step_type = str(step.get("type", "")).strip()
-        target = step.get("target")
+        step_type = str(step.get("type", "")).strip().lower()
+        target = step.get("target", step.get("element"))
         if not isinstance(target, dict):
             return False, f"Step target must be an object for assertion type {step_type}"
         _, root = self.dump_hierarchy()
@@ -1038,7 +1199,7 @@ class FunctionalEvaluator:
         for delay in MOBILE_TEST_RETRY_DELAYS:
             if delay > 0:
                 time.sleep(delay)
-            if step_type in {"click", "longclick", "input", "adb_command", "restart", "wait", "back"}:
+            if step_type in {"click", "doubleclick", "longclick", "input", "adb_command", "restart", "wait", "back", "home", "enter", "stop", "swipe"}:
                 success, details = self.perform_action(step)
             elif step_type in {"visible", "invisible"}:
                 success, details = self.check_condition(step)
@@ -1052,10 +1213,7 @@ class FunctionalEvaluator:
         artifacts = save_failure_artifacts(self.controller, test_id, raw_xml)
         return False, last_error, artifacts
 
-    def run_single_functional_test(self, test_path: Path) -> dict:
-        test_id = test_path.stem
-        steps = load_functional_test(test_path)
-        append_runner_event("run_tests", f"Running functional test {test_id}")
+    def _run_steps(self, test_id: str, steps: list[dict]) -> dict:
         started_at = time.time()
         try:
             self.init_env()
@@ -1083,19 +1241,48 @@ class FunctionalEvaluator:
             except Exception as exc:  # noqa: BLE001
                 append_debug_log(f"Failed to reset app environment after {test_id}: {exc}")
 
-    def run_all_functional_tests(self) -> list[dict]:
-        test_paths = sorted(path for path in TESTS_DIR.glob("*.json") if path.is_file())
+    def run_single_widget_test(self, test_path: Path) -> dict:
+        test_id = test_path.stem
+        payload = load_widget_test(test_path)
+        append_runner_event("run_tests", f"Running widget test {test_id}")
+        steps: list[dict] = []
+        steps.extend(payload["pre_condition"])
+        steps.append(payload["action"])
+        steps.extend(payload["post_condition"])
+        result = self._run_steps(test_id, steps)
+        result["suite"] = "widget"
+        return result
+
+    def run_single_functional_test(self, test_path: Path) -> dict:
+        test_id = test_path.stem
+        steps = load_functional_test(test_path)
+        append_runner_event("run_tests", f"Running functional test {test_id}")
+        result = self._run_steps(test_id, steps)
+        result["suite"] = "functional"
+        return result
+
+    def run_suite(self, suite_name: str, test_paths: list[Path]) -> list[dict]:
         if not test_paths:
-            append_runner_event("run_tests", "No mobile functional tests found", status="success")
+            append_runner_event("run_tests", f"No mobile {suite_name} tests found", status="success")
             return []
         results: list[dict] = []
         for test_path in test_paths:
-            result = self.run_single_functional_test(test_path)
+            if suite_name == "widget":
+                result = self.run_single_widget_test(test_path)
+            else:
+                result = self.run_single_functional_test(test_path)
             result["id"] = test_path.stem
             results.append(result)
             status = "success" if result["status"] == "passed" else "error"
-            append_runner_event("run_tests", f"Functional test {test_path.stem} finished with status={result['status']}", status=status)
+            append_runner_event("run_tests", f"{suite_name.title()} test {test_path.stem} finished with status={result['status']}", status=status)
         return results
+
+    def run_all_tests(self) -> dict[str, list[dict]]:
+        widget_test_paths, functional_test_paths = discover_test_paths(self.task_info)
+        return {
+            "widget": self.run_suite("widget", widget_test_paths),
+            "functional": self.run_suite("functional", functional_test_paths),
+        }
 
 
 def summarize_results(results: list[dict]) -> dict:
@@ -1180,28 +1367,49 @@ def main() -> int:
                 )
 
             task = spec.get("task", {})
-            category = task.get("category", "web")
+            category = str(task.get("category", "")).strip()
             if category != "mobile":
                 raise RuntimeError(f"Unsupported task category inside runner: {category}")
 
             build_metadata = build_android_app(stdout_file, stderr_file, spec)
             device_id = wait_for_android_device()
             android = resolve_android_spec(spec)
-            evaluator = FunctionalEvaluator(
+            task_info = read_task_info()
+            evaluator = MobileEvaluator(
                 device_id=device_id,
                 apk_path=Path(build_metadata["apk_path"]),
                 package_name=str(build_metadata["package_name"]),
                 permissions=[str(item) for item in android.get("permissions", [])],
+                task_info=task_info,
             )
-            append_runner_event("run_tests", "Running AppForge-style mobile functional tests")
-            test_results = evaluator.run_all_functional_tests()
-            FUNCTIONAL_RESULTS_PATH.write_text(json.dumps(test_results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            append_runner_event("run_tests", "Running AppForge-style mobile widget and functional tests")
+            suite_results = evaluator.run_all_tests()
+            widget_results = suite_results["widget"]
+            functional_results = suite_results["functional"]
+            test_results = [*widget_results, *functional_results]
+            WIDGET_RESULTS_PATH.write_text(json.dumps(widget_results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            FUNCTIONAL_RESULTS_PATH.write_text(json.dumps(functional_results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            TEST_RESULTS_PATH.write_text(json.dumps(test_results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             collect_logcat(device_id)
 
             summary = summarize_results(test_results)
             result_payload = {
                 **summary,
                 "category": "mobile",
+                "test_suites": {
+                    "widget": {
+                        "count": len(widget_results),
+                    },
+                    "functional": {
+                        "count": len(functional_results),
+                    },
+                },
+                "task_info": {
+                    "package_name": task_info["package_name"],
+                    "permissions": task_info["permissions"],
+                    "functional_test_num": task_info["functional_test_num"],
+                    "widget_test_num": task_info["widget_test_num"],
+                },
                 "build": build_metadata,
                 "device": {
                     "device_id": device_id,

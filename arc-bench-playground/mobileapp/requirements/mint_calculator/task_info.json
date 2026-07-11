@@ -3,5 +3,6 @@
   "permissions": [
     "android.permission.VIBRATE"
   ],
-  "test_num": 4
+  "functional_test_num": 4,
+  "widget_test_num": 0
 }

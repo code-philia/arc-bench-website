@@ -150,12 +150,31 @@ class WorkspaceAssembler:
     @staticmethod
     def _read_task_info(path: Path) -> dict:
         if not path.exists():
-            return {}
+            raise RuntimeError(f"Missing mobile task_info.json: {path}")
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
-        return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid JSON in mobile task_info.json: {path}") from exc
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Mobile task_info.json must be a JSON object: {path}")
+        package_name = str(data.get("package_name", "")).strip()
+        if not package_name:
+            raise RuntimeError(f"Mobile task_info.json is missing package_name: {path}")
+        permissions = data.get("permissions", [])
+        if not isinstance(permissions, list):
+            raise RuntimeError(f"Mobile task_info.json permissions must be an array: {path}")
+        functional_test_num = data.get("functional_test_num")
+        widget_test_num = data.get("widget_test_num")
+        if not isinstance(functional_test_num, int) or functional_test_num < 0:
+            raise RuntimeError(f"Mobile task_info.json functional_test_num must be a non-negative integer: {path}")
+        if not isinstance(widget_test_num, int) or widget_test_num < 0:
+            raise RuntimeError(f"Mobile task_info.json widget_test_num must be a non-negative integer: {path}")
+        return {
+            "package_name": package_name,
+            "permissions": [str(item) for item in permissions],
+            "functional_test_num": functional_test_num,
+            "widget_test_num": widget_test_num,
+        }
 
     @staticmethod
     def _build_android_spec(requirement_id: str, task_info: dict) -> dict:
@@ -167,8 +186,8 @@ class WorkspaceAssembler:
             "results_path": "/workspace/artifacts/result.json",
             "template_name": "android-starter",
             "requirement_id": requirement_id,
-            "package_name_hint": str(task_info.get("package_name", "com.arcbench.generated")),
-            "permissions": list(task_info.get("permissions", [])),
+            "package_name_hint": task_info["package_name"],
+            "permissions": task_info["permissions"],
         }
 
     @staticmethod

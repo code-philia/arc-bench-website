@@ -415,7 +415,10 @@ class RequirementCatalogService:
     @staticmethod
     def _estimate_total_tests(category: str, tests_path: Path, leaf_requirement_count: int) -> int:
         if category == "mobile" and tests_path.exists():
-            return len([path for path in tests_path.glob("*.json") if path.is_file()])
+            return (
+                len([path for path in (tests_path / "functional_tests").glob("*.json") if path.is_file()])
+                + len([path for path in (tests_path / "widget_tests").glob("*.json") if path.is_file()])
+            )
         return leaf_requirement_count * 3
 
     @staticmethod
