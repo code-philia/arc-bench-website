@@ -250,6 +250,10 @@ export type UserTaskDetail = UserTaskSummary & {
 export type UserTaskDraft = {
   draft_id: string;
   references_base_url: string;
+  title: string;
+  task_type: "web" | "mobile" | "kernel" | "mixed";
+  yaml_content: string;
+  markdown_content: string;
 };
 
 export type UserSummary = {

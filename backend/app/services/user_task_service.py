@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,10 +14,12 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.user_task import UserTask
-from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskDraftResponse, UserTaskSummary
+from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskDraftResponse, UserTaskDraftSaveRequest, UserTaskSummary
 
 
 class UserTaskService:
+    ACTIVE_DRAFT_ID = "create-task-current"
+
     def __init__(self, db: Session):
         self.db = db
         self.settings = get_settings()
@@ -34,13 +39,30 @@ class UserTaskService:
         )
 
     def create_draft(self, user: User) -> UserTaskDraftResponse:
-        draft_id = f"draft_{uuid4().hex[:12]}"
+        draft_id = self.ACTIVE_DRAFT_ID
         draft_dir = self._draft_dir(user, draft_id)
         (draft_dir / "reference").mkdir(parents=True, exist_ok=True)
+        payload = self._read_draft_payload(draft_dir)
         return UserTaskDraftResponse(
             draft_id=draft_id,
             references_base_url=f"/api/my-tasks/drafts/{draft_id}/reference/",
+            title=payload["title"],
+            task_type=payload["task_type"],
+            yaml_content=payload["yaml_content"],
+            markdown_content=payload["markdown_content"],
         )
+
+    def save_draft(self, user: User, draft_id: str, payload: UserTaskDraftSaveRequest) -> UserTaskDraftResponse:
+        draft_dir = self._draft_dir(user, draft_id)
+        draft_dir.mkdir(parents=True, exist_ok=True)
+        (draft_dir / "reference").mkdir(parents=True, exist_ok=True)
+        (draft_dir / "requirements.yaml").write_text(payload.yaml_content.strip() + "\n", encoding="utf-8")
+        (draft_dir / "requirements.md").write_text(payload.markdown_content.strip() + "\n", encoding="utf-8")
+        (draft_dir / "draft.json").write_text(json.dumps({
+            "title": payload.title.strip() or "My Custom Task",
+            "task_type": payload.task_type,
+        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return self.create_draft(user)
 
     def save_draft_reference(self, user: User, draft_id: str, filename: str, content: bytes) -> str:
         safe_name = self._sanitize_filename(filename)
@@ -103,6 +125,24 @@ class UserTaskService:
             raise LookupError("Draft reference image not found")
         return target
 
+    def build_draft_bundle(self, user: User, draft_id: str) -> tuple[bytes, str]:
+        draft_dir = self._draft_dir(user, draft_id)
+        draft_dir.mkdir(parents=True, exist_ok=True)
+        payload = self._read_draft_payload(draft_dir)
+        reference_dir = draft_dir / "reference"
+        reference_dir.mkdir(parents=True, exist_ok=True)
+        buffer = BytesIO()
+        root_dir = "requirement"
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(f"{root_dir}/requirements.yaml", (payload["yaml_content"].strip() + "\n") if payload["yaml_content"].strip() else "")
+            archive.writestr(f"{root_dir}/requirements.md", (payload["markdown_content"].strip() + "\n") if payload["markdown_content"].strip() else "")
+            archive.writestr(f"{root_dir}/reference/", "")
+            for file_path in reference_dir.rglob("*"):
+                if not file_path.is_file():
+                    continue
+                archive.write(file_path, f"{root_dir}/reference/{file_path.relative_to(reference_dir).as_posix()}")
+        return buffer.getvalue(), "requirement.zip"
+
     def _get_owned_task(self, user: User, task_id: str) -> UserTask:
         task = self.db.scalar(
             select(UserTask).where(
@@ -121,6 +161,31 @@ class UserTaskService:
     def _draft_dir(self, user: User, draft_id: str) -> Path:
         owner_slug = f"{user.username}-{user.id}"
         return self.settings.user_tasks_root / owner_slug / "_drafts" / draft_id
+
+    def _read_draft_payload(self, draft_dir: Path) -> dict[str, str]:
+        meta_path = draft_dir / "draft.json"
+        yaml_path = draft_dir / "requirements.yaml"
+        markdown_path = draft_dir / "requirements.md"
+        title = "My Custom Task"
+        task_type = "web"
+        if meta_path.is_file():
+            try:
+                payload = json.loads(meta_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    raw_title = payload.get("title")
+                    raw_task_type = payload.get("task_type")
+                    if isinstance(raw_title, str) and raw_title.strip():
+                        title = raw_title.strip()
+                    if raw_task_type in {"web", "mobile", "kernel", "mixed"}:
+                        task_type = raw_task_type
+            except json.JSONDecodeError:
+                pass
+        return {
+            "title": title,
+            "task_type": task_type,
+            "yaml_content": yaml_path.read_text(encoding="utf-8") if yaml_path.is_file() else "",
+            "markdown_content": markdown_path.read_text(encoding="utf-8") if markdown_path.is_file() else "",
+        }
 
     @staticmethod
     def _sanitize_filename(filename: str) -> str:

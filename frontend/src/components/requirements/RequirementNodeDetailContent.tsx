@@ -13,6 +13,8 @@ type RequirementNodeDetailContentProps = {
   onNodeIdChange?: (nextId: string) => void;
   taskAssets?: SubmissionTaskAssets | null;
   onDescriptionImageUpload?: (file: File) => Promise<string>;
+  dependencyOptions?: Array<{ id: string; name: string }>;
+  showTypeField?: boolean;
 };
 
 export default function RequirementNodeDetailContent({
@@ -22,12 +24,15 @@ export default function RequirementNodeDetailContent({
   onNodeIdChange,
   taskAssets = null,
   onDescriptionImageUpload,
+  dependencyOptions = [],
+  showTypeField = true,
 }: RequirementNodeDetailContentProps) {
   const editable = mode === "editable";
   const descriptionValue = node.description || "No description available.";
   const descriptionImages = collectDescriptionImages(node.description || "", taskAssets);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const descriptionImageInputRef = useRef<HTMLInputElement | null>(null);
+  const availableDependencyOptions = dependencyOptions.filter((option) => option.id !== node.id);
 
   const updateNode = (updater: (node: RequirementNode) => RequirementNode) => {
     if (!editable || !onNodeChange) {
@@ -83,18 +88,24 @@ export default function RequirementNodeDetailContent({
             <input className="text-input" value={node.name} readOnly />
           </label>
 
-          <label className="field-stack">
-            <span>Type</span>
-            <input className="text-input" value={node.type} readOnly />
-          </label>
+          {showTypeField ? (
+            <label className="field-stack">
+              <span>Type</span>
+              <input className="text-input" value={node.type} readOnly />
+            </label>
+          ) : null}
 
-          <label className="field-stack">
+          <label className="field-stack" style={{ gridColumn: "1 / -1" }}>
             <span>Dependencies</span>
-            <input
-              className="text-input"
-              value={node.dependencies.length > 0 ? node.dependencies.join(", ") : "No dependencies"}
-              readOnly
-            />
+            <div className="dependency-chip-list readonly">
+              {node.dependencies.length > 0 ? node.dependencies.map((dependencyId) => (
+                <span key={`${node.id}-${dependencyId}`} className="dependency-chip">
+                  {dependencyId}
+                </span>
+              )) : (
+                <span className="dependency-empty-copy">No dependencies</span>
+              )}
+            </div>
           </label>
         </div>
 
@@ -188,47 +199,62 @@ export default function RequirementNodeDetailContent({
           />
         </label>
 
-        <label className="field-stack">
-          <span>Type</span>
-          {editable ? (
-            <select
-              className="text-input"
-              value={node.type}
-              onChange={(event) =>
-                updateNode((currentNode) => ({
-                  ...currentNode,
-                  type: event.target.value as RequirementNode["type"],
-                  children: event.target.value === "ATOMIC" ? [] : currentNode.children,
-                  scenarios:
-                    currentNode.scenarios.length > 0 ? currentNode.scenarios : [{ name: "New scenario", steps: [] }],
-                }))
-              }
-            >
-              <option value="FOLDER">FOLDER</option>
-              <option value="ATOMIC">ATOMIC</option>
-            </select>
-          ) : (
+        {showTypeField ? (
+          <label className="field-stack">
+            <span>Type</span>
             <input className="text-input" value={node.type} readOnly />
-          )}
-        </label>
+          </label>
+        ) : null}
 
-        <label className="field-stack">
+        <label className="field-stack" style={{ gridColumn: "1 / -1" }}>
           <span>Dependencies</span>
-          <input
+          <select
             className="text-input"
-            placeholder="REQ-1, REQ-2"
-            value={node.dependencies.join(", ")}
-            readOnly={!editable}
-            onChange={(event) =>
+            defaultValue=""
+            onChange={(event) => {
+              const nextDependencyId = event.target.value.trim();
+              event.currentTarget.value = "";
+              if (!nextDependencyId || node.dependencies.includes(nextDependencyId)) {
+                return;
+              }
               updateNode((currentNode) => ({
                 ...currentNode,
-                dependencies: event.target.value
-                  .split(",")
-                  .map((item) => item.trim())
-                  .filter(Boolean),
-              }))
-            }
-          />
+                dependencies: [...currentNode.dependencies, nextDependencyId],
+              }));
+            }}
+          >
+            <option value="">Select dependency to add...</option>
+            {availableDependencyOptions.map((option) => {
+              const alreadySelected = node.dependencies.includes(option.id);
+              return (
+                <option key={option.id} value={option.id} disabled={alreadySelected}>
+                  {alreadySelected ? `[Selected] ${option.id} - ${option.name}` : `${option.id} - ${option.name}`}
+                </option>
+              );
+            })}
+          </select>
+          <div className="dependency-chip-list">
+            {node.dependencies.length > 0 ? node.dependencies.map((dependencyId) => (
+              <span key={`${node.id}-${dependencyId}`} className="dependency-chip">
+                <span>{dependencyId}</span>
+                <button
+                  type="button"
+                  className="dependency-chip-remove"
+                  onClick={() =>
+                    updateNode((currentNode) => ({
+                      ...currentNode,
+                      dependencies: currentNode.dependencies.filter((item) => item !== dependencyId),
+                    }))
+                  }
+                  aria-label={`Remove dependency ${dependencyId}`}
+                >
+                  ×
+                </button>
+              </span>
+            )) : (
+              <span className="dependency-empty-copy">No dependencies selected</span>
+            )}
+          </div>
         </label>
       </div>
 

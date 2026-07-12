@@ -7338,6 +7338,49 @@ button {
   font-weight: 600;
 }
 
+.dependency-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dependency-chip-list.readonly {
+  margin-top: 0;
+}
+
+.dependency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid rgba(0, 126, 101, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #123024;
+  font-size: 0.74rem;
+  line-height: 1;
+}
+
+.dependency-chip-remove {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #5a6f65;
+  font-size: 0.92rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dependency-chip-remove:hover {
+  color: #d14343;
+}
+
+.dependency-empty-copy {
+  color: #6a7e76;
+  font-size: 0.74rem;
+}
+
 .create-task-detail-drawer .text-input,
 .create-task-detail-drawer .text-area,
 .create-task-detail-drawer select {

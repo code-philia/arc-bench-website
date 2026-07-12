@@ -116,6 +116,7 @@ type RequirementTreeCanvasProps = {
   pulseNodeId?: string | null;
   showLegend?: boolean;
   showCanvasToolbar?: boolean;
+  showTraceabilityToolbarToggles?: boolean;
   detailTestId?: string;
   autoFitOnTreeChange?: boolean;
   traceabilityNodes?: TraceabilityCanvasPayload | null;
@@ -1221,6 +1222,7 @@ function TreeCanvasInner({
   pulseNodeId = null,
   showLegend = false,
   showCanvasToolbar = true,
+  showTraceabilityToolbarToggles = true,
   detailTestId,
   autoFitOnTreeChange = true,
   traceabilityNodes = null,
@@ -1625,24 +1627,28 @@ function TreeCanvasInner({
               {showDependencies ? <EyeOutlined /> : <EyeInvisibleOutlined />}
             </button>
           </Tooltip>
-          <Tooltip title={showInterfaces ? "Hide interfaces" : "Show interfaces"}>
-            <button
-              type="button"
-              className={`icon-tool-btn ${showInterfaces ? "active" : ""}`}
-              onClick={() => setShowInterfaces((current) => !current)}
-            >
-              <span style={{ fontSize: 11, fontWeight: 600 }}>IF</span>
-            </button>
-          </Tooltip>
-          <Tooltip title={showTests ? "Hide tests" : "Show tests"}>
-            <button
-              type="button"
-              className={`icon-tool-btn ${showTests ? "active" : ""}`}
-              onClick={() => setShowTests((current) => !current)}
-            >
-              <span style={{ fontSize: 11, fontWeight: 600 }}>T</span>
-            </button>
-          </Tooltip>
+          {showTraceabilityToolbarToggles ? (
+            <>
+              <Tooltip title={showInterfaces ? "Hide interfaces" : "Show interfaces"}>
+                <button
+                  type="button"
+                  className={`icon-tool-btn ${showInterfaces ? "active" : ""}`}
+                  onClick={() => setShowInterfaces((current) => !current)}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600 }}>IF</span>
+                </button>
+              </Tooltip>
+              <Tooltip title={showTests ? "Hide tests" : "Show tests"}>
+                <button
+                  type="button"
+                  className={`icon-tool-btn ${showTests ? "active" : ""}`}
+                  onClick={() => setShowTests((current) => !current)}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600 }}>T</span>
+                </button>
+              </Tooltip>
+            </>
+          ) : null}
         </div>
         ) : null}
         <div

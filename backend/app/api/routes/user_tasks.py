@@ -1,13 +1,13 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskDraftResponse, UserTaskSummary
+from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskDraftResponse, UserTaskDraftSaveRequest, UserTaskSummary
 from app.services.user_task_service import UserTaskService
 
 
@@ -34,6 +34,16 @@ def create_my_task_draft(
     db: Session = Depends(get_db),
 ) -> UserTaskDraftResponse:
     return UserTaskService(db).create_draft(current_user)
+
+
+@router.put("/drafts/{draft_id}", response_model=UserTaskDraftResponse)
+def save_my_task_draft(
+    draft_id: str,
+    payload: UserTaskDraftSaveRequest,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> UserTaskDraftResponse:
+    return UserTaskService(db).save_draft(current_user, draft_id, payload)
 
 
 @router.post("/drafts/{draft_id}/reference")
@@ -83,6 +93,23 @@ def get_my_task_draft_reference(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(path)
+
+
+@router.get("/drafts/{draft_id}/bundle")
+def download_my_task_draft_bundle(
+    draft_id: str,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        content, filename = UserTaskService(db).build_draft_bundle(current_user, draft_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{task_id}/document")

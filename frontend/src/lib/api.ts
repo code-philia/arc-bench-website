@@ -320,6 +320,31 @@ export const api = {
       method: "POST",
     });
   },
+  saveMyTaskDraft(draftId: string, payload: {
+    title: string;
+    task_type: "web" | "mobile" | "kernel" | "mixed";
+    yaml_content: string;
+    markdown_content: string;
+  }) {
+    return request<UserTaskDraft>(`/my-tasks/drafts/${draftId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+  async downloadMyTaskDraftBundle(draftId: string) {
+    const response = await fetch(`${API_BASE}/my-tasks/drafts/${draftId}/bundle`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
+      throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get("Content-Disposition")
+      ?.match(/filename=\"?([^"]+)\"?/)
+      ?.[1] ?? "requirement.zip";
+    return new File([blob], filename, { type: "application/zip" });
+  },
   async uploadMyTaskDraftReference(draftId: string, file: File) {
     const form = new FormData();
     form.append("file", file);

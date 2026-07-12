@@ -1,9 +1,6 @@
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  MinusOutlined,
-  PlusOutlined,
-  RadarChartOutlined,
   SaveOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
@@ -15,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
-import RequirementTreeCanvas, { type RequirementTreeCanvasHandle } from "../components/requirements/RequirementTreeCanvas";
+import RequirementTreeCanvas from "../components/requirements/RequirementTreeCanvas";
 import { api } from "../lib/api";
 import {
   appendSiblingNode,
@@ -40,25 +37,35 @@ type CreateTaskFormState = {
   taskType: "web" | "mobile" | "kernel" | "mixed";
 };
 
-function slugifyFileName(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "task";
-}
-
-function downloadText(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+function downloadFile(file: File) {
+  const url = URL.createObjectURL(file);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = filename;
+  anchor.download = file.name;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function normalizeRequirementNodeTypes(node: RequirementNode): RequirementNode {
+  const children = node.children.map((child) => normalizeRequirementNodeTypes(child));
+  return {
+    ...node,
+    type: children.length > 0 ? "FOLDER" : "ATOMIC",
+    children,
+  };
+}
+
+function collectDependencyOptions(node: RequirementNode, bucket: Array<{ id: string; name: string }>) {
+  bucket.push({ id: node.id, name: node.name });
+  node.children.forEach((child) => collectDependencyOptions(child, bucket));
 }
 
 export default function CreateTaskPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const uploadRef = useRef<HTMLInputElement | null>(null);
-  const canvasRef = useRef<RequirementTreeCanvasHandle | null>(null);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const autosaveHydratedRef = useRef(false);
   const initialPreviewWidth =
     typeof window === "undefined"
       ? 560
@@ -74,6 +81,7 @@ export default function CreateTaskPage() {
   const [taskDraft, setTaskDraft] = useState<UserTaskDraft | null>(null);
   const [showInterfaces, setShowInterfaces] = useState(false);
   const [showTests, setShowTests] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [createForm, setCreateForm] = useState<CreateTaskFormState>({
     title: "My Custom Task",
     taskType: "web",
@@ -83,14 +91,79 @@ export default function CreateTaskPage() {
   const yamlContent = useMemo(() => taskTreeToYaml(tree), [tree]);
   const stats = useMemo(() => summarizeTaskTree(tree), [tree]);
   const selectedNode = useMemo(() => (selectedNodeId ? findNodeById(tree, selectedNodeId) : null), [selectedNodeId, tree]);
+  const dependencyOptions = useMemo(() => {
+    const bucket: Array<{ id: string; name: string }> = [];
+    collectDependencyOptions(tree, bucket);
+    return bucket;
+  }, [tree]);
   const draftTaskAssets = useMemo<SubmissionTaskAssets>(() => ({
     assets_base_url: "",
     references_base_url: taskDraft?.references_base_url ?? "",
   }), [taskDraft]);
+  const autosaveLabel = useMemo(() => {
+    if (!user) {
+      return "Sign in to enable autosave";
+    }
+    if (!taskDraft) {
+      return "Preparing autosave...";
+    }
+    if (autosaveState === "saving") {
+      return "Saving draft...";
+    }
+    if (autosaveState === "saved") {
+      return "Draft saved";
+    }
+    if (autosaveState === "error") {
+      return "Autosave failed";
+    }
+    return "Autosave ready";
+  }, [autosaveState, taskDraft, user]);
 
   useEffect(() => {
-    api.createMyTaskDraft().then(setTaskDraft).catch(() => undefined);
-  }, []);
+    if (!user) {
+      autosaveHydratedRef.current = false;
+      setTaskDraft(null);
+      setAutosaveState("idle");
+      return;
+    }
+    let cancelled = false;
+    autosaveHydratedRef.current = false;
+    api.createMyTaskDraft()
+      .then((draft) => {
+        if (cancelled) {
+          return;
+        }
+        setTaskDraft(draft);
+        setCreateForm({
+          title: draft.title || "My Custom Task",
+          taskType: draft.task_type,
+        });
+        if (draft.yaml_content.trim()) {
+          try {
+            const nextTree = normalizeRequirementNodeTypes(parseTaskTreeYaml(draft.yaml_content));
+            setTree(nextTree);
+            setSelectedNodeId("ROOT");
+            setDetailExpanded(true);
+          } catch (error) {
+            message.warning(`Draft restore failed: ${(error as Error).message}`);
+          }
+        }
+        setAutosaveState("saved");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAutosaveState("error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          autosaveHydratedRef.current = true;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!isResizingPreview) {
@@ -117,17 +190,46 @@ export default function CreateTaskPage() {
     };
   }, [isResizingPreview]);
 
+  useEffect(() => {
+    if (!user || !taskDraft || !autosaveHydratedRef.current) {
+      return;
+    }
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+    autosaveTimerRef.current = window.setTimeout(() => {
+      setAutosaveState("saving");
+      void api.saveMyTaskDraft(taskDraft.draft_id, {
+        title: createForm.title,
+        task_type: createForm.taskType,
+        yaml_content: yamlContent,
+        markdown_content: markdown,
+      }).then((savedDraft) => {
+        setTaskDraft((current) => current ? { ...current, ...savedDraft } : savedDraft);
+        setAutosaveState("saved");
+      }).catch(() => {
+        setAutosaveState("error");
+      });
+    }, 900);
+    return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [createForm.taskType, createForm.title, markdown, taskDraft?.draft_id, user, yamlContent]);
+
   const updateSelectedNode = (updater: (node: RequirementNode) => RequirementNode) => {
     if (!selectedNode) {
       return;
     }
-    setTree((current) => updateNodeInTree(current, selectedNode.id, updater));
+    setTree((current) => normalizeRequirementNodeTypes(updateNodeInTree(current, selectedNode.id, updater)));
   };
 
   const handleUploadFile = async (file: File) => {
     try {
       const content = await file.text();
-      const nextTree = parseTaskTreeYaml(content);
+      const nextTree = normalizeRequirementNodeTypes(parseTaskTreeYaml(content));
       setTree(nextTree);
       setSelectedNodeId(null);
       setDetailExpanded(false);
@@ -137,13 +239,27 @@ export default function CreateTaskPage() {
     }
   };
 
-  const handleSave = () => {
-    const baseName = slugifyFileName(tree.name);
-    downloadText(`${baseName}.yaml`, `${yamlContent}\n`);
-    window.setTimeout(() => {
-      downloadText(`${baseName}.md`, `${markdown}\n`);
-    }, 120);
-    message.success("YAML and Markdown exported.");
+  const handleSave = async () => {
+    if (!user || !taskDraft) {
+      message.warning("Sign in to export the full requirement bundle.");
+      return;
+    }
+    try {
+      setAutosaveState("saving");
+      await api.saveMyTaskDraft(taskDraft.draft_id, {
+        title: createForm.title,
+        task_type: createForm.taskType,
+        yaml_content: yamlContent,
+        markdown_content: markdown,
+      });
+      const bundle = await api.downloadMyTaskDraftBundle(taskDraft.draft_id);
+      downloadFile(bundle);
+      setAutosaveState("saved");
+      message.success("Requirement bundle exported.");
+    } catch (error) {
+      setAutosaveState("error");
+      message.error((error as Error).message);
+    }
   };
 
   const handleAddChild = () => {
@@ -153,7 +269,7 @@ export default function CreateTaskPage() {
       type: "ATOMIC",
       scenarios: [{ name: "New scenario", steps: [] }],
     };
-    setTree((current) => appendChildNode(current, parent.id, child));
+    setTree((current) => normalizeRequirementNodeTypes(appendChildNode(current, parent.id, child)));
     setSelectedNodeId(child.id);
     setDetailExpanded(true);
   };
@@ -174,7 +290,7 @@ export default function CreateTaskPage() {
       type: "ATOMIC",
       scenarios: [{ name: "New scenario", steps: [] }],
     };
-    setTree((current) => appendSiblingNode(current, selectedNode.id, sibling));
+    setTree((current) => normalizeRequirementNodeTypes(appendSiblingNode(current, selectedNode.id, sibling)));
     setSelectedNodeId(sibling.id);
     setDetailExpanded(true);
   };
@@ -184,23 +300,23 @@ export default function CreateTaskPage() {
       message.warning("Root chapter cannot be deleted.");
       return;
     }
-    setTree((current) => removeNodeFromTree(current, selectedNode.id));
+    setTree((current) => normalizeRequirementNodeTypes(removeNodeFromTree(current, selectedNode.id)));
     setSelectedNodeId(null);
     setDetailExpanded(false);
   };
 
   const handleReindexIds = () => {
     const { tree: reindexedTree, idMap } = reindexRequirementTree(tree);
-    setTree(reindexedTree);
+    setTree(normalizeRequirementNodeTypes(reindexedTree));
     setSelectedNodeId((current) => (current ? (idMap[current] ?? current) : current));
     message.success("Requirement IDs reindexed.");
   };
 
   const handleConnectDependency = (sourceId: string, targetId: string) => {
-    setTree((current) => updateNodeInTree(current, sourceId, (node) => ({
+    setTree((current) => normalizeRequirementNodeTypes(updateNodeInTree(current, sourceId, (node) => ({
       ...node,
       dependencies: Array.from(new Set([...node.dependencies, targetId])).filter((dependency) => dependency !== sourceId),
-    })));
+    }))));
     setSelectedNodeId(sourceId);
     setDetailExpanded(true);
     message.success(`Dependency added: ${sourceId} -> ${targetId}`);
@@ -268,6 +384,7 @@ export default function CreateTaskPage() {
             </div>
           </div>
           <div className="create-task-topbar-actions">
+            <span className="task-node-chip">{autosaveLabel}</span>
             <button
               type="button"
               className="btn-outline create-task-toolbar-btn"
@@ -281,29 +398,6 @@ export default function CreateTaskPage() {
             </button>
             <button type="button" className="btn-outline create-task-toolbar-btn" onClick={handleSave}>
               <SaveOutlined /> Export Docs
-            </button>
-            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => canvasRef.current?.zoomOut()}>
-              <MinusOutlined /> Zoom Out
-            </button>
-            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => canvasRef.current?.zoomIn()}>
-              <PlusOutlined /> Zoom In
-            </button>
-            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => canvasRef.current?.fitView()}>
-              <RadarChartOutlined /> Center
-            </button>
-            <button
-              type="button"
-              className={`btn-outline create-task-toolbar-btn${showInterfaces ? " active" : ""}`}
-              onClick={() => setShowInterfaces((current) => !current)}
-            >
-              IF Interface
-            </button>
-            <button
-              type="button"
-              className={`btn-outline create-task-toolbar-btn${showTests ? " active" : ""}`}
-              onClick={() => setShowTests((current) => !current)}
-            >
-              T Test
             </button>
             <button type="button" className="btn-primary create-task-toolbar-primary" onClick={() => setIsCreateModalOpen(true)}>
               Create Task
@@ -358,7 +452,6 @@ export default function CreateTaskPage() {
 
           <section className="create-task-editor-panel create-task-editor-panel-locked">
             <RequirementTreeCanvas
-              ref={canvasRef}
               tree={tree}
               selectedNodeId={selectedNodeId}
               onSelectNode={(nodeId) => {
@@ -370,6 +463,7 @@ export default function CreateTaskPage() {
               mode="editable"
               detailPlacement="right"
               showDetailToggle={false}
+              showTraceabilityToolbarToggles={false}
               onAddChild={handleAddChild}
               onAddSibling={handleAddSibling}
               onDeleteNode={handleDeleteNode}
@@ -389,6 +483,8 @@ export default function CreateTaskPage() {
                   onNodeIdChange={setSelectedNodeId}
                   taskAssets={draftTaskAssets}
                   onDescriptionImageUpload={handleUploadDescriptionImage}
+                  dependencyOptions={dependencyOptions}
+                  showTypeField={false}
                 />
               )}
             />
