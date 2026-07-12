@@ -57,6 +57,7 @@ class SubmissionDetail(SubmissionSummary):
     node_states: dict[str, str] = Field(default_factory=dict)
     can_pause: bool = False
     can_resume: bool = False
+    can_rewind: bool = False
     pause_available: bool = False
 
 

@@ -31,12 +31,19 @@ from app.schemas.submission import (
     TestType,
 )
 from app.services.docker_manager import DockerManager
+from app.services.demo_replay_loader import (
+    DemoReplayPaths,
+    DemoReplayStep,
+    find_replay_step_index,
+    load_demo_agent_module,
+    load_demo_replay_steps,
+    resolve_demo_replay_paths,
+)
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
-from app.services.traceability_db_schema import ensure_traceability_schema
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -176,6 +183,24 @@ class SubmissionService:
         template_path = workspace_path / "template"
         return template_path if template_path.is_dir() else None
 
+    def _get_demo_replay_paths(self, submission: Submission) -> DemoReplayPaths | None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return None
+        return resolve_demo_replay_paths(workspace_path)
+
+    def _load_demo_replay_steps(self, submission: Submission) -> tuple[Path, DemoReplayPaths, list[DemoReplayStep]]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        replay_paths = resolve_demo_replay_paths(workspace_path)
+        if replay_paths is None:
+            raise ValueError("Submission does not contain ARC demo replay metadata")
+        steps = load_demo_replay_steps(workspace_path, replay_paths)
+        if not steps:
+            raise ValueError("ARC demo replay metadata is empty")
+        return workspace_path, replay_paths, steps
+
     def read_submission_task_documents(self, submission: Submission) -> dict[str, str]:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
@@ -214,6 +239,7 @@ class SubmissionService:
         normalized_node_id = node_id.strip()
         if not normalized_node_id:
             return
+        workspace_path, replay_paths, steps = self._load_demo_replay_steps(submission)
         project_root = self.get_template_repo_path(submission)
         if project_root is None:
             raise FileNotFoundError("Submission workspace is not available")
@@ -229,15 +255,7 @@ class SubmissionService:
         if not isinstance(commits, list):
             raise ValueError("Commit history is not available")
 
-        target_design_index = next(
-            (
-                index
-                for index, commit in enumerate(commits, start=1)
-                if str(commit.get("node_id") or "").strip() == normalized_node_id
-                and str(commit.get("phase") or "").strip() == "design"
-            ),
-            0,
-        )
+        target_design_index = find_replay_step_index(steps, node_id=normalized_node_id, phase="design")
         if target_design_index <= 0:
             raise ValueError(f"Design commit not found for node {normalized_node_id}")
 
@@ -249,17 +267,12 @@ class SubmissionService:
                 raise RuntimeError("Failed to resolve prior commit for edited node restart")
             self._run_git(project_root, ["reset", "--hard", prior_commit_oid])
         else:
-            self._run_git(project_root, ["reset", "--hard"])
+            self._restore_demo_target_tree_to_base(workspace_path, replay_paths)
         self._run_git(project_root, ["clean", "-fd"])
-
-        rewound_history_payload = self.artifact_service.read_commit_history(submission)
-        rewound_commits = rewound_history_payload.get("commits", [])
-        if not isinstance(rewound_commits, list):
-            rewound_commits = []
 
         checkpoint = self.read_checkpoint(submission)
         checkpoint["last_completed_index"] = restart_index
-        checkpoint["completed"] = self._build_checkpoint_completed_entries(rewound_commits)
+        checkpoint["completed"] = self._build_checkpoint_completed_entries_from_steps(steps[:restart_index])
         checkpoint["paused"] = False
         checkpoint["resume_requires_restart"] = True
         checkpoint["edited_node_restart"] = {
@@ -268,23 +281,14 @@ class SubmissionService:
         }
         self.write_checkpoint(submission, checkpoint)
 
-        historic_visual_events = self.read_visual_events(submission)
         self._stop_runner_container(submission.id)
         self._stop_preview_container(submission.id)
         self._clear_execution_artifacts(submission)
-        self._rebuild_runner_events_from_commit_history(
+        self._rebuild_demo_runtime_state(
             submission,
-            rewound_commits,
-            historic_visual_events=historic_visual_events,
-            target_node_id=normalized_node_id,
-            target_phase="design",
-        )
-        self._rebuild_traceability_store(submission)
-        self._rebuild_demo_test_statuses(
-            submission,
-            historic_visual_events=historic_visual_events,
-            target_node_id=normalized_node_id,
-            target_phase="design",
+            workspace_path=workspace_path,
+            steps=steps,
+            completed_index=restart_index,
         )
 
         submission.status = SubmissionStatus.PAUSED.value
@@ -313,6 +317,16 @@ class SubmissionService:
             step_key="start_agent",
             message=f"Edited node {normalized_node_id}; next resume will restart from its design phase",
             status="info",
+        )
+        SubmissionEventStream.publish(
+            submission.id,
+            reason="edited_node_rewind_completed",
+            submission=True,
+            logs=True,
+            commit_history=True,
+            traceability_selected=True,
+            traceability_all=True,
+            preview=True,
         )
 
     def write_submission_task_runtime_artifacts(self, submission: Submission, requirements_yaml: str) -> None:
@@ -393,6 +407,7 @@ class SubmissionService:
         if not self.can_rewind(submission):
             raise ValueError("Submission must be paused or completed before rewinding")
 
+        workspace_path, _replay_paths, steps = self._load_demo_replay_steps(submission)
         project_root = self.get_template_repo_path(submission)
         if project_root is None:
             raise FileNotFoundError("Submission workspace is not available")
@@ -414,25 +429,16 @@ class SubmissionService:
         if not node_id or phase not in {"design", "implement"}:
             raise ValueError("Selected commit does not map to a requirement node and resumable phase")
 
+        rewound_index = find_replay_step_index(steps, node_id=node_id, phase=phase)
+        if rewound_index <= 0:
+            raise RuntimeError("Failed to map selected commit to ARC demo replay step")
+
         self._run_git(project_root, ["reset", "--hard", normalized_commit_oid])
         self._run_git(project_root, ["clean", "-fd"])
 
-        rewound_history_payload = self.artifact_service.read_commit_history(submission)
-        rewound_commits = rewound_history_payload.get("commits", [])
-        rewound_index = next(
-            (
-                index
-                for index, commit in enumerate(rewound_commits, start=1)
-                if str(commit.get("oid", "")).strip() == normalized_commit_oid
-            ),
-            0,
-        )
-        if rewound_index <= 0:
-            raise RuntimeError("Failed to confirm rewound commit in repository history")
-
         checkpoint = self.read_checkpoint(submission)
         checkpoint["last_completed_index"] = rewound_index
-        checkpoint["completed"] = self._build_checkpoint_completed_entries(rewound_commits)
+        checkpoint["completed"] = self._build_checkpoint_completed_entries_from_steps(steps[:rewound_index])
         checkpoint["paused"] = False
         checkpoint["rewind_target"] = {
             "commit_oid": normalized_commit_oid,
@@ -443,25 +449,21 @@ class SubmissionService:
         checkpoint["resume_requires_restart"] = True
         self.write_checkpoint(submission, checkpoint)
 
-        historic_visual_events = self.read_visual_events(submission)
         self._stop_runner_container(submission.id)
         self._stop_preview_container(submission.id)
         self._clear_execution_artifacts(submission)
-        self._rebuild_runner_events_from_commit_history(
-            submission,
-            rewound_commits,
-            historic_visual_events=historic_visual_events,
-            target_node_id=node_id,
-            target_phase=phase,
-        )
-        self._rebuild_traceability_store(submission)
-        self._rebuild_demo_test_statuses(
-            submission,
-            historic_visual_events=historic_visual_events,
-            target_node_id=node_id,
-            target_phase=phase,
-        )
+        self._rebuild_demo_runtime_state(submission, workspace_path=workspace_path, steps=steps, completed_index=rewound_index)
         self._mark_rewound_paused(submission, node_id=node_id, phase=phase, commit_oid=normalized_commit_oid)
+        SubmissionEventStream.publish(
+            submission.id,
+            reason="rewind_completed",
+            submission=True,
+            logs=True,
+            commit_history=True,
+            traceability_selected=True,
+            traceability_all=True,
+            preview=True,
+        )
 
         return {
             "commit_oid": normalized_commit_oid,
@@ -639,6 +641,7 @@ class SubmissionService:
             node_states=node_states,
             can_pause=self.can_pause(submission),
             can_resume=self.can_resume(submission),
+            can_rewind=self.can_rewind(submission),
             pause_available=bool(self.get_pause_request_path(submission)),
         )
 
@@ -922,13 +925,14 @@ class SubmissionService:
     def can_resume(submission: Submission) -> bool:
         return submission.status == SubmissionStatus.PAUSED.value
 
-    @staticmethod
-    def can_rewind(submission: Submission) -> bool:
-        return submission.status in {
+    def can_rewind(self, submission: Submission) -> bool:
+        if submission.status not in {
             SubmissionStatus.PAUSED.value,
             SubmissionStatus.PASSED.value,
             SubmissionStatus.FAILED.value,
-        }
+        }:
+            return False
+        return self._get_demo_replay_paths(submission) is not None
 
     @staticmethod
     def _read_text(path: Path) -> str:
@@ -946,6 +950,12 @@ class SubmissionService:
             "stderr.log",
             "result.json",
             "runner-events.jsonl",
+            "traceability.db",
+            "traceability.db-shm",
+            "traceability.db-wal",
+            "traceability.snapshot.json",
+            "demo-test-statuses.json",
+            "preview-ready.json",
             "pause.request.json",
             "resume.request.json",
         ]:
@@ -956,158 +966,226 @@ class SubmissionService:
         if event_log_path.exists():
             event_log_path.unlink()
 
-    def _rebuild_runner_events_from_commit_history(
-        self,
-        submission: Submission,
-        commits: list[dict],
+    @staticmethod
+    def _write_demo_status_payload(
+        demo_status_path: Path,
         *,
-        historic_visual_events: list[SubmissionVisualEvent] | None = None,
-        target_node_id: str | None = None,
-        target_phase: str | None = None,
+        tests: dict[str, str],
+        requirements: dict[str, str],
     ) -> None:
-        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
-        if workspace_path is None:
-            raise FileNotFoundError("Submission workspace is not available")
-        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
-        runner_events_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "tests": tests,
+            "requirements": requirements,
+        }
+        demo_status_path.parent.mkdir(parents=True, exist_ok=True)
+        demo_status_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    @staticmethod
+    def _rebuild_demo_runner_events(
+        *,
+        steps: list[DemoReplayStep],
+        runner_events_path: Path,
+        final_state: str,
+        final_message: str,
+    ) -> None:
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         lines: list[str] = []
-        latest_test_event_by_node: dict[str, SubmissionVisualEvent] = {}
-        for event in historic_visual_events or []:
-            if event.phase != "test":
-                continue
-            latest_test_event_by_node[event.node_id] = event
-        for commit in commits:
-            node_id = str(commit.get("node_id") or "").strip()
-            phase = str(commit.get("phase") or "").strip()
-            timestamp = str(commit.get("committed_at") or "").strip()
-            message = str(commit.get("summary") or commit.get("message") or "").strip() or None
-            if not node_id or phase not in {"design", "implement"} or not timestamp:
-                continue
-            payload = {
-                "type": "requirement_state",
-                "node_id": node_id,
-                "phase": phase,
-                "status": "completed",
-                "timestamp": timestamp,
-                "message": message,
-            }
-            lines.append(json.dumps(payload, ensure_ascii=True))
-            if phase != "implement" or not node_id:
-                continue
-            if target_node_id == node_id and target_phase == "implement":
-                continue
-            test_event = latest_test_event_by_node.get(node_id)
-            if test_event is None:
-                continue
+        for step in steps:
             lines.append(
                 json.dumps(
                     {
                         "type": "requirement_state",
-                        "node_id": test_event.node_id,
-                        "phase": test_event.phase,
-                        "status": test_event.status,
-                        "timestamp": test_event.timestamp,
-                        "message": test_event.message,
+                        "node_id": step.node_id,
+                        "phase": step.phase,
+                        "status": "completed",
+                        "timestamp": timestamp,
+                        "message": f"{step.node_id} ({step.phase}) checkpoint restored",
                     },
                     ensure_ascii=True,
                 )
             )
+            if step.phase == "implement":
+                lines.append(
+                    json.dumps(
+                        {
+                            "type": "requirement_state",
+                            "node_id": step.node_id,
+                            "phase": "test",
+                            "status": "passed",
+                            "timestamp": timestamp,
+                            "message": f"{step.node_id} tests restored",
+                        },
+                        ensure_ascii=True,
+                    )
+                )
+        lines.append(
+            json.dumps(
+                {
+                    "type": "runner_state",
+                    "state": final_state,
+                    "timestamp": timestamp,
+                    "message": final_message,
+                },
+                ensure_ascii=True,
+            )
+        )
+        runner_events_path.parent.mkdir(parents=True, exist_ok=True)
         runner_events_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
-    def _rebuild_traceability_store(self, submission: Submission) -> None:
-        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
-        if workspace_path is None:
-            raise FileNotFoundError("Submission workspace is not available")
+    @staticmethod
+    def _restore_demo_target_tree_to_base(workspace_path: Path, replay_paths: DemoReplayPaths) -> None:
+        module = load_demo_agent_module()
+        module.reset_target_worktree(workspace_path / "template")
+        for source_path in replay_paths.source_template_dir.iterdir():
+            if source_path.name == "arc-replay":
+                continue
+            target_path = workspace_path / "template" / source_path.name
+            if source_path.is_dir():
+                shutil.copytree(source_path, target_path, dirs_exist_ok=True)
+            elif source_path.is_file():
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, target_path)
 
-        artifacts_dir = workspace_path / "artifacts"
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        target_traceability_db_path = artifacts_dir / "traceability.db"
-        template_traceability_db_path = (workspace_path / "template" / "traceability.db")
-
-        if template_traceability_db_path.is_file():
-            shutil.copy2(template_traceability_db_path, target_traceability_db_path)
-            self._normalize_traceability_database(target_traceability_db_path)
-            self._write_traceability_snapshot_from_db(workspace_path)
-            return
-
-        payload = self.read_submission_task_documents(submission)
-        requirements_yaml = payload.get("requirements_yaml", "").strip()
-        if requirements_yaml:
-            self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
-
-    def _rebuild_demo_test_statuses(
+    def _rebuild_demo_runtime_state(
         self,
         submission: Submission,
         *,
-        historic_visual_events: list[SubmissionVisualEvent] | None = None,
-        target_node_id: str | None = None,
-        target_phase: str | None = None,
+        workspace_path: Path,
+        steps: list[DemoReplayStep],
+        completed_index: int,
     ) -> None:
-        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
-        if workspace_path is None:
+        payload = self.read_submission_task_documents(submission)
+        requirements_yaml = payload.get("requirements_yaml", "").strip()
+        if not requirements_yaml:
+            raise ValueError("Submission requirements.yaml is required to rebuild demo runtime state")
+
+        self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
+        artifacts_dir = workspace_path / "artifacts"
+        target_traceability_db_path = artifacts_dir / "traceability.db"
+        target_traceability_snapshot_path = artifacts_dir / "traceability.snapshot.json"
+        demo_status_path = artifacts_dir / "demo-test-statuses.json"
+        runner_events_path = artifacts_dir / "runner-events.jsonl"
+        event_log_path = self.get_event_log_path(submission)
+        event_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        module = load_demo_agent_module()
+        runtime = module.AgentRuntime.from_env(
+            project_dir=str(workspace_path / "template"),
+            runner_events_path=str(runner_events_path),
+            traceability_db_path=str(target_traceability_db_path),
+            traceability_snapshot_path=str(target_traceability_snapshot_path),
+            demo_test_status_path=str(demo_status_path),
+        )
+        runtime.traceability.init_db(reset=True)
+        module.ensure_requirements_seed(runtime, steps)
+        demo_test_statuses: dict[str, str] = {}
+        demo_requirement_statuses: dict[str, str] = {}
+        for step in steps[:completed_index]:
+            if step.phase == "design":
+                for interface in step.interfaces:
+                    runtime.traceability.upsert_interface(
+                        interface_id=str(interface.get("interface_id") or "").strip(),
+                        req_ids=[str(item).strip() for item in (interface.get("req_ids") or []) if str(item).strip()],
+                        type=str(interface.get("type") or "").strip(),
+                        content=(
+                            str(interface.get("content") or "").strip()
+                            if isinstance(interface.get("content"), str)
+                            else json.dumps(interface.get("content") or {}, ensure_ascii=False)
+                        ),
+                        file_path=str(interface.get("file_path") or "").strip() or None,
+                        first_line=str(interface.get("first_line") or "").strip() or None,
+                        implemented=bool(interface.get("implemented")),
+                        callers=[str(item).strip() for item in (interface.get("callers") or []) if str(item).strip()],
+                        callees=[str(item).strip() for item in (interface.get("callees") or []) if str(item).strip()],
+                        emit_event=False,
+                    )
+                for test in step.tests:
+                    runtime.traceability.upsert_test(
+                        test_id=str(test.get("test_id") or "").strip(),
+                        req_id=str(test.get("req_id") or step.node_id).strip(),
+                        type=str(test.get("type") or "").strip(),
+                        file_path=str(test.get("file_path") or "").strip() or None,
+                        first_line=str(test.get("first_line") or "").strip() or None,
+                        interface_ids=[str(item).strip() for item in (test.get("interface_ids") or []) if str(item).strip()],
+                        passed=None,
+                        emit_event=False,
+                    )
+                runtime.traceability.upsert_node_state(step.node_id, "DESIGNED", emit_event=False)
+                continue
+
+            for interface_id in step.implemented_interface_ids:
+                runtime.traceability.set_interface_implemented(interface_id, True, emit_event=False)
+            if step.passed_test_ids:
+                runtime.traceability.set_test_pass_statuses(
+                    {test_id: True for test_id in step.passed_test_ids},
+                    emit_event=False,
+                )
+                for test_id in step.passed_test_ids:
+                    normalized_test_id = str(test_id or "").strip()
+                    if normalized_test_id:
+                        demo_test_statuses[normalized_test_id] = "passed"
+            runtime.traceability.upsert_node_state(step.node_id, "PASSED", emit_event=False)
+            demo_requirement_statuses[step.node_id] = "passed"
+        self._write_demo_status_payload(
+            demo_status_path,
+            tests=demo_test_statuses,
+            requirements=demo_requirement_statuses,
+        )
+        self._rebuild_demo_runner_events(
+            steps=steps[:completed_index],
+            runner_events_path=runner_events_path,
+            final_state="paused",
+            final_message="Execution paused at restored checkpoint",
+        )
+        if event_log_path.exists():
+            event_log_path.unlink()
+
+    def rebuild_demo_submission_to_checkpoint(self, submission: Submission) -> None:
+        workspace_path, replay_paths, steps = self._load_demo_replay_steps(submission)
+        checkpoint = self.read_checkpoint(submission)
+        completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+        if completed_index < 0:
+            completed_index = 0
+        if completed_index > len(steps):
+            completed_index = len(steps)
+        project_root = self.get_template_repo_path(submission)
+        if project_root is None:
             raise FileNotFoundError("Submission workspace is not available")
 
-        artifacts_dir = workspace_path / "artifacts"
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        demo_status_path = artifacts_dir / "demo-test-statuses.json"
-
-        payload = {
-            "tests": {},
-            "requirements": {},
-        }
-
-        test_status_by_requirement: dict[str, str] = {}
-        for event in historic_visual_events or []:
-            if event.phase != "test" or event.status not in {"passed", "failed"}:
-                continue
-            if target_node_id == event.node_id and target_phase == "design":
-                continue
-            test_status_by_requirement[event.node_id] = event.status
-
-        traceability = self.artifact_service.read_traceability(submission, node_id="__all__")
-        tests = traceability.get("tests", [])
-        for test in tests:
-            req_id = str(test.get("req_id") or "").strip()
-            test_id = str(test.get("test_id") or "").strip()
-            if not req_id or not test_id:
-                continue
-            status = test_status_by_requirement.get(req_id)
-            if status not in {"passed", "failed"}:
-                continue
-            payload["tests"][test_id] = status
-
-        for req_id, status in test_status_by_requirement.items():
-            payload["requirements"][req_id] = status
-
-        self._write_text_atomic(demo_status_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        if completed_index > 0:
+            history_payload = self.artifact_service.read_commit_history(submission)
+            commits = history_payload.get("commits", [])
+            if not isinstance(commits, list) or completed_index > len(commits):
+                raise RuntimeError("Checkpoint commit history is not available for pause restore")
+            target_commit_oid = str(commits[completed_index - 1].get("oid") or "").strip()
+            if not target_commit_oid:
+                raise RuntimeError("Checkpoint target commit is missing")
+            self._run_git(project_root, ["reset", "--hard", target_commit_oid])
+        else:
+            self._restore_demo_target_tree_to_base(workspace_path, replay_paths)
+        self._run_git(project_root, ["clean", "-fd"])
+        self._clear_execution_artifacts(submission)
+        self._rebuild_demo_runtime_state(
+            submission,
+            workspace_path=workspace_path,
+            steps=steps,
+            completed_index=completed_index,
+        )
 
     @staticmethod
-    def _normalize_traceability_database(traceability_db_path: Path) -> None:
-        connection = sqlite3.connect(traceability_db_path)
-        try:
-            ensure_traceability_schema(connection)
-        finally:
-            connection.close()
-
-    def _write_traceability_snapshot_from_db(self, workspace_path: Path) -> None:
-        artifacts_dir = workspace_path / "artifacts"
-        db_path = artifacts_dir / "traceability.db"
-        snapshot_path = artifacts_dir / "traceability.snapshot.json"
-        if not db_path.is_file():
-            return
-        from app.services.traceability_seed_builder import TraceabilitySeedBuilder
-
-        TraceabilitySeedBuilder().write_snapshot_file_from_database(snapshot_path, db_path)
-
-    @staticmethod
-    def _build_checkpoint_completed_entries(commits: list[dict]) -> list[dict[str, int | str | None]]:
+    def _build_checkpoint_completed_entries_from_steps(
+        steps: list[DemoReplayStep],
+    ) -> list[dict[str, int | str | None]]:
         completed_entries: list[dict[str, int | str | None]] = []
-        for index, commit in enumerate(commits, start=1):
+        for step in steps:
             completed_entries.append(
                 {
-                    "index": index,
-                    "node_id": str(commit.get("node_id") or "").strip() or None,
-                    "phase": str(commit.get("phase") or "").strip() or None,
+                    "index": int(step.index),
+                    "node_id": step.node_id,
+                    "phase": step.phase,
+                    "task_path": None,
+                    "source_commit": step.source_commit,
+                    "commit_message": step.commit_message,
                 }
             )
         return completed_entries

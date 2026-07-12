@@ -314,8 +314,24 @@ class ExecutionService:
                     if checkpoint_marked_paused or (
                         pause_signal_sent_at is not None and time.time() - pause_signal_sent_at >= PAUSE_SIGTERM_GRACE_SECONDS
                     ):
-                        submission_service.set_checkpoint_restart_flag(submission_service.get_submission(submission_id))
+                        paused_submission = submission_service.get_submission(submission_id)
+                        submission_service.set_checkpoint_restart_flag(paused_submission)
                         mark_paused("Execution paused by user request")
+                        try:
+                            restored_submission = submission_service.get_submission(submission_id)
+                            submission_service.rebuild_demo_submission_to_checkpoint(restored_submission)
+                            SubmissionEventStream.publish(
+                                submission_id,
+                                reason="pause_checkpoint_restored",
+                                submission=True,
+                                logs=True,
+                                commit_history=True,
+                                traceability_selected=True,
+                                traceability_all=True,
+                                preview=True,
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            debug_log.append("backend", f"Failed to restore paused checkpoint state: {exc}")
                         debug_log.append("backend", "Execution paused cleanly; terminating runner session")
                         return
                     time.sleep(1)

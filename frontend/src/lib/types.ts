@@ -105,6 +105,7 @@ export type SubmissionDetail = SubmissionSummary & {
   node_states: Record<string, RequirementVisualState>;
   can_pause: boolean;
   can_resume: boolean;
+  can_rewind: boolean;
   pause_available: boolean;
 };
 

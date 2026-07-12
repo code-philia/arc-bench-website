@@ -4,7 +4,6 @@ import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import SubmissionFactoryCanvas, { type SubmissionFactoryCanvasHandle } from "../components/graph/SubmissionFactoryCanvas";
-import RequirementTreeCanvas, { type RequirementTreeCanvasHandle } from "../components/requirements/RequirementTreeCanvas";
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
@@ -1400,7 +1399,6 @@ export default function PlaygroundSubmissionDetailPage() {
       ? "benchmark"
       : "playground";
   const { user } = useAuth();
-  const requirementCanvasRef = useRef<RequirementTreeCanvasHandle | null>(null);
   const factoryCanvasRef = useRef<SubmissionFactoryCanvasHandle | null>(null);
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
   const [logs, setLogs] = useState<SubmissionLogs | null>(null);
@@ -1829,6 +1827,7 @@ export default function PlaygroundSubmissionDetailPage() {
     }
 
     if (submission.status !== "PAUSED") {
+      setEditableTask(null);
       setEditableTree(null);
     }
 
@@ -1867,6 +1866,22 @@ export default function PlaygroundSubmissionDetailPage() {
   const pausedCanvasTree = editableModeActive ? (editableTree ?? tree) : tree;
   const pausedCanvasSelectedNodeId = editableModeActive ? editableNodeId : activeSelectedNodeId;
   const pausedCanvasSelectedNode = editableModeActive ? (editableSelectedNode ?? selectedNode) : selectedNode;
+  const factoryCanvasSelectedNodeId = executionPaused
+    ? pausedCanvasSelectedNodeId
+    : (factorySelectionActive ? activeSelectedNodeId : null);
+  const factoryCanvasSelectionActive = executionPaused ? Boolean(pausedCanvasSelectedNodeId) : factorySelectionActive;
+  const canvasDetailNode = executionPaused ? pausedCanvasSelectedNode : factoryDetailNode;
+  const canvasDetailExpanded = executionPaused ? editableDetailExpanded : factoryDetailExpanded;
+
+  useEffect(() => {
+    if (submission?.status !== "PAUSED") {
+      return;
+    }
+    const preferredNodeId = activeSelectedNodeId ?? "ROOT";
+    setEditableNodeId((current) => (current && current !== "ROOT" ? current : preferredNodeId));
+    setEditableDetailExpanded((current) => current || (useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded));
+    setFactorySelectionActive(Boolean(preferredNodeId));
+  }, [activeSelectedNodeId, detailExpanded, quickStart.canvasDemo.detailExpanded, submission?.status, useQuickStartSubmission]);
 
   useEffect(() => {
     if (!useQuickStartSubmission || !quickStart.canvasDemo.active) {
@@ -2085,6 +2100,7 @@ export default function PlaygroundSubmissionDetailPage() {
     setSubmission(nextSubmission);
     if (nextSubmission.status !== "PAUSED") {
       editableTreeDirtyRef.current = false;
+      setEditableTask(null);
       setEditableTree(null);
       setEditableNodeId("ROOT");
       setEditableDetailExpanded(false);
@@ -2097,21 +2113,10 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     const nextSubmission = await api.rewindSubmission(submissionId, { commit_oid: commit.oid });
     const targetNodeId = commit.node_id ?? "ROOT";
-    const [nextLogs, nextCommitHistory, nextTraceability, nextAllTraceability] = await Promise.all([
-      api.getSubmissionLogs(submissionId),
-      api.getSubmissionCommitHistory(submissionId),
-      api.getSubmissionTraceability(submissionId, targetNodeId).catch(() => null),
-      api.getSubmissionAllTraceability(submissionId).catch(() => null),
-    ]);
     editableTreeDirtyRef.current = false;
     visualEventCountRef.current = 0;
     setSubmission(nextSubmission);
-    setLogs(nextLogs);
-    setCommitHistory(nextCommitHistory);
-    setTraceability(nextTraceability);
-    setTraceabilityError(null);
     setTraceabilityNodeId(targetNodeId);
-    setAllTraceability(nextAllTraceability);
     setEditableTask(null);
     setEditableTree(null);
     setActiveTab("canvas");
@@ -2146,17 +2151,6 @@ export default function PlaygroundSubmissionDetailPage() {
       }
     } finally {
       setSavingEditableTask(false);
-    }
-  };
-
-  const handleParseTraceability = () => {
-    setSidebarTab("traceability");
-    if (activeSelectedNodeId) {
-      void refreshSelectedTraceability(activeSelectedNodeId, true).catch(() => undefined);
-      return;
-    }
-    if (traceabilityOverlayVisible) {
-      void refreshAllTraceability().catch(() => undefined);
     }
   };
 
@@ -2343,23 +2337,15 @@ export default function PlaygroundSubmissionDetailPage() {
                   >
                     Status
                   </button>
-                  <button
-                    type="button"
-                    className={`submission-side-tab ${sidebarTab === "traceability" ? "active" : ""}`}
-                    onClick={() => setSidebarTab("traceability")}
-                  >
-                    Traceability
-                  </button>
-                </div>
                 <button
                   type="button"
-                  className="submission-side-parse"
-                  onClick={handleParseTraceability}
-                  disabled={traceabilityLoading || (!activeSelectedNodeId && !traceabilityOverlayVisible)}
+                  className={`submission-side-tab ${sidebarTab === "traceability" ? "active" : ""}`}
+                  onClick={() => setSidebarTab("traceability")}
                 >
-                  Pause
+                  Traceability
                 </button>
               </div>
+            </div>
 
               <div className={`submission-side-actions ${submission.status === "RUNNING" || executionPausePending ? "single" : ""}`}>
                 {submission.status === "RUNNING" ? (
@@ -2504,7 +2490,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     type="button"
                     className="icon-tool-btn"
                     title="Zoom out"
-                    onClick={() => executionPaused ? requirementCanvasRef.current?.zoomOut() : factoryCanvasRef.current?.zoomOut()}
+                    onClick={() => factoryCanvasRef.current?.zoomOut()}
                   >
                     <MinusOutlined />
                   </button>
@@ -2512,7 +2498,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     type="button"
                     className="icon-tool-btn"
                     title="Zoom in"
-                    onClick={() => executionPaused ? requirementCanvasRef.current?.zoomIn() : factoryCanvasRef.current?.zoomIn()}
+                    onClick={() => factoryCanvasRef.current?.zoomIn()}
                   >
                     <PlusOutlined />
                   </button>
@@ -2520,7 +2506,7 @@ export default function PlaygroundSubmissionDetailPage() {
                     type="button"
                     className="icon-tool-btn"
                     title="Center graph"
-                    onClick={() => executionPaused ? requirementCanvasRef.current?.fitView() : factoryCanvasRef.current?.fitView()}
+                    onClick={() => factoryCanvasRef.current?.fitView()}
                   >
                     <RadarChartOutlined />
                   </button>
@@ -2542,204 +2528,137 @@ export default function PlaygroundSubmissionDetailPage() {
                     <span style={{ fontSize: 11, fontWeight: 600 }}>T</span>
                   </button>
                 </div>
-                {submission?.status === "PAUSED" ? (
-                  <RequirementTreeCanvas
-                    ref={requirementCanvasRef}
-                    tree={pausedCanvasTree ?? tree}
-                    selectedNodeId={pausedCanvasSelectedNodeId}
-                    onSelectNode={(nodeId) => {
-                      if (submission?.status === "PAUSED") {
-                        setEditableNodeId(nodeId);
-                      } else {
+                <>
+                  <div style={{ flex: "1 1 auto", minHeight: 0 }}>
+                    <SubmissionFactoryCanvas
+                      ref={factoryCanvasRef}
+                      key={`factory-canvas:${submissionId}`}
+                      tree={pausedCanvasTree ?? tree}
+                      selectedNodeId={factoryCanvasSelectedNodeId}
+                      selectionActive={factoryCanvasSelectionActive}
+                      onSelectNode={(nodeId) => {
                         setSelectedNodeId(nodeId);
+                        setFactorySelectionActive(Boolean(nodeId));
+                        setSelectedTraceabilityKind(null);
+                        setSelectedTraceabilityId(null);
+                        setFocusNodeId(nodeId);
+                        setPulseNodeId(null);
+                        if (executionPaused) {
+                          setEditableNodeId(nodeId);
+                        }
                         if (useQuickStartSubmission) {
                           quickStart.setSelectedNode(nodeId);
                         }
-                      }
-                    }}
-                    detailExpanded={submission?.status === "PAUSED"
-                      ? editableDetailExpanded
-                      : (useQuickStartSubmission ? quickStart.canvasDemo.detailExpanded : detailExpanded)}
-                    onDetailExpandedChange={(expanded) => {
-                      if (submission?.status === "PAUSED") {
-                        setEditableDetailExpanded(expanded);
-                      } else {
-                        setDetailExpanded(expanded);
-                        if (useQuickStartSubmission) {
-                          quickStart.setDetailExpanded(expanded);
-                        }
-                      }
-                    }}
-                    mode={submission?.status === "PAUSED" ? "editable" : "readonly"}
-                    detailPlacement="bottom"
-                    nodeStates={nodeStates}
-                    focusNodeId={submission?.status === "PAUSED"
-                      ? (editableNodeId ?? focusNodeId)
-                      : (useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? focusNodeId) : focusNodeId)}
-                    pulseNodeId={submission?.status === "PAUSED"
-                      ? (editableNodeId ?? pulseNodeId)
-                      : (useQuickStartSubmission ? (quickStart.canvasDemo.currentNodeId ?? pulseNodeId) : pulseNodeId)}
-                    showLegend
-                    showCanvasToolbar={false}
-                    detailTestId="quickstart-submission-node-detail"
-                    taskAssets={submissionTaskAssets}
-                    autoFitOnTreeChange={false}
-                    traceabilityNodes={visibleTraceability}
-                    showInterfaces={showInterfaces}
-                    showTests={showTests}
-                    onShowInterfacesChange={setShowInterfaces}
-                    onShowTestsChange={setShowTests}
-                    allTraceability={allTraceability}
-                    onRequestAllTraceability={() => {
-                      void refreshAllTraceability().catch(() => undefined);
-                    }}
-                    onTraceabilityOverlayChange={({ showInterfaces, showTests }) => {
-                      setTraceabilityOverlayVisible(showInterfaces || showTests);
-                    }}
-                    selectedTraceabilityId={selectedTraceabilityId}
-                    selectedTraceabilityKind={selectedTraceabilityKind}
-                    onTraceabilityNodeClick={({ kind, id, requirementNodeId }) => {
-                      const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
-                      if (targetNodeId) {
-                        setSelectedNodeId(targetNodeId);
-                        setFocusNodeId(targetNodeId);
-                        if (submission?.status === "PAUSED") {
-                          setEditableNodeId(targetNodeId);
-                        }
-                        if (useQuickStartSubmission) {
-                          quickStart.setSelectedNode(targetNodeId);
-                        }
-                      }
-                      setSelectedTraceabilityKind(kind);
-                      setSelectedTraceabilityId(id);
-                      setSidebarTab("traceability");
-                    }}
-                    renderDetailContent={submission?.status === "PAUSED" ? (node) => (
-                      <RequirementNodeDetailContent
-                        node={node}
-                        mode="editable"
-                        taskAssets={submissionTaskAssets}
-                        onNodeChange={(updater) => {
-                          editableTreeDirtyRef.current = true;
-                          setEditableTree((current) => {
-                            if (!current) {
-                              return current;
-                            }
-                            return updateNodeInTree(current, node.id, updater);
-                          });
-                        }}
-                        onNodeIdChange={(nextNodeId) => {
-                          editableTreeDirtyRef.current = true;
-                          setEditableNodeId(nextNodeId);
-                        }}
-                      />
-                    ) : selectedNode ? (node) => (
-                      <RequirementNodeDetailContent
-                        node={node}
-                        mode="readonly"
-                        taskAssets={submissionTaskAssets}
-                      />
-                    ) : undefined}
-                  />
-                ) : (
-                  <>
-                    <div style={{ flex: "1 1 auto", minHeight: 0 }}>
-                      <SubmissionFactoryCanvas
-                        ref={factoryCanvasRef}
-                        key={`factory-canvas:${submissionId}`}
-                        tree={tree}
-                        selectedNodeId={factorySelectionActive ? activeSelectedNodeId : null}
-                        selectionActive={factorySelectionActive}
-                        onSelectNode={(nodeId) => {
-                          setSelectedNodeId(nodeId);
-                          setFactorySelectionActive(Boolean(nodeId));
-                          setSelectedTraceabilityKind(null);
-                          setSelectedTraceabilityId(null);
-                          setFocusNodeId(nodeId);
-                          setPulseNodeId(null);
+                      }}
+                      nodeStates={nodeStates}
+                      allTraceability={allTraceability}
+                      onRequestAllTraceability={() => {
+                        void refreshAllTraceability().catch(() => undefined);
+                      }}
+                      showInterfaces={showInterfaces}
+                      showTests={showTests}
+                      selectedTraceabilityId={selectedTraceabilityId}
+                      selectedTraceabilityKind={selectedTraceabilityKind}
+                      onSelectInterface={({ id, requirementNodeId }) => {
+                        setFactorySelectionActive(true);
+                        const targetNodeId = requirementNodeId ?? pausedCanvasSelectedNodeId ?? activeSelectedNodeId;
+                        if (targetNodeId) {
+                          setSelectedNodeId(targetNodeId);
+                          setFocusNodeId(targetNodeId);
+                          if (executionPaused) {
+                            setEditableNodeId(targetNodeId);
+                          }
                           if (useQuickStartSubmission) {
-                            quickStart.setSelectedNode(nodeId);
+                            quickStart.setSelectedNode(targetNodeId);
                           }
-                        }}
-                        nodeStates={nodeStates}
-                        allTraceability={allTraceability}
-                        onRequestAllTraceability={() => {
-                          void refreshAllTraceability().catch(() => undefined);
-                        }}
-                        showInterfaces={showInterfaces}
-                        showTests={showTests}
-                        selectedTraceabilityId={selectedTraceabilityId}
-                        selectedTraceabilityKind={selectedTraceabilityKind}
-                        onSelectInterface={({ id, requirementNodeId }) => {
-                          setFactorySelectionActive(true);
-                          const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
-                          if (targetNodeId) {
-                            setSelectedNodeId(targetNodeId);
-                            setFocusNodeId(targetNodeId);
-                            if (useQuickStartSubmission) {
-                              quickStart.setSelectedNode(targetNodeId);
-                            }
+                        }
+                        setSelectedTraceabilityKind("interface");
+                        setSelectedTraceabilityId(id);
+                        setSidebarTab("traceability");
+                      }}
+                      onSelectTest={({ id, requirementNodeId }) => {
+                        setFactorySelectionActive(true);
+                        const targetNodeId = requirementNodeId ?? pausedCanvasSelectedNodeId ?? activeSelectedNodeId;
+                        if (targetNodeId) {
+                          setSelectedNodeId(targetNodeId);
+                          setFocusNodeId(targetNodeId);
+                          if (executionPaused) {
+                            setEditableNodeId(targetNodeId);
                           }
-                          setSelectedTraceabilityKind("interface");
-                          setSelectedTraceabilityId(id);
-                          setSidebarTab("traceability");
-                        }}
-                        onSelectTest={({ id, requirementNodeId }) => {
-                          setFactorySelectionActive(true);
-                          const targetNodeId = requirementNodeId ?? activeSelectedNodeId;
-                          if (targetNodeId) {
-                            setSelectedNodeId(targetNodeId);
-                            setFocusNodeId(targetNodeId);
-                            if (useQuickStartSubmission) {
-                              quickStart.setSelectedNode(targetNodeId);
-                            }
+                          if (useQuickStartSubmission) {
+                            quickStart.setSelectedNode(targetNodeId);
                           }
-                          setSelectedTraceabilityKind("test");
-                          setSelectedTraceabilityId(id);
-                          setSidebarTab("traceability");
-                        }}
-                      />
-                    </div>
-                    {factoryDetailNode ? (
-                      <div
-                        data-quickstart-id="quickstart-submission-node-detail"
-                        className={`create-task-detail-drawer detail-placement-bottom ${factoryDetailExpanded ? "expanded" : "collapsed"}`}
-                      >
-                        <div className="create-task-detail-top">
-                          <div>
-                            <strong>{factoryDetailNode.id}</strong>
-                            <span>{factoryDetailNode.name}</span>
+                        }
+                        setSelectedTraceabilityKind("test");
+                        setSelectedTraceabilityId(id);
+                        setSidebarTab("traceability");
+                      }}
+                    />
+                  </div>
+                  {canvasDetailNode ? (
+                    <div
+                      data-quickstart-id="quickstart-submission-node-detail"
+                      className={`create-task-detail-drawer detail-placement-bottom ${canvasDetailExpanded ? "expanded" : "collapsed"}`}
+                    >
+                      <div className="create-task-detail-top">
+                        <div>
+                          <strong>{canvasDetailNode.id}</strong>
+                          <span>{canvasDetailNode.name}</span>
+                        </div>
+                        <div className="create-task-detail-actions">
+                          <div className={`task-node-chip ${canvasDetailNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
+                            {canvasDetailNode.type}
                           </div>
-                          <div className="create-task-detail-actions">
-                            <div className={`task-node-chip ${factoryDetailNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
-                              {factoryDetailNode.type}
-                            </div>
-                            <button
-                              type="button"
-                              className="icon-only-btn"
-                              onClick={() => {
-                                const nextExpanded = !factoryDetailExpanded;
+                          <button
+                            type="button"
+                            className="icon-only-btn"
+                            onClick={() => {
+                              const nextExpanded = !canvasDetailExpanded;
+                              if (executionPaused) {
+                                setEditableDetailExpanded(nextExpanded);
+                              } else {
                                 setDetailExpanded(nextExpanded);
                                 if (useQuickStartSubmission) {
                                   quickStart.setDetailExpanded(nextExpanded);
                                 }
-                              }}
-                            >
-                              {factoryDetailExpanded ? <DownOutlined /> : <UpOutlined />}
-                            </button>
-                          </div>
+                              }
+                            }}
+                          >
+                            {canvasDetailExpanded ? <DownOutlined /> : <UpOutlined />}
+                          </button>
                         </div>
-                        {factoryDetailExpanded ? (
+                      </div>
+                      {canvasDetailExpanded ? (
+                        executionPaused ? (
                           <RequirementNodeDetailContent
-                            node={factoryDetailNode}
+                            node={canvasDetailNode}
+                            mode="editable"
+                            taskAssets={submissionTaskAssets}
+                            onNodeChange={(updater) => {
+                              editableTreeDirtyRef.current = true;
+                              setEditableTree((current) => {
+                                if (!current) {
+                                  return current;
+                                }
+                                return updateNodeInTree(current, canvasDetailNode.id, updater);
+                              });
+                            }}
+                            onNodeIdChange={(nextNodeId) => {
+                              editableTreeDirtyRef.current = true;
+                              setEditableNodeId(nextNodeId);
+                            }}
+                          />
+                        ) : (
+                          <RequirementNodeDetailContent
+                            node={canvasDetailNode}
                             mode="readonly"
                             taskAssets={submissionTaskAssets}
                           />
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </>
-                )}
+                        )
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
               </div>
             ) : null}
             {activeTab === "canvas" && !tree ? (
@@ -2974,7 +2893,7 @@ export default function PlaygroundSubmissionDetailPage() {
                   selectedCommitOid={selectedCommitOid}
                   onSelectCommit={selectCommitHistoryEntry}
                   onOpenDiff={openCommitDiff}
-                  onRewind={submission && (submission.status === "PAUSED" || submission.status === "PASSED" || submission.status === "FAILED")
+                  onRewind={submission?.can_rewind
                     ? (commit) => {
                         void handleRewind(commit);
                       }
