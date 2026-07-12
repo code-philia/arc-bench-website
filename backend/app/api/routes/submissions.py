@@ -136,6 +136,7 @@ def resume_submission(
         raise HTTPException(status_code=409, detail="Submission is not paused")
     try:
         service.clear_runtime_request_files(submission)
+        service.ensure_demo_checkpoint_runtime_restored(submission)
         service.set_checkpoint_restart_flag(submission)
         service.update_status(submission, SubmissionStatus.RUNNING)
         service.update_steps(

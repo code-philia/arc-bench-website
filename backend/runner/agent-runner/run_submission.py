@@ -4,6 +4,7 @@ import re
 import signal
 import sqlite3
 import subprocess
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -229,6 +230,24 @@ def reset_traceability_storage() -> None:
             append_debug_log(f"Removed stale traceability artifact: {path}")
         except FileNotFoundError:
             continue
+
+
+def restore_traceability_storage_from_workspace() -> bool:
+    source_db_path = ARTIFACTS_DIR / "traceability.db"
+    if not source_db_path.is_file():
+        return False
+    TRACEABILITY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    reset_traceability_storage()
+    shutil.copy2(source_db_path, TRACEABILITY_DB_PATH)
+    for suffix in ("-wal", "-shm"):
+        source_sidecar = ARTIFACTS_DIR / f"traceability.db{suffix}"
+        target_sidecar = TRACEABILITY_DB_PATH.parent / f"{TRACEABILITY_DB_PATH.name}{suffix}"
+        if source_sidecar.is_file():
+            shutil.copy2(source_sidecar, target_sidecar)
+    append_debug_log(
+        f"Restored traceability database from workspace checkpoint: {source_db_path} -> {TRACEABILITY_DB_PATH}"
+    )
+    return True
 
 
 def initialize_traceability_db() -> None:
@@ -974,17 +993,25 @@ def main() -> int:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint = read_checkpoint()
     resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
+    runtime_state_restored = bool(checkpoint.get("runtime_state_restored"))
     if not resume_from_checkpoint:
         RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
     spec = read_spec()
     append_debug_log(f"Runner started with spec: {spec}")
-    initialize_traceability_db()
-    seeded_requirements, seeded_scenarios = seed_traceability_requirements()
-    append_runner_event(
-        "deploy_agent",
-        f"Traceability initialized with {seeded_requirements} requirements and {seeded_scenarios} scenarios",
-        status="success",
-    )
+    if resume_from_checkpoint and runtime_state_restored and restore_traceability_storage_from_workspace():
+        append_runner_event(
+            "deploy_agent",
+            f"Traceability restored from checkpoint at step {int(checkpoint.get('last_completed_index', 0) or 0)}",
+            status="success",
+        )
+    else:
+        initialize_traceability_db()
+        seeded_requirements, seeded_scenarios = seed_traceability_requirements()
+        append_runner_event(
+            "deploy_agent",
+            f"Traceability initialized with {seeded_requirements} requirements and {seeded_scenarios} scenarios",
+            status="success",
+        )
 
     managed_processes: list[tuple[subprocess.Popen | None, str]] = []
     managed_threads: list[threading.Thread | None] = []

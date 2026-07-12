@@ -35,8 +35,8 @@ class DockerManager:
             if log_callback is not None:
                 log_callback(f"Building runner image: {self.settings.runner_image}")
             _, build_logs = self.client.images.build(
-                path=str(self.settings.runner_context_dir.parents[2]),
-                dockerfile=str(self.settings.runner_context_dir.relative_to(self.settings.runner_context_dir.parents[2]) / "Dockerfile"),
+                path=str(self.settings.runner_context_dir),
+                dockerfile="Dockerfile",
                 tag=self.settings.runner_image,
                 rm=True,
                 pull=False,

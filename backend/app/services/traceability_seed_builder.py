@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -394,22 +395,31 @@ class TraceabilitySeedBuilder:
     @staticmethod
     def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(
-            dir=str(path.parent),
-            prefix=f"{path.name}.",
-            suffix=".tmp",
-            text=True,
-        )
-        tmp_path = Path(tmp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as output:
-                output.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
-            os.replace(tmp_path, path)
-        finally:
+        last_error: OSError | None = None
+        for delay in (0.0, 0.05, 0.1, 0.2, 0.5, 1.0):
+            if delay > 0:
+                time.sleep(delay)
+            fd, tmp_name = tempfile.mkstemp(
+                dir=str(path.parent),
+                prefix=f"{path.name}.",
+                suffix=".tmp",
+                text=True,
+            )
+            tmp_path = Path(tmp_name)
             try:
-                tmp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+                with os.fdopen(fd, "w", encoding="utf-8") as output:
+                    output.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+                os.replace(tmp_path, path)
+                return
+            except OSError as exc:
+                last_error = exc
+            finally:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        if last_error is not None:
+            raise last_error
 
     @staticmethod
     def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
