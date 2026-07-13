@@ -566,6 +566,7 @@ export default function CreateTaskPage() {
               markdown={markdown}
               assetsBaseUrl=""
               referencesBaseUrl={taskAssets.references_base_url}
+              tocTree={tree}
               tocTitle="Contents"
               bodyClassName="playground-readme-body"
               tocClassName="playground-readme-toc create-task-preview-toc"
