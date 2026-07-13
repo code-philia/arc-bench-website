@@ -319,13 +319,15 @@ class ExecutionService:
                         mark_paused("Execution paused by user request")
                         try:
                             restored_submission = submission_service.get_submission(submission_id)
-                            submission_service.rebuild_demo_submission_to_checkpoint(restored_submission)
+                            submission_service.mark_paused_for_manual_edit(
+                                restored_submission,
+                                reason="Execution paused; workspace is ready for manual edits",
+                            )
                             SubmissionEventStream.publish(
                                 submission_id,
-                                reason="pause_checkpoint_restored",
+                                reason="pause_ready_for_manual_edit",
                                 submission=True,
                                 logs=True,
-                                commit_history=True,
                                 traceability_selected=True,
                                 traceability_all=True,
                                 preview=True,
@@ -356,6 +358,28 @@ class ExecutionService:
             latest_events = import_runner_events()
             if latest_events:
                 refresh_running_steps(latest_events)
+            checkpoint = submission_service.read_checkpoint(submission_service.get_submission(submission_id))
+            if bool(checkpoint.get("resume_patch_conflict")):
+                conflict_message = "Replay patch merge conflict detected. Resolve the workspace manually, then resume again."
+                paused_submission = submission_service.get_submission(submission_id)
+                submission_service.update_status(
+                    paused_submission,
+                    SubmissionStatus.PAUSED,
+                    failure_reason=conflict_message,
+                )
+                submission_service.mark_resume_patch_conflict(paused_submission, message=conflict_message)
+                SubmissionEventStream.publish(
+                    submission_id,
+                    reason="resume_patch_conflict",
+                    submission=True,
+                    logs=True,
+                    commit_history=True,
+                    traceability_selected=True,
+                    traceability_all=True,
+                    preview=True,
+                )
+                debug_log.append("backend", conflict_message)
+                return
             emit_event("run_tests", "Collecting test artifacts")
             stdout, stderr = manager.collect_logs(container)
             if stdout and not stdout_path.exists():

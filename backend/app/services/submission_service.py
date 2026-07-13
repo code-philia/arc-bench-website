@@ -70,6 +70,8 @@ DEFAULT_STEPS = [
     ),
 ]
 
+DEMO_BASE_TREE_SENTINEL = "__arcbench_base_tree__"
+
 
 class SubmissionService:
     def __init__(self, db: Session):
@@ -200,6 +202,140 @@ class SubmissionService:
             raise ValueError("ARC demo replay metadata is empty")
         return workspace_path, replay_paths, steps
 
+    def _is_demo_replay_submission(self, submission: Submission) -> bool:
+        return self._get_demo_replay_paths(submission) is not None
+
+    def _resolve_manual_edit_context(
+        self,
+        submission: Submission,
+        *,
+        checkpoint: dict | None = None,
+    ) -> dict[str, object]:
+        normalized_checkpoint = dict(checkpoint or self.read_checkpoint(submission))
+        if not self._is_demo_replay_submission(submission):
+            return {
+                "checkpoint": normalized_checkpoint,
+                "steps": [],
+                "last_completed_index": 0,
+                "current_node_id": None,
+                "current_phase": None,
+                "base_source_commit": DEMO_BASE_TREE_SENTINEL,
+            }
+
+        _workspace_path, _replay_paths, steps = self._load_demo_replay_steps(submission)
+        last_completed_index = int(normalized_checkpoint.get("last_completed_index", 0) or 0)
+        last_completed_index = max(0, min(last_completed_index, len(steps)))
+        next_step = steps[last_completed_index] if last_completed_index < len(steps) else None
+        if last_completed_index > 0:
+            base_source_commit = steps[last_completed_index - 1].source_commit
+        else:
+            base_source_commit = DEMO_BASE_TREE_SENTINEL
+        return {
+            "checkpoint": normalized_checkpoint,
+            "steps": steps,
+            "last_completed_index": last_completed_index,
+            "current_node_id": next_step.node_id if next_step else None,
+            "current_phase": next_step.phase if next_step else None,
+            "base_source_commit": base_source_commit,
+        }
+
+    @staticmethod
+    def _normalize_pending_test_creations(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        normalized: list[str] = []
+        for item in value:
+            text = str(item or "").strip()
+            if text:
+                normalized.append(text)
+        return normalized
+
+    def _build_manual_edit_commit_message(self, node_id: str | None, phase: str | None) -> str:
+        normalized_node_id = str(node_id or "").strip() or "ROOT"
+        normalized_phase = str(phase or "").strip().lower()
+        if normalized_phase not in {"design", "implement"}:
+            normalized_phase = "implement"
+        return f"{normalized_node_id} ({normalized_phase}): user edit"
+
+    def can_manual_edit(self, submission: Submission) -> bool:
+        if submission.status != SubmissionStatus.PAUSED.value:
+            return False
+        return self._is_demo_replay_submission(submission)
+
+    def get_manual_edit_state(self, submission: Submission) -> dict[str, object]:
+        if not self._is_demo_replay_submission(submission):
+            return {
+                "can_manual_edit": False,
+                "manual_edit_node_id": None,
+                "manual_edit_phase": None,
+                "manual_edit_dirty": False,
+            }
+
+        context = self._resolve_manual_edit_context(submission)
+        checkpoint = context["checkpoint"] if isinstance(context.get("checkpoint"), dict) else {}
+        manual_edit_session = checkpoint.get("manual_edit_session")
+        session = manual_edit_session if isinstance(manual_edit_session, dict) else {}
+        node_id = str(session.get("current_node_id") or context.get("current_node_id") or "").strip() or None
+        phase = str(session.get("current_phase") or context.get("current_phase") or "").strip().lower() or None
+        dirty = bool(session.get("has_workspace_changes")) or bool(session.get("has_traceability_changes"))
+        return {
+            "can_manual_edit": self.can_manual_edit(submission),
+            "manual_edit_node_id": node_id,
+            "manual_edit_phase": phase if phase in {"design", "implement"} else None,
+            "manual_edit_dirty": dirty,
+        }
+
+    def prepare_manual_edit_session(self, submission: Submission) -> dict:
+        context = self._resolve_manual_edit_context(submission)
+        checkpoint = dict(context["checkpoint"])
+        existing_session = checkpoint.get("manual_edit_session")
+        existing = existing_session if isinstance(existing_session, dict) else {}
+        node_id = str(existing.get("current_node_id") or context.get("current_node_id") or "").strip() or None
+        phase = str(existing.get("current_phase") or context.get("current_phase") or "").strip().lower() or None
+        commit_message = self._build_manual_edit_commit_message(node_id, phase)
+        checkpoint["pause_mode"] = "manual_edit"
+        checkpoint["current_node_id"] = node_id
+        checkpoint["current_phase"] = phase
+        checkpoint["runtime_state_restored"] = True
+        checkpoint["resume_requires_restart"] = True
+        checkpoint["resume_patch_conflict"] = False
+        checkpoint["manual_edit_session"] = {
+            "base_completed_index": int(existing.get("base_completed_index", context.get("last_completed_index", 0)) or 0),
+            "current_node_id": node_id,
+            "current_phase": phase,
+            "base_source_commit": str(existing.get("base_source_commit") or context.get("base_source_commit") or DEMO_BASE_TREE_SENTINEL),
+            "has_workspace_changes": bool(existing.get("has_workspace_changes")),
+            "has_traceability_changes": bool(existing.get("has_traceability_changes")),
+            "pending_test_creations": self._normalize_pending_test_creations(existing.get("pending_test_creations")),
+            "pending_commit_message": commit_message,
+        }
+        self.write_checkpoint(submission, checkpoint)
+        return checkpoint
+
+    def _update_manual_edit_session(
+        self,
+        submission: Submission,
+        *,
+        has_workspace_changes: bool | None = None,
+        has_traceability_changes: bool | None = None,
+        append_test_creation: str | None = None,
+    ) -> dict:
+        checkpoint = self.prepare_manual_edit_session(submission)
+        manual_edit_session = checkpoint.get("manual_edit_session")
+        if not isinstance(manual_edit_session, dict):
+            raise RuntimeError("Manual edit session is not available")
+        if has_workspace_changes is not None:
+            manual_edit_session["has_workspace_changes"] = bool(has_workspace_changes or manual_edit_session.get("has_workspace_changes"))
+        if has_traceability_changes is not None:
+            manual_edit_session["has_traceability_changes"] = bool(has_traceability_changes or manual_edit_session.get("has_traceability_changes"))
+        if append_test_creation:
+            pending = self._normalize_pending_test_creations(manual_edit_session.get("pending_test_creations"))
+            pending.append(append_test_creation)
+            manual_edit_session["pending_test_creations"] = pending
+        checkpoint["manual_edit_session"] = manual_edit_session
+        self.write_checkpoint(submission, checkpoint)
+        return checkpoint
+
     def read_submission_task_documents(self, submission: Submission) -> dict[str, str]:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
@@ -275,6 +411,9 @@ class SubmissionService:
         checkpoint["paused"] = False
         checkpoint["runtime_state_restored"] = False
         checkpoint["resume_requires_restart"] = True
+        checkpoint["pause_mode"] = "checkpoint"
+        checkpoint["manual_edit_session"] = None
+        checkpoint["resume_patch_conflict"] = False
         checkpoint["edited_node_restart"] = {
             "node_id": normalized_node_id,
             "restart_from_index": restart_index,
@@ -443,6 +582,9 @@ class SubmissionService:
         checkpoint["completed"] = self._build_checkpoint_completed_entries_from_steps(steps[:rewound_index])
         checkpoint["paused"] = False
         checkpoint["runtime_state_restored"] = False
+        checkpoint["pause_mode"] = "checkpoint"
+        checkpoint["manual_edit_session"] = None
+        checkpoint["resume_patch_conflict"] = False
         checkpoint["rewind_target"] = {
             "commit_oid": normalized_commit_oid,
             "node_id": node_id,
@@ -650,6 +792,7 @@ class SubmissionService:
         node_states = self.artifact_service.read_node_visual_states(submission)
         visual_events = self.read_visual_events(submission)
         node_states = self._overlay_visual_event_states(node_states, visual_events)
+        manual_edit_state = self.get_manual_edit_state(submission)
         return SubmissionDetail(
             id=submission.id,
             display_name=submission.display_name,
@@ -677,6 +820,10 @@ class SubmissionService:
             can_pause=self.can_pause(submission),
             can_resume=self.can_resume(submission),
             can_rewind=self.can_rewind(submission),
+            can_manual_edit=bool(manual_edit_state["can_manual_edit"]),
+            manual_edit_node_id=manual_edit_state["manual_edit_node_id"],
+            manual_edit_phase=manual_edit_state["manual_edit_phase"],
+            manual_edit_dirty=bool(manual_edit_state["manual_edit_dirty"]),
             pause_available=bool(self.get_pause_request_path(submission)),
         )
 
@@ -883,6 +1030,23 @@ class SubmissionService:
             req_id = str(payload.get("req_id", "")).strip()
             suffix = f" -> {req_id}" if req_id else ""
             return f"[{timestamp}] [{event_type}] {test_id}{suffix}"
+        if event_type in {
+            "manual_edit_started",
+            "workspace_file_updated",
+            "manual_test_created",
+            "manual_edit_committed",
+            "resume_patch_conflict",
+        }:
+            context_bits = [
+                str(payload.get("node_id", "")).strip(),
+                str(payload.get("phase", "")).strip(),
+                str(payload.get("file_path", "")).strip(),
+            ]
+            context = " ".join(bit for bit in context_bits if bit)
+            if context and message:
+                return f"[{timestamp}] [{event_type}] {context} | {message}"
+            if context:
+                return f"[{timestamp}] [{event_type}] {context}"
         if message:
             return f"[{timestamp}] [{event_type}] {message}"
         return f"[{timestamp}] [{event_type}]"
@@ -1023,6 +1187,194 @@ class SubmissionService:
                 + "\n"
             )
 
+    def _append_runner_event(self, submission: Submission, payload: dict[str, object]) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return
+        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        runner_events_path.parent.mkdir(parents=True, exist_ok=True)
+        enriched_payload = {
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            **payload,
+        }
+        with runner_events_path.open("a", encoding="utf-8") as output:
+            output.write(json.dumps(enriched_payload, ensure_ascii=True) + "\n")
+
+    def _append_runner_refresh_signal(
+        self,
+        submission: Submission,
+        *,
+        reason: str,
+        submission_refresh: bool = False,
+        logs: bool = False,
+        commit_history: bool = False,
+        traceability_selected: bool = False,
+        traceability_all: bool = False,
+        preview: bool = False,
+        message: str | None = None,
+    ) -> None:
+        payload: dict[str, object] = {
+            "type": "signal",
+            "reason": reason,
+            "refresh": {
+                "submission": submission_refresh,
+                "logs": logs,
+                "commit_history": commit_history,
+                "traceability_selected": traceability_selected,
+                "traceability_all": traceability_all,
+                "preview": preview,
+            },
+        }
+        if message:
+            payload["message"] = message
+        self._append_runner_event(submission, payload)
+
+    def _write_traceability_snapshot_from_db(self, workspace_path: Path) -> None:
+        artifacts_dir = workspace_path / "artifacts"
+        snapshot_path = artifacts_dir / "traceability.snapshot.json"
+        db_path = artifacts_dir / "traceability.db"
+        if not db_path.is_file():
+            return
+        self.artifact_service._refresh_traceability_snapshot_from_db(snapshot_path, db_path, force=True)  # noqa: SLF001
+
+    def _parse_git_status_paths(self, status_output: str) -> list[str]:
+        dirty_files: list[str] = []
+        for raw_line in status_output.splitlines():
+            line = raw_line.rstrip()
+            if len(line) < 4:
+                continue
+            candidate = line[3:].strip()
+            if " -> " in candidate:
+                candidate = candidate.split(" -> ", 1)[1].strip()
+            if candidate:
+                dirty_files.append(candidate.replace("\\", "/"))
+        return dirty_files
+
+    def build_manual_edit_commit_preview(self, submission: Submission) -> dict[str, object]:
+        if not self.can_manual_edit(submission):
+            raise ValueError("Submission is not in paused manual edit mode")
+        manual_edit_state = self.get_manual_edit_state(submission)
+        template_dir = self.get_template_repo_path(submission)
+        dirty_files: list[str] = []
+        if template_dir is not None and (template_dir / ".git").exists():
+            dirty_files = self._parse_git_status_paths(self._run_git(template_dir, ["status", "--porcelain"],))
+        return {
+            "message": self._build_manual_edit_commit_message(
+                manual_edit_state["manual_edit_node_id"],
+                manual_edit_state["manual_edit_phase"],
+            ),
+            "node_id": manual_edit_state["manual_edit_node_id"],
+            "phase": manual_edit_state["manual_edit_phase"],
+            "dirty": bool(dirty_files) or bool(manual_edit_state["manual_edit_dirty"]),
+            "dirty_files": dirty_files,
+        }
+
+    def commit_manual_edit_session(self, submission: Submission) -> dict[str, object]:
+        preview = self.build_manual_edit_commit_preview(submission)
+        template_dir = self.get_template_repo_path(submission)
+        if template_dir is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        dirty_files = list(preview["dirty_files"]) if isinstance(preview.get("dirty_files"), list) else []
+        committed = False
+        if dirty_files:
+            self._run_git(template_dir, ["add", "."])
+            commit_output = self._run_git(template_dir, ["commit", "-m", str(preview["message"])])
+            committed = bool(commit_output is not None)
+            self._append_runner_event(
+                submission,
+                {
+                    "type": "manual_edit_committed",
+                    "node_id": preview["node_id"],
+                    "phase": preview["phase"],
+                    "message": str(preview["message"]),
+                },
+            )
+            self._append_runner_refresh_signal(
+                submission,
+                reason="commit_history_changed",
+                commit_history=True,
+                preview=True,
+                message=str(preview["message"]),
+            )
+
+        checkpoint = self.prepare_manual_edit_session(submission)
+        manual_edit_session = checkpoint.get("manual_edit_session")
+        if isinstance(manual_edit_session, dict):
+            manual_edit_session["has_workspace_changes"] = False
+            manual_edit_session["has_traceability_changes"] = False
+            manual_edit_session["pending_test_creations"] = []
+            manual_edit_session["pending_commit_message"] = str(preview["message"])
+            checkpoint["manual_edit_session"] = manual_edit_session
+            self.write_checkpoint(submission, checkpoint)
+        return {
+            "committed": committed,
+            **preview,
+        }
+
+    def prepare_resume_from_pause(self, submission: Submission) -> dict[str, object]:
+        commit_result = {"committed": False}
+        if self.can_manual_edit(submission):
+            commit_result = self.commit_manual_edit_session(submission)
+            checkpoint = self.read_checkpoint(submission)
+            checkpoint["pause_mode"] = "checkpoint"
+            checkpoint["manual_edit_session"] = None
+            checkpoint["resume_requires_restart"] = True
+            checkpoint["runtime_state_restored"] = True
+            checkpoint["resume_patch_conflict"] = False
+            self.write_checkpoint(submission, checkpoint)
+            return commit_result
+
+        checkpoint = self.read_checkpoint(submission)
+        checkpoint["pause_mode"] = "checkpoint"
+        checkpoint["resume_requires_restart"] = True
+        self.write_checkpoint(submission, checkpoint)
+        return commit_result
+
+    def mark_paused_for_manual_edit(self, submission: Submission, *, reason: str) -> None:
+        if not self._is_demo_replay_submission(submission):
+            return
+        checkpoint = self.prepare_manual_edit_session(submission)
+        self.update_steps(
+            submission,
+            self.build_step_states(
+                active_key="start_agent",
+                completed={"deploy_agent"},
+                description="Paused editing session",
+            ),
+        )
+        manual_edit_session = checkpoint.get("manual_edit_session")
+        if isinstance(manual_edit_session, dict):
+            self._append_runner_event(
+                submission,
+                {
+                    "type": "manual_edit_started",
+                    "node_id": manual_edit_session.get("current_node_id"),
+                    "phase": manual_edit_session.get("current_phase"),
+                    "message": reason,
+                },
+            )
+
+    def mark_resume_patch_conflict(self, submission: Submission, *, message: str) -> None:
+        if not self._is_demo_replay_submission(submission):
+            return
+        checkpoint = self.prepare_manual_edit_session(submission)
+        checkpoint["resume_patch_conflict"] = True
+        self.write_checkpoint(submission, checkpoint)
+        self.update_steps(
+            submission,
+            self.build_step_states(
+                active_key="start_agent",
+                completed={"deploy_agent"},
+                description="Paused after replay merge conflict",
+            ),
+        )
+        self.append_step_event(
+            submission.id,
+            step_key="start_agent",
+            message=message,
+            status="error",
+        )
+
     def _restore_demo_runtime_state_from_checkpoint(
         self,
         submission: Submission,
@@ -1123,6 +1475,9 @@ class SubmissionService:
         if completed_index > len(steps):
             completed_index = len(steps)
         checkpoint["runtime_state_restored"] = False
+        checkpoint["pause_mode"] = "checkpoint"
+        checkpoint["manual_edit_session"] = None
+        checkpoint["resume_patch_conflict"] = False
         self.write_checkpoint(submission, checkpoint)
         project_root = self.get_template_repo_path(submission)
         if project_root is None:
@@ -1359,6 +1714,8 @@ class SubmissionService:
             raise RuntimeError(f"Failed to list workspace files: {e}")
 
     def update_workspace_file(self, submission: Submission, file_path: str, content: str) -> None:
+        if not self.can_manual_edit(submission):
+            raise ValueError("Workspace edits are only allowed for paused replay submissions")
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")
@@ -1376,15 +1733,25 @@ class SubmissionService:
             raise FileNotFoundError(f"File path outside template directory: {file_path}")
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(content, encoding="utf-8")
-
-        self._run_git(template_dir, ["add", str(normalized_path)])
-        try:
-            self._run_git(template_dir, ["commit", "-m", "Manual file update"])
-        except RuntimeError:
-            pass
+        self._write_text_atomic(target_path, content)
+        self._update_manual_edit_session(submission, has_workspace_changes=True)
+        self._append_runner_event(
+            submission,
+            {
+                "type": "workspace_file_updated",
+                "file_path": normalized_path.as_posix(),
+                "message": normalized_path.as_posix(),
+            },
+        )
+        self._append_runner_refresh_signal(
+            submission,
+            reason="preview_stale",
+            preview=True,
+        )
 
     def create_test_file(self, submission: Submission, test_id: str, req_id: str, test_type: str, scenario_id: Optional[str] = None, file_path: Optional[str] = None) -> str:
+        if not self.can_manual_edit(submission):
+            raise ValueError("Test creation is only allowed for paused replay submissions")
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")
@@ -1420,15 +1787,32 @@ describe('{test_id}', () => {{
 """
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(test_template, encoding="utf-8")
+        self._write_text_atomic(target_path, test_template)
 
         self._register_test_in_traceability(submission, test_id, req_id, test_type, file_path, scenario_id)
-
-        self._run_git(template_dir, ["add", str(normalized_path)])
-        try:
-            self._run_git(template_dir, ["commit", "-m", f"Add test {test_id} for {req_id}"])
-        except RuntimeError:
-            pass
+        self._update_manual_edit_session(
+            submission,
+            has_workspace_changes=True,
+            has_traceability_changes=True,
+            append_test_creation=normalized_path.as_posix(),
+        )
+        self._append_runner_event(
+            submission,
+            {
+                "type": "manual_test_created",
+                "node_id": req_id,
+                "file_path": normalized_path.as_posix(),
+                "message": test_id,
+            },
+        )
+        self._append_runner_refresh_signal(
+            submission,
+            reason="traceability_changed",
+            traceability_selected=True,
+            traceability_all=True,
+            preview=True,
+            message=test_id,
+        )
 
         return file_path
 

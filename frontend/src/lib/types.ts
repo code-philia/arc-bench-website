@@ -106,6 +106,10 @@ export type SubmissionDetail = SubmissionSummary & {
   can_pause: boolean;
   can_resume: boolean;
   can_rewind: boolean;
+  can_manual_edit: boolean;
+  manual_edit_node_id: string | null;
+  manual_edit_phase: "design" | "implement" | null;
+  manual_edit_dirty: boolean;
   pause_available: boolean;
 };
 
@@ -211,6 +215,14 @@ export type SubmissionPreviewStatus = {
   workspace_head_oid: string | null;
   preview_head_oid: string | null;
   error: string | null;
+};
+
+export type SubmissionManualEditCommitPreview = {
+  message: string;
+  node_id: string | null;
+  phase: "design" | "implement" | null;
+  dirty: boolean;
+  dirty_files: string[];
 };
 
 export type SubmissionSseRefresh = {

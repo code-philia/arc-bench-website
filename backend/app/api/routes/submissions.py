@@ -21,6 +21,7 @@ from app.schemas.submission import (
     SubmissionSourcePayload,
     SubmissionSummary,
     SubmissionTraceabilityPayload,
+    SubmissionManualEditCommitPreview,
     WorkspaceFileListPayload,
     FileUpdatePayload,
     TestCreatePayload,
@@ -136,8 +137,14 @@ def resume_submission(
         raise HTTPException(status_code=409, detail="Submission is not paused")
     try:
         service.clear_runtime_request_files(submission)
-        service.ensure_demo_checkpoint_runtime_restored(submission)
-        service.set_checkpoint_restart_flag(submission)
+        resume_prep = service.prepare_resume_from_pause(submission)
+        if bool(resume_prep.get("committed")):
+            SubmissionEventStream.publish(
+                submission_id,
+                reason="manual_edit_committed",
+                commit_history=True,
+                preview=True,
+            )
         service.update_status(submission, SubmissionStatus.RUNNING)
         service.update_steps(
             submission,
@@ -554,6 +561,25 @@ def get_workspace_files(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/{submission_id}/manual-edit/commit-preview", response_model=SubmissionManualEditCommitPreview)
+def get_manual_edit_commit_preview(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionManualEditCommitPreview:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not service.can_manual_edit(submission):
+        raise HTTPException(status_code=409, detail="Submission is not in paused manual edit mode")
+    try:
+        return SubmissionManualEditCommitPreview(**service.build_manual_edit_commit_preview(submission))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/{submission_id}/workspace/files")
 def update_workspace_file(
     submission_id: str,
@@ -568,13 +594,15 @@ def update_workspace_file(
         SubmissionEventStream.publish(
             submission_id,
             reason="file_updated",
-            commit_history=True,
+            preview=True,
         )
         return {"detail": "File updated successfully"}
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/{submission_id}/workspace/tests")
@@ -598,11 +626,14 @@ def create_test(
         SubmissionEventStream.publish(
             submission_id,
             reason="test_created",
-            commit_history=True,
+            traceability_selected=True,
             traceability_all=True,
+            preview=True,
         )
         return {"detail": "Test created successfully", "file_path": file_path}
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

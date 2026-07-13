@@ -12,6 +12,7 @@ import type {
   SubmissionDetail,
   SubmissionCommitHistoryPayload,
   SubmissionLogs,
+  SubmissionManualEditCommitPreview,
   SubmissionPreviewStatus,
   SubmissionSseEvent,
   SubmissionSummary,
@@ -153,6 +154,11 @@ export const api = {
   },
   resumeSubmission(submissionId: string) {
     return request<SubmissionDetail>(`/submissions/${submissionId}/resume`, {
+      method: "POST",
+    });
+  },
+  getManualEditCommitPreview(submissionId: string) {
+    return request<SubmissionManualEditCommitPreview>(`/submissions/${submissionId}/manual-edit/commit-preview`, {
       method: "POST",
     });
   },

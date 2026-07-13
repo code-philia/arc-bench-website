@@ -695,7 +695,7 @@ function SubmissionFilePanel({
   const [newTestId, setNewTestId] = useState("");
   const [newTestType, setNewTestType] = useState("Unit");
   const [selectedNodeIdForTest, setSelectedNodeIdForTest] = useState<string | null>(null);
-  const isPaused = submission?.status === "PAUSED";
+  const canManualEdit = submission?.status === "PAUSED" && submission?.can_manual_edit;
   const codeGrammar = resolveCodeGrammar(taskType);
   const isDiffPanel = panelMode === "diff";
   const [cachedFileSource, setCachedFileSource] = useState<SubmissionSourcePayload | null>(null);
@@ -815,7 +815,13 @@ function SubmissionFilePanel({
       setUnsavedChanges(false);
       setIsEditing(false);
       await loadWorkspaceFiles();
-      await refreshCommitHistory(false);
+      setSource({
+        kind: "file",
+        file_path: selectedFilePath,
+        language: fileSource?.language ?? "text",
+        content: fileContent,
+        first_line: fileSource?.first_line ?? 1,
+      });
     } catch (e) {
       console.error("Failed to save file", e);
     }
@@ -840,7 +846,6 @@ function SubmissionFilePanel({
       setShowCreateTestModal(false);
       setNewTestId("");
       await loadWorkspaceFiles();
-      await refreshCommitHistory(false);
       refreshTraceabilityForCurrentView();
       await openWorkspaceFile(result.file_path);
     } catch (e) {
@@ -981,8 +986,11 @@ function SubmissionFilePanel({
             </button>
           </div>
           <div className="ide-file-list">
-            {isPaused ? (
+            {canManualEdit ? (
               <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ marginBottom: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Paused editing session
+                </div>
                 <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
                   <button
                     type="button"
@@ -1063,7 +1071,7 @@ function SubmissionFilePanel({
               <div className="ide-editor-tab active">{fileSource?.file_path ?? "workspace/template"}</div>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {isPaused && fileSource ? (
+            {canManualEdit && fileSource ? (
               <>
                 {!isEditing ? (
                   <button
@@ -2087,6 +2095,31 @@ export default function PlaygroundSubmissionDetailPage() {
   const handleResume = async () => {
     if (!submissionId) {
       return;
+    }
+    if (submission?.can_manual_edit) {
+      try {
+        const preview = await api.getManualEditCommitPreview(submissionId);
+        if (preview.dirty) {
+          const scope = preview.node_id && preview.phase
+            ? `${preview.node_id} (${preview.phase})`
+            : "the current paused step";
+          const confirmed = window.confirm(
+            `Resume will create one manual commit for ${scope} before continuing.`,
+          );
+          if (!confirmed) {
+            return;
+          }
+        }
+      } catch (error) {
+        const fallbackMessage = error instanceof Error ? error.message : "Failed to prepare resume preview.";
+        console.error("Failed to load manual edit commit preview", error);
+        const confirmed = window.confirm(
+          `${fallbackMessage}\n\nResume will still try to continue from the paused workspace. Continue?`,
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
     }
     if (submission?.status === "PAUSED" && editableTreeDirtyRef.current) {
       setSavingEditableTask(true);

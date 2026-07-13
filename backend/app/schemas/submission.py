@@ -58,6 +58,10 @@ class SubmissionDetail(SubmissionSummary):
     can_pause: bool = False
     can_resume: bool = False
     can_rewind: bool = False
+    can_manual_edit: bool = False
+    manual_edit_node_id: str | None = None
+    manual_edit_phase: str | None = None
+    manual_edit_dirty: bool = False
     pause_available: bool = False
 
 
@@ -82,6 +86,14 @@ class SubmissionPreviewStatus(BaseModel):
 
 class SubmissionCreateResponse(BaseModel):
     submission: SubmissionSummary
+
+
+class SubmissionManualEditCommitPreview(BaseModel):
+    message: str
+    node_id: str | None = None
+    phase: str | None = None
+    dirty: bool = False
+    dirty_files: list[str] = Field(default_factory=list)
 
 
 class SubmissionLogs(BaseModel):
