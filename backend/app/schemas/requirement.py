@@ -42,6 +42,16 @@ class CompetitionSummary(BaseModel):
     is_public: bool
 
 
+class CompetitionLeaderboardEntry(BaseModel):
+    username: str
+    model_name: str | None = None
+    track: str
+    avg_pass_rate: float
+    total_token_millions: float | None = None
+    avg_runtime_seconds: int | None = None
+    submission_count: int
+
+
 class CompetitionDetail(CompetitionSummary):
     downloads: CompetitionTaskDownloadLinks | None = None
     tasks: list[CompetitionTaskSummary]

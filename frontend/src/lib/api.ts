@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   BenchmarkDetail,
   BenchmarkSummary,
+  CompetitionLeaderboardEntry,
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
@@ -110,6 +111,9 @@ export const api = {
   },
   listCompetitions() {
     return request<CompetitionSummary[]>("/competitions");
+  },
+  getCompetitionLeaderboard(track: "all" | "web" | "mobile" | "kernel" = "all") {
+    return request<CompetitionLeaderboardEntry[]>(`/competitions/leaderboard?track=${track}`);
   },
   getCompetition(competitionId: string) {
     return request<CompetitionDetail>(`/competitions/${competitionId}`);

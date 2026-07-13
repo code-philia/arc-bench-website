@@ -6,17 +6,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 import yaml
 
+from app.core.enums import SubmissionStatus
 from app.core.config import get_settings
 from app.models.requirement import Requirement
+from app.models.submission import Submission
+from app.models.user import User
 from app.schemas.requirement import (
     BenchmarkDetail,
     BenchmarkDownloadLinks,
     BenchmarkSummary,
     BenchmarkTaskSummary,
     CompetitionDetail,
+    CompetitionLeaderboardEntry,
     CompetitionSummary,
     CompetitionTaskDownloadLinks,
     CompetitionTaskSummary,
@@ -238,6 +243,83 @@ class RequirementCatalogService:
             )
 
         return competitions
+
+    def list_competition_leaderboard(self, track: str = "all") -> list[CompetitionLeaderboardEntry]:
+        normalized_track = track.strip().lower() or "all"
+        if normalized_track not in {"all", "web", "mobile", "kernel"}:
+            raise ValueError(f"Unsupported leaderboard track '{track}'")
+
+        rows = self.scan_entries()
+        requirement_ids_by_category: dict[str, list[str]] = {}
+        for row in rows:
+            requirement_ids_by_category.setdefault(row.category, []).append(row.id)
+
+        if normalized_track == "all":
+            requirement_ids = [requirement_id for ids in requirement_ids_by_category.values() for requirement_id in ids]
+        else:
+            requirement_ids = requirement_ids_by_category.get(normalized_track, [])
+
+        if not requirement_ids:
+            return []
+
+        query = (
+            select(Submission, User.username)
+            .join(User, Submission.user_id == User.id)
+            .where(Submission.requirement_id.in_(requirement_ids))
+            .where(Submission.user_id.is_not(None))
+            .where(Submission.status.in_([SubmissionStatus.PASSED.value, SubmissionStatus.FAILED.value]))
+            .where(Submission.score.is_not(None))
+        )
+
+        aggregates: dict[tuple[str, str], dict[str, object]] = {}
+        for submission, username in self.db.execute(query).all():
+            model_name = (submission.model_name or "").strip() or None
+            key = (submission.user_id or "", model_name or "")
+            aggregate = aggregates.setdefault(
+                key,
+                {
+                    "username": username,
+                    "model_name": model_name,
+                    "pass_rate_sum": 0.0,
+                    "submission_count": 0,
+                    "runtime_sum": 0,
+                    "runtime_count": 0,
+                },
+            )
+            aggregate["pass_rate_sum"] = float(aggregate["pass_rate_sum"]) + float(submission.score or 0.0)
+            aggregate["submission_count"] = int(aggregate["submission_count"]) + 1
+            if submission.started_at and submission.finished_at:
+                runtime_seconds = max(0, int((submission.finished_at - submission.started_at).total_seconds()))
+                aggregate["runtime_sum"] = int(aggregate["runtime_sum"]) + runtime_seconds
+                aggregate["runtime_count"] = int(aggregate["runtime_count"]) + 1
+
+        leaderboard: list[CompetitionLeaderboardEntry] = []
+        for aggregate in aggregates.values():
+            submission_count = int(aggregate["submission_count"])
+            runtime_count = int(aggregate["runtime_count"])
+            avg_runtime_seconds = int(round(int(aggregate["runtime_sum"]) / runtime_count)) if runtime_count > 0 else None
+            leaderboard.append(
+                CompetitionLeaderboardEntry(
+                    username=str(aggregate["username"]),
+                    model_name=aggregate["model_name"] if isinstance(aggregate["model_name"], str) or aggregate["model_name"] is None else None,
+                    track=normalized_track,
+                    avg_pass_rate=round(float(aggregate["pass_rate_sum"]) / submission_count, 1),
+                    total_token_millions=None,
+                    avg_runtime_seconds=avg_runtime_seconds,
+                    submission_count=submission_count,
+                )
+            )
+
+        leaderboard.sort(
+            key=lambda item: (
+                -item.avg_pass_rate,
+                -item.submission_count,
+                item.avg_runtime_seconds if item.avg_runtime_seconds is not None else 10**9,
+                item.username.lower(),
+                (item.model_name or "").lower(),
+            )
+        )
+        return leaderboard
 
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
         rows = self.scan_entries()

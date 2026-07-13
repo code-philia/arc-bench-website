@@ -1,24 +1,11 @@
-import { RightOutlined, TrophyFilled } from "@ant-design/icons";
+import { InfoCircleOutlined, RightOutlined, StarFilled, TrophyFilled } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
-import type { CompetitionSummary } from "../lib/types";
+import type { CompetitionLeaderboardEntry, CompetitionSummary } from "../lib/types";
 
 type LeaderboardTrack = "all" | "web" | "mobile" | "kernel";
-
-type HeroRow = {
-  username: string;
-  model: string;
-  track: Exclude<LeaderboardTrack, "all">;
-  totalTotalM: number;
-  runtimeSeconds: number;
-  avgPassRate: number;
-};
-
-const heroRows: HeroRow[] = [];
-
-const rankBadges = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
 function competitionTypeLabel(type: string) {
   if (type === "web") return "WEB";
@@ -46,9 +33,24 @@ function formatRuntime(seconds: number) {
   return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(remainder).padStart(2, "0")}s`;
 }
 
+function renderRankDisplay(rank: number) {
+  if (rank > 3) {
+    return <span className="competition-rank-plain">{rank}</span>;
+  }
+
+  return (
+    <span className={`competition-rank-badge rank-${rank}`}>
+      <span className="competition-rank-badge-number">{rank}</span>
+      {rank === 1 ? <StarFilled /> : <TrophyFilled />}
+    </span>
+  );
+}
+
 export default function RequirementsPage() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
+  const [leaderboardRows, setLeaderboardRows] = useState<CompetitionLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
   const [activeTrack, setActiveTrack] = useState<LeaderboardTrack>("all");
 
   useEffect(() => {
@@ -59,15 +61,50 @@ export default function RequirementsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const leaderboardRows = useMemo(() => {
-    const filtered = activeTrack === "all" ? heroRows : heroRows.filter((row) => row.track === activeTrack);
-    const sorted = [...filtered].sort((a, b) => {
-      return b.avgPassRate - a.avgPassRate || b.totalTotalM - a.totalTotalM;
-    });
-    return sorted.map((row, index) => ({ ...row, rank: index + 1 }));
+  useEffect(() => {
+    setLeaderboardLoading(true);
+    api
+      .getCompetitionLeaderboard(activeTrack)
+      .then(setLeaderboardRows)
+      .catch(() => setLeaderboardRows([]))
+      .finally(() => setLeaderboardLoading(false));
   }, [activeTrack]);
 
-  const leader = leaderboardRows[0] ?? null;
+  const rankedLeaderboardRows = useMemo(
+    () => leaderboardRows.map((row, index) => ({ ...row, rank: index + 1 })),
+    [leaderboardRows],
+  );
+  const leader = rankedLeaderboardRows[0] ?? null;
+  const displayRows = useMemo(() => {
+    const rows = rankedLeaderboardRows.length === 0
+      ? []
+      : [{
+        username: "-",
+        model_name: null,
+        track: activeTrack,
+        avg_pass_rate: NaN,
+        total_token_millions: null,
+        avg_runtime_seconds: null,
+        submission_count: 0,
+        rank: 1,
+      }, ...rankedLeaderboardRows.slice(1)];
+    const targetRowCount = Math.max(5, rows.length || 5);
+    const nextRankStart = rows.length + 1;
+    for (let rank = nextRankStart; rank <= targetRowCount; rank += 1) {
+      rows.push({
+        username: "-",
+        model_name: null,
+        track: activeTrack,
+        avg_pass_rate: NaN,
+        total_token_millions: null,
+        avg_runtime_seconds: null,
+        submission_count: 0,
+        rank,
+      });
+    }
+    return rows;
+  }, [activeTrack, rankedLeaderboardRows]);
+  const competitionsViewAllHref = competitions[0] ? `/competitions/${competitions[0].id}` : "/competitions/web";
 
   return (
     <div className="page library-page competition-home-page">
@@ -79,12 +116,29 @@ export default function RequirementsPage() {
         </div>
 
         <div className="competition-home-grid">
-          <section className="competition-heroes-panel leaderboard-card leaderboard-card-clean">
+          <section className="competition-heroes-panel">
             <div className="competition-heroes-header compact">
-              <div className="competition-heroes-heading-block">
-                <div className="competition-panel-kicker">
-                  <TrophyFilled /> Hero Board
+              <div className="competition-panel-kicker">
+                <TrophyFilled /> Hero Board
+              </div>
+            </div>
+
+            <div className="competition-hero-backdrop competition-hero-backdrop-top" aria-hidden="true">
+              <div className="competition-empty-confetti dot-one" />
+              <div className="competition-empty-confetti dot-two" />
+              <div className="competition-empty-podium">
+                <div className="competition-empty-podium-step left" />
+                <div className="competition-empty-podium-step center">
+                  <StarFilled />
                 </div>
+                <div className="competition-empty-podium-step right" />
+              </div>
+              <div className="competition-empty-laurel left">*</div>
+              <div className="competition-empty-laurel right">*</div>
+            </div>
+
+            <div className="competition-heroes-controls compact">
+              <div className="competition-heroes-heading-block">
                 <div className="leaderboard-segmented" role="tablist" aria-label="Leaderboard track filter">
                   {[
                     { key: "all", label: "All" },
@@ -106,80 +160,84 @@ export default function RequirementsPage() {
               <div className="competition-hero-summary compact">
                 <span className="summary-label">Current leader</span>
                 <strong>{leader?.username ?? "-"}</strong>
-                <span className="competition-hero-summary-model">{leader?.model ?? "No data"}</span>
+                <span className="competition-hero-summary-model">
+                  {leader?.model_name ?? "No data yet"} {leader ? null : <RightOutlined />}
+                </span>
               </div>
             </div>
 
-            <div className="leaderboard-table-wrap competition-heroes-table-wrap">
-              {leaderboardRows.length === 0 ? (
-                <div className="empty-state competition-bank-state">No leaderboard data yet.</div>
-              ) : (
-                <table className="leaderboard-table leaderboard-table-clean competition-heroes-table compact">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "84px" }}>Rank</th>
-                      <th style={{ width: "168px" }}>User</th>
-                      <th style={{ width: "240px" }}>Model</th>
-                      <th style={{ width: "156px" }}>Avg. Pass Rate</th>
-                      <th style={{ width: "168px" }}>TOTAL TOKEN</th>
-                      <th style={{ width: "176px" }}>RUNTIME</th>
+            <div className="competition-home-table-shell">
+              <table className="competition-home-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "96px" }}>Rank</th>
+                    <th style={{ width: "168px" }}>User</th>
+                    <th style={{ width: "240px" }}>Model</th>
+                    <th style={{ width: "156px" }}>
+                      <span className="competition-table-heading-inline">
+                        Avg. Pass Rate <InfoCircleOutlined />
+                      </span>
+                    </th>
+                    <th style={{ width: "168px" }}>Total Token</th>
+                    <th style={{ width: "176px" }}>Runtime</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboardLoading ? (
+                    <tr className="competition-home-table-empty-row">
+                      <td colSpan={6}>Loading leaderboard...</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboardRows.map((row) => (
-                      <tr key={`${row.username}-${row.model}`} className={row.rank === 1 ? "is-top" : ""}>
-                        <td className="leaderboard-rank-cell">
-                          {row.rank <= 3 ? (
-                            <span className={`competition-rank-badge rank-${row.rank}`}>{rankBadges[row.rank - 1]}</span>
-                          ) : (
-                            row.rank
-                          )}
-                        </td>
-                        <td>
-                          <div className="competition-user-cell compact">
-                            <strong>{row.username}</strong>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="leaderboard-model-cell compact">
-                            <span className="model-chip">{row.model}</span>
-                          </div>
-                        </td>
-                        <td>{row.avgPassRate.toFixed(1)}%</td>
-                        <td>{row.totalTotalM.toFixed(1)}M</td>
-                        <td>{formatRuntime(row.runtimeSeconds)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                  ) : displayRows.map((row) => (
+                    <tr
+                      key={`${row.rank}-${row.username}-${row.model_name ?? "none"}`}
+                      className={row.rank === 1 && row.submission_count > 0 ? "is-top" : undefined}
+                    >
+                      <td className="leaderboard-rank-cell">{renderRankDisplay(row.rank)}</td>
+                      <td>
+                        <div className="competition-home-user-cell">
+                          <strong>{row.username}</strong>
+                        </div>
+                      </td>
+                      <td>{row.model_name ?? "-"}</td>
+                      <td>{Number.isFinite(row.avg_pass_rate) ? `${row.avg_pass_rate.toFixed(1)}%` : "-"}</td>
+                      <td>{row.total_token_millions == null ? "-" : `${row.total_token_millions.toFixed(1)}M`}</td>
+                      <td>{row.avg_runtime_seconds == null ? "-" : formatRuntime(row.avg_runtime_seconds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
 
-          <aside className="competition-bank-panel playground-bank">
-            <div className="playground-bank-shell competition-bank-shell-compact">
-              <div className="playground-bank-title">Competition Bank</div>
+          <aside className="competition-bank-panel">
+            <div className="competition-bank-shell">
+              <div className="competition-bank-header">
+                <div className="competition-bank-title">Competition Bank</div>
+                <Link className="competition-bank-view-all" to={competitionsViewAllHref}>
+                  View all <RightOutlined />
+                </Link>
+              </div>
 
               {loading ? (
                 <div className="loading-state competition-bank-state">Loading competitions...</div>
               ) : competitions.length === 0 ? (
                 <div className="empty-state competition-bank-state">No competitions available.</div>
               ) : (
-                <div className="playground-bank-list">
+                <div className="competition-bank-list">
                   {competitions.map((competition) => (
                     <Link
                       key={competition.id}
                       to={`/competitions/${competition.id}`}
-                      className={`playground-bank-item ${competitionAccent(competition.type)}`}
+                      className={`competition-bank-item ${competitionAccent(competition.type)}`}
                     >
-                      <div className="playground-bank-item-copy">
+                      <div className="competition-bank-item-copy">
                         <div className={`playground-bank-badge ${competitionAccent(competition.type)}`}>
                           {competitionTypeLabel(competition.type)}
                         </div>
                         <h2>{competition.title}</h2>
                         <p>{competition.summary}</p>
                       </div>
-                      <div className="playground-bank-meta">
+                      <div className="competition-bank-item-meta">
                         <span>{bankMetaLabel(competition.task_count)}</span>
                         <RightOutlined />
                       </div>

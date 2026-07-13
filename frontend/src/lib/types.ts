@@ -39,6 +39,16 @@ export type CompetitionSummary = {
   is_public: boolean;
 };
 
+export type CompetitionLeaderboardEntry = {
+  username: string;
+  model_name: string | null;
+  track: string;
+  avg_pass_rate: number;
+  total_token_millions: number | null;
+  avg_runtime_seconds: number | null;
+  submission_count: number;
+};
+
 export type CompetitionDetail = CompetitionSummary & {
   downloads: CompetitionTaskDownloadLinks | null;
   tasks: CompetitionTaskSummary[];

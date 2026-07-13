@@ -5,7 +5,15 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.requirement import BenchmarkDetail, BenchmarkSummary, CompetitionDetail, CompetitionSummary, RequirementDetail, RequirementSummary
+from app.schemas.requirement import (
+    BenchmarkDetail,
+    BenchmarkSummary,
+    CompetitionDetail,
+    CompetitionLeaderboardEntry,
+    CompetitionSummary,
+    RequirementDetail,
+    RequirementSummary,
+)
 from app.services.agent_starter_service import AgentStarterService
 from app.services.demo_agent_service import DemoAgentService
 from app.services.requirement_catalog import RequirementCatalogService
@@ -29,6 +37,15 @@ def list_requirements(
 def list_competitions(db: Session = Depends(get_db)) -> list[CompetitionSummary]:
     service = RequirementCatalogService.for_catalog(db, "competition")
     return service.list_competitions()
+
+
+@competition_router.get("/leaderboard", response_model=list[CompetitionLeaderboardEntry])
+def get_competition_leaderboard(
+    track: str = Query(default="all", pattern="^(all|web|mobile|kernel)$"),
+    db: Session = Depends(get_db),
+) -> list[CompetitionLeaderboardEntry]:
+    service = RequirementCatalogService.for_catalog(db, "competition")
+    return service.list_competition_leaderboard(track)
 
 
 @competition_router.get("/{competition_id}", response_model=CompetitionDetail)
