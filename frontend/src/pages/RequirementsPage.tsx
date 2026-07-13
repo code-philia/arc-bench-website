@@ -3,9 +3,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
-import type { CompetitionLeaderboardEntry, CompetitionSummary } from "../lib/types";
+import type { CompetitionSummary } from "../lib/types";
 
 type LeaderboardTrack = "all" | "web" | "mobile" | "kernel";
+
+type PlaceholderLeaderboardRow = {
+  username: string;
+  model_name: string | null;
+  track: LeaderboardTrack;
+  avg_pass_rate: number;
+  total_token_millions: number | null;
+  avg_runtime_seconds: number | null;
+  submission_count: number;
+  rank: number;
+};
 
 function competitionTypeLabel(type: string) {
   if (type === "web") return "WEB";
@@ -48,9 +59,7 @@ function renderRankDisplay(rank: number) {
 
 export default function RequirementsPage() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
-  const [leaderboardRows, setLeaderboardRows] = useState<CompetitionLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
   const [activeTrack, setActiveTrack] = useState<LeaderboardTrack>("all");
 
   useEffect(() => {
@@ -61,24 +70,8 @@ export default function RequirementsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    setLeaderboardLoading(true);
-    api
-      .getCompetitionLeaderboard(activeTrack)
-      .then(setLeaderboardRows)
-      .catch(() => setLeaderboardRows([]))
-      .finally(() => setLeaderboardLoading(false));
-  }, [activeTrack]);
-
-  const rankedLeaderboardRows = useMemo(
-    () => leaderboardRows.map((row, index) => ({ ...row, rank: index + 1 })),
-    [leaderboardRows],
-  );
-  const leader = rankedLeaderboardRows[0] ?? null;
   const displayRows = useMemo(() => {
-    const rows = rankedLeaderboardRows.length === 0
-      ? []
-      : [{
+    const rows: PlaceholderLeaderboardRow[] = [{
         username: "-",
         model_name: null,
         track: activeTrack,
@@ -87,8 +80,8 @@ export default function RequirementsPage() {
         avg_runtime_seconds: null,
         submission_count: 0,
         rank: 1,
-      }, ...rankedLeaderboardRows.slice(1)];
-    const targetRowCount = Math.max(5, rows.length || 5);
+      }];
+    const targetRowCount = 5;
     const nextRankStart = rows.length + 1;
     for (let rank = nextRankStart; rank <= targetRowCount; rank += 1) {
       rows.push({
@@ -103,7 +96,7 @@ export default function RequirementsPage() {
       });
     }
     return rows;
-  }, [activeTrack, rankedLeaderboardRows]);
+  }, [activeTrack]);
   const competitionsViewAllHref = competitions[0] ? `/competitions/${competitions[0].id}` : "/competitions/web";
 
   return (
@@ -159,9 +152,9 @@ export default function RequirementsPage() {
               </div>
               <div className="competition-hero-summary compact">
                 <span className="summary-label">Current leader</span>
-                <strong>{leader?.username ?? "-"}</strong>
+                <strong>-</strong>
                 <span className="competition-hero-summary-model">
-                  {leader?.model_name ?? "No data yet"} {leader ? null : <RightOutlined />}
+                  No data yet <RightOutlined />
                 </span>
               </div>
             </div>
@@ -183,14 +176,9 @@ export default function RequirementsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaderboardLoading ? (
-                    <tr className="competition-home-table-empty-row">
-                      <td colSpan={6}>Loading leaderboard...</td>
-                    </tr>
-                  ) : displayRows.map((row) => (
+                  {displayRows.map((row) => (
                     <tr
                       key={`${row.rank}-${row.username}-${row.model_name ?? "none"}`}
-                      className={row.rank === 1 && row.submission_count > 0 ? "is-top" : undefined}
                     >
                       <td className="leaderboard-rank-cell">{renderRankDisplay(row.rank)}</td>
                       <td>
