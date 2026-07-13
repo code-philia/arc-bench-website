@@ -42,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "playground/create-task", element: <CreateTaskPage /> },
       { path: "playground/my-tasks", element: <MyTasksPage /> },
       { path: "playground/my-tasks/:taskId", element: <MyTaskDetailPage /> },
+      { path: "playground/my-tasks/:taskId/edit", element: <CreateTaskPage /> },
       { path: "research", element: <ResearchPage /> },
     ],
   },

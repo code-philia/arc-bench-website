@@ -1,6 +1,6 @@
-import { DownloadOutlined, FileTextOutlined } from "@ant-design/icons";
+import { DownloadOutlined, EditOutlined, FileTextOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import { api } from "../lib/api";
@@ -75,6 +75,9 @@ export default function MyTaskDetailPage() {
             </div>
             <div className="submission-subsection">
               <div className="submission-subsection-title">Documents</div>
+              <Link className="btn-outline create-task-side-link" to={`/playground/my-tasks/${task.id}/edit`}>
+                <EditOutlined /> Continue Editing
+              </Link>
               <a className="btn-outline create-task-side-link" href={`/api/my-tasks/${task.id}/document?kind=yaml`}>
                 <DownloadOutlined /> Download YAML
               </a>

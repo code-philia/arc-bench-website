@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.user_task import UserTask
-from app.schemas.user_task import UserTaskCreateRequest, UserTaskDetail, UserTaskDraftResponse, UserTaskDraftSaveRequest, UserTaskSummary
+from app.schemas.user_task import (
+    UserTaskCreateRequest,
+    UserTaskDetail,
+    UserTaskDraftResponse,
+    UserTaskDraftSaveRequest,
+    UserTaskSummary,
+    UserTaskUpdateRequest,
+)
 
 
 class UserTaskService:
@@ -74,6 +81,17 @@ class UserTaskService:
         target_path.write_bytes(content)
         return target_path.name
 
+    def save_task_reference(self, user: User, task_id: str, filename: str, content: bytes) -> str:
+        safe_name = self._sanitize_filename(filename)
+        if not safe_name:
+            raise ValueError("Uploaded image filename is invalid")
+        task = self._get_owned_task(user, task_id)
+        target_dir = Path(task.yaml_path).parent / "reference"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = self._unique_path(target_dir, safe_name)
+        target_path.write_bytes(content)
+        return target_path.name
+
     def create_user_task(self, user: User, payload: UserTaskCreateRequest) -> UserTaskDetail:
         task_id = f"task_{uuid4().hex[:12]}"
         task_dir = self._task_dir(user, task_id)
@@ -100,6 +118,24 @@ class UserTaskService:
             yaml_path=str(yaml_path),
             markdown_path=str(markdown_path),
         )
+        self.db.add(task)
+        self.db.commit()
+        self.db.refresh(task)
+        return self.get_user_task_detail(user, task.id)
+
+    def update_user_task(self, user: User, task_id: str, payload: UserTaskUpdateRequest) -> UserTaskDetail:
+        task = self._get_owned_task(user, task_id)
+
+        Path(task.yaml_path).write_text(payload.yaml_content.strip() + "\n", encoding="utf-8")
+        Path(task.markdown_path).write_text(payload.markdown_content.strip() + "\n", encoding="utf-8")
+
+        task.title = payload.title.strip()
+        task.task_type = payload.task_type
+        task.summary = payload.summary.strip()
+        task.root_requirement_id = payload.root_requirement_id.strip()
+        task.node_count = payload.node_count
+        task.atomic_count = payload.atomic_count
+
         self.db.add(task)
         self.db.commit()
         self.db.refresh(task)

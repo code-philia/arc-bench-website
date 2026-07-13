@@ -109,11 +109,11 @@ export default function MyTasksPage() {
               </thead>
               <tbody>
                 {tasks.map((task) => (
-                  <tr key={task.id} onClick={() => navigate(`/playground/my-tasks/${task.id}`)}>
+                  <tr key={task.id} onClick={() => navigate(`/playground/my-tasks/${task.id}/edit`)}>
                     <td className="task-id">{task.id}</td>
                     <td>
                       <div className="task-name">
-                        <Link className="inline-link" to={`/playground/my-tasks/${task.id}`}>
+                        <Link className="inline-link" to={`/playground/my-tasks/${task.id}/edit`}>
                           {task.title}
                         </Link>
                         <span className="sub">{task.summary || "No summary provided."}</span>

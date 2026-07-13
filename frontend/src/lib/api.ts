@@ -321,6 +321,21 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  updateMyTask(taskId: string, payload: {
+    title: string;
+    task_type: "web" | "mobile" | "kernel" | "mixed";
+    summary: string;
+    root_requirement_id: string;
+    node_count: number;
+    atomic_count: number;
+    yaml_content: string;
+    markdown_content: string;
+  }) {
+    return request<UserTaskDetail>(`/my-tasks/${taskId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
   createMyTaskDraft() {
     return request<UserTaskDraft>("/my-tasks/drafts", {
       method: "POST",
@@ -355,6 +370,14 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     return request<{ filename: string; relative_path: string; url: string }>(`/my-tasks/drafts/${draftId}/reference`, {
+      method: "POST",
+      body: form,
+    });
+  },
+  async uploadMyTaskReference(taskId: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return request<{ filename: string; relative_path: string; url: string }>(`/my-tasks/${taskId}/reference`, {
       method: "POST",
       body: form,
     });
