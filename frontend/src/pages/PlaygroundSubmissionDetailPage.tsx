@@ -31,6 +31,7 @@ import type {
   SubmissionTraceabilityPayload,
   SubmissionEditableTaskPayload,
   SubmissionTaskAssets,
+  UserTaskDetail,
   WorkspaceFileEntry,
 } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
@@ -241,6 +242,24 @@ function resolveRequirementCatalogTree(requirement: RequirementDetail | null): R
     }
   }
   return null;
+}
+
+function adaptUserTaskToRequirementDetail(task: UserTaskDetail): RequirementDetail {
+  return {
+    id: task.id,
+    display_id: task.id,
+    title: task.title,
+    category: task.task_type,
+    summary: task.summary,
+    test_runner: "playwright",
+    total_tests: 0,
+    module_count: task.atomic_count,
+    requirements_markdown: task.markdown_content,
+    requirements_yaml: task.yaml_content,
+    prerequisites_markdown: "",
+    assets_base_url: "",
+    references_base_url: `/api/my-tasks/${task.id}/reference/`,
+  };
 }
 
 function diffLineClassName(line: string) {
@@ -1398,11 +1417,15 @@ function CommitHistoryPanel({
 }
 
 export default function PlaygroundSubmissionDetailPage() {
-  const { taskType: rawTaskType = "web", requirementId = "", submissionId = "" } = useParams();
+  const params = useParams();
+  const rawTaskType = params.taskType ?? "web";
+  const requirementId = params.requirementId ?? params.taskId ?? "";
+  const submissionId = params.submissionId ?? "";
   const location = useLocation();
-  const taskType = normalizeTaskType(rawTaskType);
-  const requirementCatalog: "playground" | "competition" | "benchmark" = location.pathname.startsWith("/submissions/")
+  const requirementCatalog: "playground" | "competition" | "benchmark" | "my_tasks" = location.pathname.startsWith("/submissions/")
     ? "competition"
+    : location.pathname.startsWith("/playground/my-tasks/")
+      ? "my_tasks"
     : location.pathname.startsWith("/playground/arc-bench/")
       ? "benchmark"
       : "playground";
@@ -1474,6 +1497,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const [editableDetailExpanded, setEditableDetailExpanded] = useState(false);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
   const [editableReloadToken, setEditableReloadToken] = useState(0);
+  const taskType = normalizeTaskType(requirement?.category ?? rawTaskType);
   const executionPaused = submission?.status === "PAUSED";
   const executionPausePending = submission?.status === "PAUSE_REQUESTED";
   const hasSubmission = submission !== null;
@@ -1678,7 +1702,9 @@ export default function PlaygroundSubmissionDetailPage() {
     Promise.all([
       refreshSubmissionDetail(),
       refreshSubmissionLogs(),
-      api.getRequirement(requirementId, requirementCatalog),
+      requirementCatalog === "my_tasks"
+        ? api.getMyTask(requirementId).then(adaptUserTaskToRequirementDetail)
+        : api.getRequirement(requirementId, requirementCatalog),
     ])
       .then(([detail, latestLogs, requirementDetail]) => {
         setSubmission(detail);
@@ -2294,7 +2320,9 @@ export default function PlaygroundSubmissionDetailPage() {
                 <Link
                   className="inline-link"
                   to={
-                    requirementCatalog === "benchmark"
+                    requirementCatalog === "my_tasks"
+                      ? `/playground/my-tasks/${requirementId}`
+                      : requirementCatalog === "benchmark"
                       ? `/playground/arc-bench/${taskType}/${requirementId}`
                       : `/playground/task-bank/${taskType}/${requirementId}`
                   }

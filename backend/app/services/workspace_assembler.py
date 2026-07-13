@@ -38,7 +38,12 @@ class WorkspaceAssembler:
         with zipfile.ZipFile(submission.archive_path, "r") as archive:
             archive.extractall(submission_dir)
         self._flatten_single_root(submission_dir)
+        requirement_root = Path(requirement.requirements_path).resolve().parent
         template_source_root = Path(requirement.requirements_path).resolve().parents[2] / "template"
+        if not template_source_root.is_dir():
+            fallback_template_root = requirement_root / "template"
+            if fallback_template_root.is_dir():
+                template_source_root = fallback_template_root
         shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
         shutil.copytree(Path(requirement.assets_path), task_dir / "assets", dirs_exist_ok=True)
         shutil.copytree(Path(requirement.references_path), task_dir / "reference", dirs_exist_ok=True)

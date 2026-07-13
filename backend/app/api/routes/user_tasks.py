@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.services.agent_starter_service import AgentStarterService
 from app.schemas.user_task import (
     UserTaskCreateRequest,
     UserTaskDetail,
@@ -154,6 +155,48 @@ def download_my_task_draft_bundle(
         content,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{task_id}/bundle")
+def download_my_task_bundle(
+    task_id: str,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        content, filename = UserTaskService(db).build_task_bundle(current_user, task_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{task_id}/starter-agent")
+def download_my_task_starter_agent(
+    task_id: str,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        task = UserTaskService(db)._get_owned_task(current_user, task_id)  # noqa: SLF001
+        content, filename = AgentStarterService().build_bundle(task_type=task.task_type)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
     )
 
 

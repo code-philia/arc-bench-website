@@ -253,7 +253,7 @@ export const api = {
     file?: File | null;
     displayName?: string;
     modelName?: string;
-    catalog?: "playground" | "competition" | "benchmark";
+    catalog?: "playground" | "competition" | "benchmark" | "my_tasks";
   }) {
     const form = new FormData();
     form.append("requirement_id", payload.requirementId);
@@ -381,5 +381,19 @@ export const api = {
       method: "POST",
       body: form,
     });
+  },
+  async downloadMyTaskBundle(taskId: string) {
+    const response = await fetch(`${API_BASE}/my-tasks/${taskId}/bundle`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
+      throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get("Content-Disposition")
+      ?.match(/filename=\"?([^"]+)\"?/)
+      ?.[1] ?? `${taskId}.zip`;
+    return new File([blob], filename, { type: "application/zip" });
   },
 };

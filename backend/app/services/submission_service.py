@@ -46,6 +46,7 @@ from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
+from app.services.user_task_service import UserTaskService
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -99,15 +100,18 @@ class SubmissionService:
         if runtime != RuntimeType.PYTHON:
             raise ValueError("Only Python submissions are supported in v1")
 
-        RequirementCatalogService.for_catalog(self.db, catalog).sync_to_db(requirement_id)
-        requirement = self.db.get(Requirement, requirement_id)
+        user = self._get_submission_user(user_id)
+        if catalog == "my_tasks":
+            _task, requirement = UserTaskService(self.db).get_owned_task_for_submission(user, requirement_id)
+        else:
+            RequirementCatalogService.for_catalog(self.db, catalog).sync_to_db(requirement_id)
+            requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")
         if requirement.category != "web":
             raise ValueError("Only web requirements are supported in v1")
 
         submission_id = uuid.uuid4().hex[:12]
-        user = self._get_submission_user(user_id)
         draft_submission = Submission(id=submission_id, user_id=user_id)
         submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
         submission_dir.mkdir(parents=True, exist_ok=True)

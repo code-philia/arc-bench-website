@@ -31,6 +31,8 @@ const navItems: NavItem[] = [
       "/playground/create-task",
       "/playground/my-tasks",
       "/playground/my-tasks/:taskId",
+      "/playground/my-tasks/:taskId/edit",
+      "/playground/my-tasks/:taskId/submissions/:submissionId",
     ],
   },
   {

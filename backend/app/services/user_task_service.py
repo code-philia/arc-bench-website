@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.models.requirement import Requirement
 from app.models.user import User
 from app.models.user_task import UserTask
 from app.schemas.user_task import (
@@ -97,14 +98,15 @@ class UserTaskService:
         task_dir = self._task_dir(user, task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
 
-        yaml_path = task_dir / "task.yaml"
-        markdown_path = task_dir / "task.md"
+        yaml_path = task_dir / "requirements.yaml"
+        markdown_path = task_dir / "requirements.md"
         yaml_content = payload.yaml_content.strip() + "\n"
         markdown_content = payload.markdown_content.strip() + "\n"
 
         yaml_path.write_text(yaml_content, encoding="utf-8")
         markdown_path.write_text(markdown_content, encoding="utf-8")
         self._copy_draft_references(user, payload.draft_id, task_dir)
+        self._ensure_task_runtime_layout(task_dir, payload.task_type, yaml_content, markdown_content)
 
         task = UserTask(
             id=task_id,
@@ -121,13 +123,18 @@ class UserTaskService:
         self.db.add(task)
         self.db.commit()
         self.db.refresh(task)
+        self.sync_task_requirement(user, task.id)
         return self.get_user_task_detail(user, task.id)
 
     def update_user_task(self, user: User, task_id: str, payload: UserTaskUpdateRequest) -> UserTaskDetail:
         task = self._get_owned_task(user, task_id)
 
-        Path(task.yaml_path).write_text(payload.yaml_content.strip() + "\n", encoding="utf-8")
-        Path(task.markdown_path).write_text(payload.markdown_content.strip() + "\n", encoding="utf-8")
+        yaml_content = payload.yaml_content.strip() + "\n"
+        markdown_content = payload.markdown_content.strip() + "\n"
+        task_dir = Path(task.yaml_path).parent
+        Path(task.yaml_path).write_text(yaml_content, encoding="utf-8")
+        Path(task.markdown_path).write_text(markdown_content, encoding="utf-8")
+        self._ensure_task_runtime_layout(task_dir, payload.task_type, yaml_content, markdown_content)
 
         task.title = payload.title.strip()
         task.task_type = payload.task_type
@@ -139,6 +146,7 @@ class UserTaskService:
         self.db.add(task)
         self.db.commit()
         self.db.refresh(task)
+        self.sync_task_requirement(user, task.id)
         return self.get_user_task_detail(user, task.id)
 
     def get_document(self, user: User, task_id: str, kind: str) -> tuple[str, str]:
@@ -178,6 +186,59 @@ class UserTaskService:
                     continue
                 archive.write(file_path, f"{root_dir}/reference/{file_path.relative_to(reference_dir).as_posix()}")
         return buffer.getvalue(), "requirement.zip"
+
+    def build_task_bundle(self, user: User, task_id: str) -> tuple[bytes, str]:
+        task = self._get_owned_task(user, task_id)
+        task_dir = Path(task.yaml_path).parent
+        reference_dir = task_dir / "reference"
+        reference_dir.mkdir(parents=True, exist_ok=True)
+        buffer = BytesIO()
+        root_dir = task.id
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(f"{root_dir}/requirements.yaml", Path(task.yaml_path).read_text(encoding="utf-8"))
+            archive.writestr(f"{root_dir}/requirements.md", Path(task.markdown_path).read_text(encoding="utf-8"))
+            archive.writestr(f"{root_dir}/reference/", "")
+            for file_path in reference_dir.rglob("*"):
+                if not file_path.is_file():
+                    continue
+                archive.write(file_path, f"{root_dir}/reference/{file_path.relative_to(reference_dir).as_posix()}")
+        return buffer.getvalue(), f"{task.id}.zip"
+
+    def sync_task_requirement(self, user: User, task_id: str) -> Requirement:
+        task = self._get_owned_task(user, task_id)
+        task_dir = Path(task.yaml_path).parent
+        self._ensure_task_runtime_layout(
+            task_dir,
+            task.task_type,
+            Path(task.yaml_path).read_text(encoding="utf-8"),
+            Path(task.markdown_path).read_text(encoding="utf-8"),
+        )
+        requirement = self.db.get(Requirement, task.id)
+        if requirement is None:
+            requirement = Requirement(id=task.id)
+            self.db.add(requirement)
+
+        requirement.title = task.title
+        requirement.category = task.task_type
+        requirement.summary = task.summary
+        requirement.test_runner = "playwright"
+        requirement.requirements_path = str(task_dir / "requirements.md")
+        requirement.prerequisites_path = str(task_dir / "prerequisites.md")
+        requirement.tests_path = str(task_dir / "tests")
+        requirement.assets_path = str(task_dir / "assets")
+        requirement.references_path = str(task_dir / "reference")
+        requirement.total_tests = 0
+        requirement.module_count = task.atomic_count
+
+        self.db.add(requirement)
+        self.db.commit()
+        self.db.refresh(requirement)
+        return requirement
+
+    def get_owned_task_for_submission(self, user: User, task_id: str) -> tuple[UserTask, Requirement]:
+        task = self._get_owned_task(user, task_id)
+        requirement = self.sync_task_requirement(user, task_id)
+        return task, requirement
 
     def _get_owned_task(self, user: User, task_id: str) -> UserTask:
         task = self.db.scalar(
@@ -251,3 +312,24 @@ class UserTaskService:
             return
         target_reference_dir = task_dir / "reference"
         shutil.copytree(source_reference_dir, target_reference_dir, dirs_exist_ok=True)
+
+    def _ensure_task_runtime_layout(self, task_dir: Path, task_type: str, yaml_content: str, markdown_content: str) -> None:
+        (task_dir / "requirements.yaml").write_text(yaml_content.strip() + "\n", encoding="utf-8")
+        (task_dir / "requirements.md").write_text(markdown_content.strip() + "\n", encoding="utf-8")
+        (task_dir / "prerequisites.md").write_text("", encoding="utf-8")
+        (task_dir / "assets").mkdir(parents=True, exist_ok=True)
+        (task_dir / "reference").mkdir(parents=True, exist_ok=True)
+        (task_dir / "tests").mkdir(parents=True, exist_ok=True)
+
+        template_dir = task_dir / "template"
+        template_source = self._resolve_template_source(task_type)
+        if template_source is not None and template_source.is_dir():
+            shutil.copytree(template_source, template_dir, dirs_exist_ok=True)
+        else:
+            template_dir.mkdir(parents=True, exist_ok=True)
+
+    def _resolve_template_source(self, task_type: str) -> Path | None:
+        normalized = str(task_type or "").strip().lower()
+        if normalized == "web":
+            return self.settings.playground_templates_root
+        return None

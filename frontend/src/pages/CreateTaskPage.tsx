@@ -1,4 +1,5 @@
 import {
+  ArrowLeftOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   SaveOutlined,
@@ -60,10 +61,24 @@ function collectDependencyOptions(node: RequirementNode, bucket: Array<{ id: str
   node.children.forEach((child) => collectDependencyOptions(child, bucket));
 }
 
+function serializeTaskPayload(payload: {
+  title: string;
+  task_type: "web" | "mobile" | "kernel" | "mixed";
+  summary: string;
+  root_requirement_id: string;
+  node_count: number;
+  atomic_count: number;
+  yaml_content: string;
+  markdown_content: string;
+}) {
+  return JSON.stringify(payload);
+}
+
 export default function CreateTaskPage() {
   const navigate = useNavigate();
   const { taskId } = useParams();
   const { user } = useAuth();
+  const [modal, modalContextHolder] = Modal.useModal();
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveHydratedRef = useRef(false);
@@ -87,6 +102,7 @@ export default function CreateTaskPage() {
     title: "My Custom Task",
     taskType: "web",
   });
+  const savedTaskSignatureRef = useRef<string | null>(null);
 
   const isEditingTask = Boolean(taskId);
   const markdown = useMemo(() => taskTreeToMarkdown(tree), [tree]);
@@ -108,17 +124,29 @@ export default function CreateTaskPage() {
     if (!user) {
       return "Sign in to enable autosave";
     }
+    if (isEditingTask) {
+      if (autosaveState === "saving") {
+        return "Saving task...";
+      }
+      if (autosaveState === "saved") {
+        return "Manual save mode";
+      }
+      if (autosaveState === "error") {
+        return "Save failed";
+      }
+      return "Manual save mode";
+    }
     if (!isEditingTask && !taskDraft) {
       return "Preparing autosave...";
     }
     if (autosaveState === "saving") {
-      return isEditingTask ? "Saving task..." : "Saving draft...";
+      return "Saving draft...";
     }
     if (autosaveState === "saved") {
-      return isEditingTask ? "Task saved" : "Draft saved";
+      return "Draft saved";
     }
     if (autosaveState === "error") {
-      return "Autosave failed";
+      return "Draft autosave failed";
     }
     return "Autosave ready";
   }, [autosaveState, isEditingTask, taskDraft, user]);
@@ -133,11 +161,23 @@ export default function CreateTaskPage() {
     yaml_content: yamlContent,
     markdown_content: markdown,
   });
+  const currentTaskSignature = useMemo(() => serializeTaskPayload(buildTaskPayload()), [
+    createForm.title,
+    createForm.taskType,
+    markdown,
+    stats.atomicCount,
+    stats.nodeCount,
+    tree.description,
+    tree.id,
+    yamlContent,
+  ]);
+  const hasUnsavedTaskChanges = isEditingTask && savedTaskSignatureRef.current !== null && savedTaskSignatureRef.current !== currentTaskSignature;
 
   useEffect(() => {
     if (!user) {
       autosaveHydratedRef.current = false;
       setTaskDraft(null);
+      savedTaskSignatureRef.current = null;
       setAutosaveState("idle");
       return;
     }
@@ -154,17 +194,28 @@ export default function CreateTaskPage() {
         if (cancelled) {
           return;
         }
+        const nextTree = task.yaml_content.trim()
+          ? normalizeRequirementNodeTypes(parseTaskTreeYaml(task.yaml_content))
+          : createDefaultTaskTree();
+        const nextStats = summarizeTaskTree(nextTree);
         setTaskDraft(null);
         setCreateForm({
           title: task.title || "My Custom Task",
           taskType: task.task_type,
         });
-        if (task.yaml_content.trim()) {
-          const nextTree = normalizeRequirementNodeTypes(parseTaskTreeYaml(task.yaml_content));
-          setTree(nextTree);
-          setSelectedNodeId("ROOT");
-          setDetailExpanded(true);
-        }
+        setTree(nextTree);
+        setSelectedNodeId("ROOT");
+        setDetailExpanded(true);
+        savedTaskSignatureRef.current = serializeTaskPayload({
+          title: (task.title || "My Custom Task").trim(),
+          task_type: task.task_type,
+          summary: nextTree.description,
+          root_requirement_id: nextTree.id,
+          node_count: nextStats.nodeCount,
+          atomic_count: nextStats.atomicCount,
+          yaml_content: taskTreeToYaml(nextTree),
+          markdown_content: taskTreeToMarkdown(nextTree),
+        });
         setAutosaveState("saved");
         return;
       }
@@ -237,7 +288,7 @@ export default function CreateTaskPage() {
     if (!user || !autosaveHydratedRef.current) {
       return;
     }
-    if (!isEditingTask && !taskDraft) {
+    if (isEditingTask || !taskDraft) {
       return;
     }
 
@@ -247,16 +298,14 @@ export default function CreateTaskPage() {
 
     autosaveTimerRef.current = window.setTimeout(() => {
       setAutosaveState("saving");
-      const savePromise = taskId
-        ? api.updateMyTask(taskId, buildTaskPayload())
-        : api.saveMyTaskDraft(taskDraft!.draft_id, {
-          title: createForm.title,
-          task_type: createForm.taskType,
-          yaml_content: yamlContent,
-          markdown_content: markdown,
-        }).then((savedDraft) => {
-          setTaskDraft((current) => (current ? { ...current, ...savedDraft } : savedDraft));
-        });
+      const savePromise = api.saveMyTaskDraft(taskDraft.draft_id, {
+        title: createForm.title,
+        task_type: createForm.taskType,
+        yaml_content: yamlContent,
+        markdown_content: markdown,
+      }).then((savedDraft) => {
+        setTaskDraft((current) => (current ? { ...current, ...savedDraft } : savedDraft));
+      });
 
       void savePromise
         .then(() => {
@@ -278,12 +327,7 @@ export default function CreateTaskPage() {
     createForm.title,
     isEditingTask,
     markdown,
-    stats.atomicCount,
-    stats.nodeCount,
     taskDraft?.draft_id,
-    taskId,
-    tree.description,
-    tree.id,
     user,
     yamlContent,
   ]);
@@ -422,12 +466,14 @@ export default function CreateTaskPage() {
 
     try {
       setSavingTask(true);
+      const taskPayload = buildTaskPayload();
       const savedTask = taskId
-        ? await api.updateMyTask(taskId, buildTaskPayload())
+        ? await api.updateMyTask(taskId, taskPayload)
         : await api.createMyTask({
-          ...buildTaskPayload(),
+          ...taskPayload,
           draft_id: taskDraft?.draft_id ?? null,
         });
+      savedTaskSignatureRef.current = serializeTaskPayload(taskPayload);
       setAutosaveState("saved");
       message.success(taskId ? "Task updated." : "Task saved.");
       setIsSaveModalOpen(false);
@@ -439,8 +485,27 @@ export default function CreateTaskPage() {
     }
   };
 
+  const handleReturnToTask = () => {
+    if (!taskId) {
+      return;
+    }
+    const proceed = () => navigate(`/playground/my-tasks/${taskId}`);
+    if (!hasUnsavedTaskChanges) {
+      proceed();
+      return;
+    }
+    modal.confirm({
+      title: "Unsaved changes",
+      content: "This task has unsaved changes. Continue and leave the editor?",
+      okText: "Leave Editor",
+      cancelText: "Stay",
+      onOk: proceed,
+    });
+  };
+
   return (
     <div className="page create-task-page create-task-page-locked">
+      {modalContextHolder}
       <div className="create-task-shell create-task-shell-locked">
         <div className="create-task-topbar">
           <div className="create-task-topbar-copy">
@@ -459,6 +524,11 @@ export default function CreateTaskPage() {
           </div>
           <div className="create-task-topbar-actions">
             <span className="task-node-chip">{autosaveLabel}</span>
+            {isEditingTask ? (
+              <button type="button" className="btn-outline create-task-toolbar-btn" onClick={handleReturnToTask}>
+                <ArrowLeftOutlined /> Back to Task
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn-outline create-task-toolbar-btn"
@@ -474,7 +544,7 @@ export default function CreateTaskPage() {
               <SaveOutlined /> Export Docs
             </button>
             <button type="button" className="btn-primary create-task-toolbar-primary" onClick={() => setIsSaveModalOpen(true)}>
-              Save Task
+              {isEditingTask ? "Save" : "Save Task"}
             </button>
             <input
               ref={uploadRef}
@@ -568,13 +638,18 @@ export default function CreateTaskPage() {
 
       <Modal
         open={isSaveModalOpen}
-        title="Save Task"
-        okText="Save Task"
+        title={isEditingTask ? "Update Task" : "Save Task"}
+        okText={isEditingTask ? "Update Task" : "Save Task"}
         onOk={() => void handleSaveTask()}
         onCancel={() => setIsSaveModalOpen(false)}
         confirmLoading={savingTask}
       >
         <div className="modal-form-stack">
+          {isEditingTask ? (
+            <div className="inline-alert">
+              Update this task with the current requirement tree and metadata.
+            </div>
+          ) : null}
           <label className="field-stack">
             <span>Task Name</span>
             <input
