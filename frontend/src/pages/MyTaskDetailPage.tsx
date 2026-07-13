@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
+import { parseTaskTreeYaml } from "../lib/taskTree";
 import type { SubmissionDetail, SubmissionSummary, UserTaskDetail } from "../lib/types";
 
 function submissionBadgeClass(status: string) {
@@ -92,6 +93,16 @@ export default function MyTaskDetailPage() {
     }
     return "Download Requirement";
   }, [downloadingBundle]);
+  const tocTree = useMemo(() => {
+    if (!task?.yaml_content.trim()) {
+      return null;
+    }
+    try {
+      return parseTaskTreeYaml(task.yaml_content);
+    } catch {
+      return null;
+    }
+  }, [task?.yaml_content]);
 
   const beginPolling = (submissionId: string) => {
     if (pollRef.current) {
@@ -227,6 +238,7 @@ export default function MyTaskDetailPage() {
             markdown={task.markdown_content}
             assetsBaseUrl=""
             referencesBaseUrl={`/api/my-tasks/${task.id}/reference/`}
+            tocTree={tocTree}
             bodyClassName="playground-readme-body"
             tocClassName="playground-readme-toc"
             scrollClassName="playground-readme-scroll"

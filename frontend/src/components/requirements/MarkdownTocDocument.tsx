@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { RequirementNode } from "../../lib/taskTree";
 import MarkdownDocument, { extractHeadings, slugify } from "./MarkdownDocument";
@@ -28,14 +28,14 @@ function joinClassNames(...classNames: Array<string | undefined>) {
 }
 
 function flattenRequirementToc(node: RequirementNode, depth = 0): TocEntry[] {
-  return node.children.flatMap((child) => ([
+  return [
     {
-      id: slugify(`${child.id} ${child.name}`),
-      text: `${child.id} ${child.name}`,
+      id: slugify(`${node.id} ${node.name}`),
+      text: `${node.id} ${node.name}`,
       depth,
     },
-    ...flattenRequirementToc(child, depth + 1),
-  ]));
+    ...node.children.flatMap((child) => flattenRequirementToc(child, depth + 1)),
+  ];
 }
 
 export default function MarkdownTocDocument({
@@ -52,6 +52,7 @@ export default function MarkdownTocDocument({
   scrollDataQuickstartId,
 }: MarkdownTocDocumentProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const resizeOriginRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const tocEntries = useMemo<TocEntry[]>(
     () => (tocTree ? flattenRequirementToc(tocTree) : extractHeadings(markdown).filter((heading) => heading.level >= 2).map((heading) => ({
       id: heading.id,
@@ -61,6 +62,8 @@ export default function MarkdownTocDocument({
     [markdown, tocTree],
   );
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(tocEntries[0]?.id ?? null);
+  const [tocWidth, setTocWidth] = useState(240);
+  const [isResizingToc, setIsResizingToc] = useState(false);
 
   const syncActiveHeading = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -149,8 +152,53 @@ export default function MarkdownTocDocument({
     });
   }, [tocEntries, scrollToHeading]);
 
+  useEffect(() => {
+    if (!isResizingToc) {
+      return;
+    }
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const origin = resizeOriginRef.current;
+      if (!origin) {
+        return;
+      }
+
+      const maxWidth = Math.min(420, Math.round(window.innerWidth * 0.42));
+      const nextWidth = origin.startWidth + (event.clientX - origin.startX);
+      setTocWidth(Math.max(160, Math.min(maxWidth, nextWidth)));
+    };
+
+    const handlePointerUp = () => {
+      resizeOriginRef.current = null;
+      setIsResizingToc(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingToc]);
+
+  const bodyStyle = useMemo<CSSProperties>(
+    () => ({ "--toc-width": `${tocWidth}px` } as CSSProperties),
+    [tocWidth],
+  );
+
   return (
-    <div className={joinClassNames("readme-body", bodyClassName)}>
+    <div
+      className={joinClassNames("readme-body", bodyClassName, isResizingToc ? "resizing" : undefined)}
+      style={bodyStyle}
+    >
       <aside
         className={joinClassNames("toc", tocClassName)}
         data-quickstart-id={tocDataQuickstartId}
@@ -176,6 +224,25 @@ export default function MarkdownTocDocument({
           ))
         )}
       </aside>
+      <div
+        className="toc-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize contents sidebar"
+        onPointerDown={(event) => {
+          if (window.innerWidth <= 820) {
+            return;
+          }
+          event.preventDefault();
+          resizeOriginRef.current = {
+            startX: event.clientX,
+            startWidth: tocWidth,
+          };
+          setIsResizingToc(true);
+        }}
+      >
+        <span className="toc-resizer-handle" />
+      </div>
       <div
         ref={scrollContainerRef}
         className={joinClassNames("markdown-toc-scroll", scrollClassName)}

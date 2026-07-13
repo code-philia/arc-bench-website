@@ -94,6 +94,10 @@ export default function MarkdownDocument({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          h1: ({ children }) => {
+            const text = extractTextContent(Children.toArray(children)).trim();
+            return <h1 id={slugify(text)}>{children}</h1>;
+          },
           h2: ({ children }) => {
             const text = extractTextContent(Children.toArray(children)).trim();
             return <h2 id={slugify(text)}>{children}</h2>;

@@ -2505,12 +2505,13 @@ button {
 }
 
 .toc {
-  width: 220px;
+  width: var(--toc-width, 240px);
   flex-shrink: 0;
   overflow-y: auto;
   padding: 18px 14px;
   border-right: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
+  transition: border-color var(--transition);
 }
 
 .toc-title,
@@ -2521,6 +2522,40 @@ button {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.toc-resizer {
+  position: relative;
+  width: 10px;
+  flex: 0 0 10px;
+  cursor: col-resize;
+  background: var(--bg);
+  touch-action: none;
+}
+
+.toc-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+}
+
+.toc-resizer-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 64px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transform: translate(-50%, -50%);
+  transition: background var(--transition), box-shadow var(--transition);
+}
+
+.toc-resizer:hover .toc-resizer-handle,
+.readme-body.resizing .toc-resizer-handle {
+  background: var(--accent-dim);
+  box-shadow: 0 0 0 4px var(--accent-glow);
 }
 
 .toc-item {
@@ -6015,6 +6050,10 @@ button {
     max-height: 180px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .toc-resizer {
+    display: none;
   }
 
   .readme-content {

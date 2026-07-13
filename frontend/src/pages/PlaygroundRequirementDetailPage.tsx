@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
+import { parseTaskTreeYaml } from "../lib/taskTree";
 import type { RequirementDetail, SubmissionDetail, SubmissionSummary } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
@@ -72,6 +73,16 @@ export default function PlaygroundRequirementDetailPage() {
     }
     return activeDoc === "readme" ? requirement.requirements_markdown : requirement.prerequisites_markdown;
   }, [activeDoc, requirement]);
+  const tocTree = useMemo(() => {
+    if (activeDoc !== "readme" || !requirement?.requirements_yaml?.trim()) {
+      return null;
+    }
+    try {
+      return parseTaskTreeYaml(requirement.requirements_yaml);
+    } catch {
+      return null;
+    }
+  }, [activeDoc, requirement?.requirements_yaml]);
 
   useEffect(() => {
     quickStart.syncStepForRoute();
@@ -284,6 +295,7 @@ export default function PlaygroundRequirementDetailPage() {
             markdown={currentMarkdown}
             assetsBaseUrl={requirement.assets_base_url}
             referencesBaseUrl={requirement.references_base_url}
+            tocTree={tocTree}
             bodyClassName="playground-readme-body"
             tocClassName="playground-readme-toc"
             scrollClassName="quickstart-document-anchor playground-readme-scroll"
