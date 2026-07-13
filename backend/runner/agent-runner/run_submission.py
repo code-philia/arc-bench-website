@@ -39,6 +39,7 @@ PIP_RESUME_RETRIES = 8
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
+NPM_REGISTRY = "https://repo.huaweicloud.com/repository/npm/"
 
 
 def resolve_traceability_db_path() -> Path:
@@ -460,6 +461,14 @@ def run_command(command: list[str], cwd: Path, stdout_file, stderr_file, check: 
     return completed
 
 
+def build_npm_environment() -> dict[str, str]:
+    return {
+        **os.environ,
+        "NPM_CONFIG_REGISTRY": NPM_REGISTRY,
+        "NPM_CONFIG_REPLACE_REGISTRY_HOST": "always",
+    }
+
+
 def read_spec() -> dict:
     if not SPEC_PATH.exists():
         raise RuntimeError("runner-spec.json is missing from the workspace")
@@ -714,8 +723,16 @@ def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
 
 def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str, install_args: list[str] | None = None) -> None:
     append_runner_event(step_key, f"Installing dependencies for {label}")
-    command = ["npm", "install", *(install_args or [])]
-    run_command(command, cwd=project_dir, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label=f"{label}-npm-install")
+    command = ["npm", "install", "--no-audit", "--no-fund", *(install_args or [])]
+    run_command(
+        command,
+        cwd=project_dir,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=True,
+        label=f"{label}-npm-install",
+        env=build_npm_environment(),
+    )
     append_runner_event(step_key, f"Dependencies installed for {label}", status="success")
 
 
@@ -784,7 +801,15 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
     append_runner_event("run_tests", "Installing Playwright dependencies")
-    run_command(["npm", "install"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="tests-npm-install")
+    run_command(
+        ["npm", "install", "--no-audit", "--no-fund"],
+        cwd=TESTS_DIR,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=True,
+        label="tests-npm-install",
+        env=build_npm_environment(),
+    )
     append_runner_event("run_tests", "Playwright environment is ready", status="success")
 
 
