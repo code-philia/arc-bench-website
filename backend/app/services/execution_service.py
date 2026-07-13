@@ -278,10 +278,14 @@ class ExecutionService:
                 ),
             )
             emit_event("start_agent", start_agent_description)
-            debug_log.append("backend", f"Waiting for container to exit with timeout={self.settings.runner_timeout_seconds + 30}s")
-            wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
+            runner_timeout_seconds = int(self.settings.runner_timeout_seconds)
+            wait_deadline = None if runner_timeout_seconds <= 0 else time.time() + runner_timeout_seconds + 30
+            if wait_deadline is None:
+                debug_log.append("backend", "Waiting for container to exit without timeout")
+            else:
+                debug_log.append("backend", f"Waiting for container to exit with timeout={runner_timeout_seconds + 30}s")
             exit_result = None
-            while time.time() < wait_deadline:
+            while wait_deadline is None or time.time() < wait_deadline:
                 latest_events = import_runner_events()
                 if latest_events:
                     refresh_running_steps(latest_events)
