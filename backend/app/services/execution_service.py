@@ -253,6 +253,7 @@ class ExecutionService:
             container = manager.create_container(
                 submission.id,
                 workspace_path,
+                model_name=submission.model_name,
                 github_email=user.github_email,
                 github_username=user.github_username,
                 log_callback=lambda line: debug_log.append("docker-build", line),

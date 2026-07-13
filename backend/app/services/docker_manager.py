@@ -84,15 +84,17 @@ class DockerManager:
         submission_id: str,
         workspace_path: str | Path,
         *,
+        model_name: str | None = None,
         github_email: str | None = None,
         github_username: str | None = None,
         log_callback=None,
     ):
         self.ensure_image(log_callback=log_callback)
-        builtin_openai_base_url = self.settings.builtin_openai_base_url or self.settings.builtin_openai_api_base_url or ""
+        builtin_openai_base_url = self.settings.builtin_openai_base_url or ""
         builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
         builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
         builtin_visual_base_url = self.settings.builtin_visual_base_url or builtin_openai_base_url
+        builtin_model = (model_name or "").strip() or (self.settings.builtin_model or "").strip()
         environment = {
             "SUBMISSION_ID": submission_id,
             "RUNNER_TIMEOUT_SECONDS": str(self.settings.runner_timeout_seconds),
@@ -100,10 +102,12 @@ class DockerManager:
             "OPENAI_API_KEY": builtin_openai_api_key,
             "OPENAI_BASE_URL": builtin_openai_base_url,
             "OPENAI_API_BASE_URL": builtin_openai_base_url,
+            "MODEL": builtin_model,
             "VISUAL_API_KEY": builtin_visual_api_key,
             "VISUAL_BASE_URL": builtin_visual_base_url,
             "VISUAL_MODEL": self.settings.builtin_visual_model or "",
             "ARC_DEBUG": str(self.settings.builtin_debug_mode),
+            "DEBUG_MODE": str(self.settings.builtin_debug_mode),
             "PIP_INDEX_URL": self.settings.pip_index_url,
             "PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
             "ARCBENCH_PIP_INDEX_URL": self.settings.pip_index_url,
@@ -115,15 +119,27 @@ class DockerManager:
             environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
         if github_username and github_username.strip():
             environment["ARC_GIT_USER_NAME"] = github_username.strip()
+        container_kwargs = {
+            "name": f"arcbench-{submission_id}",
+            "detach": True,
+            "environment": environment,
+            "volumes": {str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
+            "mem_limit": self.settings.runner_memory_limit,
+            "nano_cpus": self.settings.runner_cpu_limit * 1_000_000_000,
+            "working_dir": "/workspace",
+        }
+        network_mode = (self.settings.runner_network_mode or "").strip()
+        if network_mode:
+            container_kwargs["network_mode"] = network_mode
+        dns_servers = self.settings.get_runner_dns_servers()
+        if dns_servers:
+            container_kwargs["dns"] = dns_servers
+        extra_hosts = self.settings.get_runner_extra_hosts()
+        if extra_hosts:
+            container_kwargs["extra_hosts"] = extra_hosts
         return self.client.containers.create(
             self.settings.runner_image,
-            name=f"arcbench-{submission_id}",
-            detach=True,
-            environment=environment,
-            volumes={str(Path(workspace_path).resolve()): {"bind": "/workspace", "mode": "rw"}},
-            mem_limit=self.settings.runner_memory_limit,
-            nano_cpus=self.settings.runner_cpu_limit * 1_000_000_000,
-            working_dir="/workspace",
+            **container_kwargs,
         )
 
     @staticmethod

@@ -55,9 +55,13 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("VISUAL_MODEL", "ARCBENCH_BUILTIN_VISUAL_MODEL"),
     )
+    builtin_model: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("MODEL", "ARCBENCH_BUILTIN_MODEL"),
+    )
     builtin_debug_mode: str = Field(
         default="0",
-        validation_alias=AliasChoices("ARC_DEBUG", "ARCBENCH_BUILTIN_DEBUG_MODE"),
+        validation_alias=AliasChoices("ARC_DEBUG", "DEBUG_MODE", "ARCBENCH_BUILTIN_DEBUG_MODE"),
     )
     session_secret: str = "arcbench-dev-session-secret"
 
@@ -65,11 +69,33 @@ class Settings(BaseSettings):
     runner_memory_limit: str = "4g"
     runner_timeout_seconds: int = 1200
     agent_health_timeout_seconds: int = 90
+    runner_network_mode: str | None = None
+    runner_dns_servers: str | None = None
+    runner_extra_hosts: str | None = None
     pip_index_url: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
     pip_trusted_host: str = "pypi.tuna.tsinghua.edu.cn"
     pip_extra_index_url: str | None = None
 
     model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False, extra="ignore")
+
+    @staticmethod
+    def _split_csv(value: str | None) -> list[str]:
+        if value is None:
+            return []
+        return [item.strip() for item in value.split(",") if item.strip()]
+
+    def get_runner_dns_servers(self) -> list[str]:
+        return self._split_csv(self.runner_dns_servers)
+
+    def get_runner_extra_hosts(self) -> dict[str, str]:
+        entries: dict[str, str] = {}
+        for item in self._split_csv(self.runner_extra_hosts):
+            host, separator, target = item.partition(":")
+            normalized_host = host.strip()
+            normalized_target = target.strip()
+            if separator and normalized_host and normalized_target:
+                entries[normalized_host] = normalized_target
+        return entries
 
 
 @lru_cache

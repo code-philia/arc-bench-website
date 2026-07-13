@@ -626,9 +626,28 @@ def build_agent_environment() -> dict[str, str]:
     return env
 
 
+def log_agent_environment_summary(env: dict[str, str]) -> None:
+    redacted_api_key = "set" if str(env.get("OPENAI_API_KEY", "")).strip() else "missing"
+    append_debug_log(
+        "Agent environment summary: "
+        f"OPENAI_API_KEY={redacted_api_key}, "
+        f"OPENAI_BASE_URL={str(env.get('OPENAI_BASE_URL', '')).strip() or '<missing>'}, "
+        f"OPENAI_API_BASE_URL={str(env.get('OPENAI_API_BASE_URL', '')).strip() or '<missing>'}, "
+        f"MODEL={str(env.get('MODEL', '')).strip() or '<missing>'}, "
+        f"ARC_DEBUG={str(env.get('ARC_DEBUG', '')).strip() or '<missing>'}, "
+        f"DEBUG_MODE={str(env.get('DEBUG_MODE', '')).strip() or '<missing>'}, "
+        f"VISUAL_BASE_URL={str(env.get('VISUAL_BASE_URL', '')).strip() or '<missing>'}, "
+        f"VISUAL_MODEL={str(env.get('VISUAL_MODEL', '')).strip() or '<missing>'}, "
+        f"ARCBENCH_RUNNER_EVENTS_PATH={str(env.get('ARCBENCH_RUNNER_EVENTS_PATH', '')).strip() or '<missing>'}, "
+        f"ARCBENCH_TRACEABILITY_DB_PATH={str(env.get('ARCBENCH_TRACEABILITY_DB_PATH', '')).strip() or '<missing>'}"
+    )
+
+
 def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
     entrypoint = resolve_python_agent_entrypoint()
     command = build_generation_agent_command(entrypoint)
+    agent_env = build_agent_environment()
+    log_agent_environment_summary(agent_env)
     append_runner_event("start_agent", "Launching generation agent")
     return run_command(
         command,
@@ -637,7 +656,7 @@ def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProces
         stderr_file=stderr_file,
         check=False,
         label="generation-agent",
-        env=build_agent_environment(),
+        env=agent_env,
     )
 
 
