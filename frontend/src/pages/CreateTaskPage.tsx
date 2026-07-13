@@ -516,11 +516,6 @@ export default function CreateTaskPage() {
               <span className="sep">/</span>
               <span className="current">{createForm.title || tree.name}</span>
             </div>
-            <div className="create-task-topbar-meta">
-              <span className="task-node-chip folder">{createForm.taskType.toUpperCase()}</span>
-              <span className="task-node-chip">{stats.nodeCount} Nodes</span>
-              <span className="task-node-chip atomic">{stats.atomicCount} Atomic</span>
-            </div>
           </div>
           <div className="create-task-topbar-actions">
             <span className="task-node-chip">{autosaveLabel}</span>

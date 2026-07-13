@@ -6136,8 +6136,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.74)),
@@ -6154,7 +6155,7 @@ button {
 .create-task-topbar-copy {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -6169,14 +6170,18 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.create-task-toolbar-btn {
-  min-height: 40px;
-  padding-left: 16px;
-  padding-right: 16px;
+.create-task-toolbar-btn,
+.create-task-toolbar-primary {
+  min-height: 34px;
+  height: 34px;
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: 0.82rem;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -6188,10 +6193,9 @@ button {
 
 .create-task-toolbar-primary {
   width: auto;
-  min-width: 148px;
+  min-width: 110px;
   margin-top: 0;
-  padding-left: 22px;
-  padding-right: 22px;
+  justify-content: center;
 }
 
 .create-task-breadcrumb {
@@ -7635,11 +7639,15 @@ button {
     position: static;
     flex-direction: column;
     align-items: flex-start;
+    gap: 8px;
+    min-height: 0;
+    padding: 10px 12px;
   }
 
   .create-task-topbar-actions {
     width: 100%;
     justify-content: flex-start;
+    gap: 8px;
   }
 
   .create-task-toolbar-primary {
