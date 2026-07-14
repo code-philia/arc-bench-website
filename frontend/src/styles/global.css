@@ -2891,6 +2891,163 @@ button {
   border-radius: var(--radius-sm);
 }
 
+.requirement-attachment-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(0, 126, 101, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 16px rgba(15, 23, 32, 0.06);
+}
+
+.requirement-attachment-card.markdown-variant {
+  width: min(100%, 720px);
+  margin: 18px 0 22px;
+}
+
+.requirement-attachment-preview-shell {
+  background: linear-gradient(180deg, #f8fbfa 0%, #eef5f2 100%);
+}
+
+.requirement-attachment-image,
+.requirement-attachment-video,
+.requirement-attachment-pdf {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  border: 0;
+}
+
+.requirement-attachment-audio-shell,
+.requirement-attachment-generic,
+.requirement-attachment-preview-placeholder,
+.requirement-attachment-text-preview,
+.requirement-attachment-table-scroll {
+  min-height: 120px;
+}
+
+.requirement-attachment-audio-shell,
+.requirement-attachment-generic,
+.requirement-attachment-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  color: #516272;
+}
+
+.requirement-attachment-audio-icon,
+.requirement-attachment-generic-icon {
+  font-size: 30px;
+  color: #0f766e;
+}
+
+.requirement-attachment-generic-subicon {
+  font-size: 18px;
+  color: #6b7280;
+}
+
+.requirement-attachment-audio {
+  width: min(100%, 360px);
+}
+
+.requirement-attachment-text-preview {
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  color: #23313c;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  font-family: "Consolas", "SFMono-Regular", "Liberation Mono", monospace;
+}
+
+.requirement-attachment-table-scroll {
+  overflow: auto;
+  padding: 10px;
+}
+
+.requirement-attachment-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.requirement-attachment-table td {
+  padding: 7px 9px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: #23313c;
+  font-size: 0.77rem;
+  vertical-align: top;
+}
+
+.requirement-attachment-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 12px;
+}
+
+.requirement-attachment-caption-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.requirement-attachment-name {
+  color: #23313c;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.requirement-attachment-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.requirement-attachment-link {
+  flex: 0 0 auto;
+  color: #0f766e;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.requirement-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.requirement-attachment-delete {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.requirement-attachment-delete:disabled {
+  cursor: wait;
+  opacity: 0.66;
+}
+
+.requirement-attachment-link:hover {
+  text-decoration: underline;
+}
+
 .action-panel {
   display: flex;
   flex-direction: column;
@@ -6484,6 +6641,10 @@ button {
     max-width: 100%;
   }
 
+  .requirement-attachment-card.markdown-variant {
+    width: 100%;
+  }
+
   .readonly-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -7763,6 +7924,28 @@ button {
   background: #f0fbf7;
 }
 
+.create-task-detail-drawer .detail-toolbar-like-btn {
+  min-height: 36px;
+  padding: 8px 16px;
+  border-color: var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.87rem;
+  font-weight: 500;
+}
+
+.create-task-detail-drawer .detail-toolbar-like-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-glow);
+}
+
+.create-task-detail-drawer .detail-toolbar-like-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .task-flow-toolbar .icon-tool-btn.active {
   border-color: rgba(0, 160, 124, 0.85);
   background: #00a07c;
@@ -7905,6 +8088,10 @@ button {
   color: #546577;
   font-size: 0.72rem;
   line-height: 1.4;
+}
+
+.requirement-detail-image-grid .requirement-attachment-card {
+  height: 100%;
 }
 
 .scenario-editor {

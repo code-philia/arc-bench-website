@@ -439,7 +439,7 @@ export default function CreateTaskPage() {
     message.success(`Dependency added: ${sourceId} -> ${targetId}`);
   };
 
-  const handleUploadDescriptionImage = async (file: File) => {
+  const handleUploadDescriptionAttachment = async (file: File) => {
     if (taskId) {
       const uploaded = await api.uploadMyTaskReference(taskId, file);
       return uploaded.relative_path;
@@ -452,6 +452,20 @@ export default function CreateTaskPage() {
     }
     const uploaded = await api.uploadMyTaskDraftReference(draft.draft_id, file);
     return uploaded.relative_path;
+  };
+
+  const handleDeleteDescriptionAttachment = async (relativePath: string) => {
+    if (taskId) {
+      await api.deleteMyTaskReference(taskId, relativePath);
+      return;
+    }
+
+    let draft = taskDraft;
+    if (!draft) {
+      draft = await api.createMyTaskDraft();
+      setTaskDraft(draft);
+    }
+    await api.deleteMyTaskDraftReference(draft.draft_id, relativePath);
   };
 
   const handleSaveTask = async () => {
@@ -622,7 +636,8 @@ export default function CreateTaskPage() {
                   onNodeChange={updateSelectedNode}
                   onNodeIdChange={setSelectedNodeId}
                   taskAssets={taskAssets}
-                  onDescriptionImageUpload={handleUploadDescriptionImage}
+                  onDescriptionAttachmentUpload={handleUploadDescriptionAttachment}
+                  onDescriptionAttachmentDelete={handleDeleteDescriptionAttachment}
                   dependencyOptions={dependencyOptions}
                   showTypeField={false}
                 />

@@ -75,10 +75,10 @@ async def upload_my_task_draft_reference(
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Uploaded image filename is required")
+        raise HTTPException(status_code=400, detail="Uploaded attachment filename is required")
     content = await file.read()
     if not content:
-        raise HTTPException(status_code=400, detail="Uploaded image is empty")
+        raise HTTPException(status_code=400, detail="Uploaded attachment is empty")
     try:
         stored_filename = UserTaskService(db).save_draft_reference(current_user, draft_id, file.filename, content)
     except ValueError as exc:
@@ -98,10 +98,10 @@ async def upload_my_task_reference(
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Uploaded image filename is required")
+        raise HTTPException(status_code=400, detail="Uploaded attachment filename is required")
     content = await file.read()
     if not content:
-        raise HTTPException(status_code=400, detail="Uploaded image is empty")
+        raise HTTPException(status_code=400, detail="Uploaded attachment is empty")
     try:
         stored_filename = UserTaskService(db).save_task_reference(current_user, task_id, file.filename, content)
     except LookupError as exc:
@@ -139,6 +139,20 @@ def get_my_task_draft_reference(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(path)
+
+
+@router.delete("/drafts/{draft_id}/reference/{asset_path:path}", status_code=204)
+def delete_my_task_draft_reference(
+    draft_id: str,
+    asset_path: str,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        UserTaskService(db).delete_draft_reference(current_user, draft_id, asset_path)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)
 
 
 @router.get("/drafts/{draft_id}/bundle")
@@ -231,7 +245,21 @@ def get_my_task_reference_asset(
     try:
         target.relative_to(reference_root)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Reference image path is invalid") from exc
+        raise HTTPException(status_code=404, detail="Reference attachment path is invalid") from exc
     if not target.is_file():
-        raise HTTPException(status_code=404, detail="Reference image not found")
+        raise HTTPException(status_code=404, detail="Reference attachment not found")
     return FileResponse(target)
+
+
+@router.delete("/{task_id}/reference/{asset_path:path}", status_code=204)
+def delete_my_task_reference_asset(
+    task_id: str,
+    asset_path: str,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        UserTaskService(db).delete_task_reference(current_user, task_id, asset_path)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)

@@ -75,7 +75,7 @@ class UserTaskService:
     def save_draft_reference(self, user: User, draft_id: str, filename: str, content: bytes) -> str:
         safe_name = self._sanitize_filename(filename)
         if not safe_name:
-            raise ValueError("Uploaded image filename is invalid")
+            raise ValueError("Uploaded attachment filename is invalid")
         target_dir = self._draft_dir(user, draft_id) / "reference"
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = self._unique_path(target_dir, safe_name)
@@ -85,7 +85,7 @@ class UserTaskService:
     def save_task_reference(self, user: User, task_id: str, filename: str, content: bytes) -> str:
         safe_name = self._sanitize_filename(filename)
         if not safe_name:
-            raise ValueError("Uploaded image filename is invalid")
+            raise ValueError("Uploaded attachment filename is invalid")
         task = self._get_owned_task(user, task_id)
         target_dir = Path(task.yaml_path).parent / "reference"
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -166,8 +166,24 @@ class UserTaskService:
         except ValueError as exc:
             raise LookupError("Draft reference path is outside the draft directory") from exc
         if not target.is_file():
-            raise LookupError("Draft reference image not found")
+            raise LookupError("Draft reference attachment not found")
         return target
+
+    def delete_draft_reference(self, user: User, draft_id: str, asset_path: str) -> None:
+        target = self.get_draft_reference_path(user, draft_id, asset_path)
+        target.unlink()
+
+    def delete_task_reference(self, user: User, task_id: str, asset_path: str) -> None:
+        task = self._get_owned_task(user, task_id)
+        reference_root = (Path(task.yaml_path).parent / "reference").resolve()
+        target = (reference_root / asset_path).resolve()
+        try:
+            target.relative_to(reference_root)
+        except ValueError as exc:
+            raise LookupError("Reference attachment path is invalid") from exc
+        if not target.is_file():
+            raise LookupError("Reference attachment not found")
+        target.unlink()
 
     def build_draft_bundle(self, user: User, draft_id: str) -> tuple[bytes, str]:
         draft_dir = self._draft_dir(user, draft_id)

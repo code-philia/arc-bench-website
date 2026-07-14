@@ -2,6 +2,9 @@ import { Children, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import DescriptionAttachmentPreview from "./DescriptionAttachmentPreview";
+import { inferAttachmentKind, looksLikeManagedAttachmentPath } from "../../lib/descriptionMedia";
+
 export type Heading = {
   level: number;
   text: string;
@@ -107,8 +110,35 @@ export default function MarkdownDocument({
             return <h3 id={slugify(text)}>{children}</h3>;
           },
           img: ({ src = "", alt = "" }) => (
-            <img src={src} alt={alt} className="ref-img" loading="lazy" />
+            <DescriptionAttachmentPreview
+              variant="markdown"
+              attachment={{
+                alt,
+                extension: "",
+                kind: "image",
+                rawPath: src,
+                src,
+              }}
+            />
           ),
+          a: ({ href = "", children }) => {
+            const label = extractTextContent(Children.toArray(children)).trim() || href;
+            if (looksLikeManagedAttachmentPath(href) || inferAttachmentKind(href) !== "file") {
+              return (
+                <DescriptionAttachmentPreview
+                  variant="markdown"
+                  attachment={{
+                    alt: label,
+                    extension: "",
+                    kind: inferAttachmentKind(href),
+                    rawPath: href,
+                    src: href,
+                  }}
+                />
+              );
+            }
+            return <a href={href} target="_blank" rel="noreferrer">{children}</a>;
+          },
         }}
       >
         {rewrittenMarkdown}

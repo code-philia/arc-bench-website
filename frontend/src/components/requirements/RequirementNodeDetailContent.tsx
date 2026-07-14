@@ -1,8 +1,9 @@
 import { DeleteOutlined, PaperClipOutlined, PlusOutlined } from "@ant-design/icons";
 import { message } from "antd";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
-import { collectDescriptionImages } from "../../lib/descriptionMedia";
+import DescriptionAttachmentPreview from "./DescriptionAttachmentPreview";
+import { collectDescriptionAttachments, inferAttachmentKind } from "../../lib/descriptionMedia";
 import type { RequirementNode } from "../../lib/taskTree";
 import type { SubmissionTaskAssets } from "../../lib/types";
 
@@ -12,10 +13,34 @@ type RequirementNodeDetailContentProps = {
   onNodeChange?: (updater: (node: RequirementNode) => RequirementNode) => void;
   onNodeIdChange?: (nextId: string) => void;
   taskAssets?: SubmissionTaskAssets | null;
-  onDescriptionImageUpload?: (file: File) => Promise<string>;
+  onDescriptionAttachmentUpload?: (file: File) => Promise<string>;
+  onDescriptionAttachmentDelete?: (relativePath: string) => Promise<void>;
   dependencyOptions?: Array<{ id: string; name: string }>;
   showTypeField?: boolean;
 };
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeAttachmentPath(rawPath: string) {
+  return rawPath.trim().replace(/^\.\//, "");
+}
+
+function removeAttachmentReferences(description: string, rawPath: string) {
+  const normalizedPath = normalizeAttachmentPath(rawPath);
+  const pathPattern = escapeRegExp(normalizedPath);
+  const optionalDotSlashPathPattern = normalizedPath.startsWith("reference/") || normalizedPath.startsWith("assets/")
+    ? `(?:\\./)?${pathPattern}`
+    : pathPattern;
+
+  return description
+    .replace(new RegExp(`!?\\[[^\\]]*\\]\\(${optionalDotSlashPathPattern}\\)`, "g"), "")
+    .replace(new RegExp(`^\\s*${optionalDotSlashPathPattern}\\s*$`, "gm"), "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 export default function RequirementNodeDetailContent({
   node,
@@ -23,15 +48,17 @@ export default function RequirementNodeDetailContent({
   onNodeChange,
   onNodeIdChange,
   taskAssets = null,
-  onDescriptionImageUpload,
+  onDescriptionAttachmentUpload,
+  onDescriptionAttachmentDelete,
   dependencyOptions = [],
   showTypeField = true,
 }: RequirementNodeDetailContentProps) {
   const editable = mode === "editable";
   const descriptionValue = node.description || "No description available.";
-  const descriptionImages = collectDescriptionImages(node.description || "", taskAssets);
+  const descriptionAttachments = collectDescriptionAttachments(node.description || "", taskAssets);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const descriptionImageInputRef = useRef<HTMLInputElement | null>(null);
+  const descriptionAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [deletingAttachmentPath, setDeletingAttachmentPath] = useState<string | null>(null);
   const availableDependencyOptions = dependencyOptions.filter((option) => option.id !== node.id);
 
   const updateNode = (updater: (node: RequirementNode) => RequirementNode) => {
@@ -41,13 +68,15 @@ export default function RequirementNodeDetailContent({
     onNodeChange(updater);
   };
 
-  const insertDescriptionImage = async (file: File) => {
-    if (!editable || !onDescriptionImageUpload) {
+  const insertDescriptionAttachment = async (file: File) => {
+    if (!editable || !onDescriptionAttachmentUpload) {
       return;
     }
     try {
-      const relativePath = await onDescriptionImageUpload(file);
-      const markdownToken = `![image](${relativePath})`;
+      const relativePath = await onDescriptionAttachmentUpload(file);
+      const markdownToken = inferAttachmentKind(file.name) === "image"
+        ? `![${file.name}](${relativePath})`
+        : `[${file.name}](${relativePath})`;
       const textarea = descriptionInputRef.current;
       const currentDescription = node.description || "";
       const selectionStart = textarea?.selectionStart ?? currentDescription.length;
@@ -71,6 +100,30 @@ export default function RequirementNodeDetailContent({
       }, 0);
     } catch (error) {
       message.error((error as Error).message);
+    }
+  };
+
+  const removeDescriptionAttachment = async (rawPath: string) => {
+    if (!editable) {
+      return;
+    }
+    const nextDescription = removeAttachmentReferences(node.description || "", rawPath);
+    const normalizedPath = normalizeAttachmentPath(rawPath);
+    const managedReferencePath = normalizedPath.replace(/^reference\//, "");
+    try {
+      setDeletingAttachmentPath(normalizedPath);
+      if (normalizedPath.startsWith("reference/") && onDescriptionAttachmentDelete) {
+        await onDescriptionAttachmentDelete(managedReferencePath);
+      }
+      updateNode((currentNode) => ({
+        ...currentNode,
+        description: nextDescription,
+      }));
+      message.success("Attachment deleted.");
+    } catch (error) {
+      message.error((error as Error).message);
+    } finally {
+      setDeletingAttachmentPath((current) => (current === normalizedPath ? null : current));
     }
   };
 
@@ -119,15 +172,15 @@ export default function RequirementNodeDetailContent({
           />
         </label>
 
-        {descriptionImages.length > 0 ? (
+        {descriptionAttachments.length > 0 ? (
           <div className="requirement-detail-image-section">
-            <div className="requirement-detail-image-title">Reference Images</div>
+            <div className="requirement-detail-image-title">Reference Attachments</div>
             <div className="requirement-detail-image-grid">
-              {descriptionImages.map((image, index) => (
-                <figure key={`${node.id}-readonly-image-${index}`} className="requirement-detail-image-card">
-                  <img src={image.src} alt={image.alt || `Reference ${index + 1}`} loading="lazy" />
-                  {image.alt ? <figcaption>{image.alt}</figcaption> : null}
-                </figure>
+              {descriptionAttachments.map((attachment, index) => (
+                <DescriptionAttachmentPreview
+                  key={`${node.id}-readonly-attachment-${index}`}
+                  attachment={attachment}
+                />
               ))}
             </div>
           </div>
@@ -248,7 +301,7 @@ export default function RequirementNodeDetailContent({
                   }
                   aria-label={`Remove dependency ${dependencyId}`}
                 >
-                  ×
+                  x
                 </button>
               </span>
             )) : (
@@ -258,26 +311,25 @@ export default function RequirementNodeDetailContent({
         </label>
       </div>
 
-      <label className="field-stack">
+      <div className="field-stack">
         <span>Description</span>
         <div className="requirement-detail-description-actions">
           <button
             type="button"
-            className="mini-btn"
-            onClick={() => descriptionImageInputRef.current?.click()}
-            disabled={!editable || !onDescriptionImageUpload}
+            className="mini-btn detail-toolbar-like-btn"
+            onClick={() => descriptionAttachmentInputRef.current?.click()}
+            disabled={!editable || !onDescriptionAttachmentUpload}
           >
-            <PaperClipOutlined /> Upload Image
+            <PaperClipOutlined /> Upload Attachment
           </button>
           <input
-            ref={descriptionImageInputRef}
+            ref={descriptionAttachmentInputRef}
             className="visually-hidden"
             type="file"
-            accept="image/*"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) {
-                void insertDescriptionImage(file);
+                void insertDescriptionAttachment(file);
               }
               event.currentTarget.value = "";
             }}
@@ -291,17 +343,19 @@ export default function RequirementNodeDetailContent({
           readOnly={!editable}
           onChange={(event) => updateNode((currentNode) => ({ ...currentNode, description: event.target.value }))}
         />
-      </label>
+      </div>
 
-      {descriptionImages.length > 0 ? (
+      {descriptionAttachments.length > 0 ? (
         <div className="requirement-detail-image-section">
-          <div className="requirement-detail-image-title">Reference Images</div>
+          <div className="requirement-detail-image-title">Reference Attachments</div>
           <div className="requirement-detail-image-grid">
-            {descriptionImages.map((image, index) => (
-              <figure key={`${node.id}-editable-image-${index}`} className="requirement-detail-image-card">
-                <img src={image.src} alt={image.alt || `Reference ${index + 1}`} loading="lazy" />
-                {image.alt ? <figcaption>{image.alt}</figcaption> : null}
-              </figure>
+            {descriptionAttachments.map((attachment, index) => (
+              <DescriptionAttachmentPreview
+                key={`${node.id}-editable-attachment-${index}`}
+                attachment={attachment}
+                onDelete={() => void removeDescriptionAttachment(attachment.rawPath)}
+                deleting={deletingAttachmentPath === normalizeAttachmentPath(attachment.rawPath)}
+              />
             ))}
           </div>
         </div>
@@ -313,7 +367,7 @@ export default function RequirementNodeDetailContent({
           {editable ? (
             <button
               type="button"
-              className="mini-btn"
+              className="mini-btn detail-toolbar-like-btn"
               onClick={() =>
                 updateNode((currentNode) => ({
                   ...currentNode,

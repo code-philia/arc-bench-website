@@ -82,6 +82,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function encodePathSegments(path: string) {
+  return path
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 export const api = {
   getCurrentUser() {
     return request<AuthResponse>("/auth/me");
@@ -378,12 +386,22 @@ export const api = {
       body: form,
     });
   },
+  deleteMyTaskDraftReference(draftId: string, assetPath: string) {
+    return request<void>(`/my-tasks/drafts/${draftId}/reference/${encodePathSegments(assetPath)}`, {
+      method: "DELETE",
+    });
+  },
   async uploadMyTaskReference(taskId: string, file: File) {
     const form = new FormData();
     form.append("file", file);
     return request<{ filename: string; relative_path: string; url: string }>(`/my-tasks/${taskId}/reference`, {
       method: "POST",
       body: form,
+    });
+  },
+  deleteMyTaskReference(taskId: string, assetPath: string) {
+    return request<void>(`/my-tasks/${taskId}/reference/${encodePathSegments(assetPath)}`, {
+      method: "DELETE",
     });
   },
   async downloadMyTaskBundle(taskId: string) {
