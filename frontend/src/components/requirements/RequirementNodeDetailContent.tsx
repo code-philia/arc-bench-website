@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 
 import DescriptionAttachmentPreview from "./DescriptionAttachmentPreview";
 import { collectDescriptionAttachments, inferAttachmentKind } from "../../lib/descriptionMedia";
-import type { RequirementNode } from "../../lib/taskTree";
+import { autoStructureNodeFromDescription, type RequirementNode } from "../../lib/taskTree";
 import type { SubmissionTaskAssets } from "../../lib/types";
 
 type RequirementNodeDetailContentProps = {
@@ -342,6 +342,7 @@ export default function RequirementNodeDetailContent({
           value={node.description}
           readOnly={!editable}
           onChange={(event) => updateNode((currentNode) => ({ ...currentNode, description: event.target.value }))}
+          onBlur={(event) => updateNode((currentNode) => autoStructureNodeFromDescription(currentNode, event.target.value))}
         />
       </div>
 

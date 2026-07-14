@@ -795,6 +795,121 @@ export type ReindexedTaskTreeResult = {
   idMap: Record<string, string>;
 };
 
+type DescriptionOutlineNode = {
+  name: string;
+  description: string;
+  children: DescriptionOutlineNode[];
+};
+
+function trimBlankLines(lines: string[]): string[] {
+  const next = [...lines];
+  while (next.length > 0 && !next[0].trim()) {
+    next.shift();
+  }
+  while (next.length > 0 && !next[next.length - 1].trim()) {
+    next.pop();
+  }
+  return next;
+}
+
+function parseDescriptionOutline(description: string): {
+  rootDescription: string;
+  children: DescriptionOutlineNode[];
+} | null {
+  const normalized = description.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const headingMatches = lines
+    .map((line) => /^(#{1,6})\s+(.+?)\s*$/.exec(line))
+    .filter((match): match is RegExpExecArray => Boolean(match));
+
+  if (headingMatches.length === 0) {
+    return null;
+  }
+
+  const highestLevel = headingMatches.reduce((min, match) => Math.min(min, match[1].length), 6);
+  const rootLines: string[] = [];
+  const rootChildren: DescriptionOutlineNode[] = [];
+  const stack: Array<{ level: number; node: DescriptionOutlineNode }> = [];
+
+  for (const line of lines) {
+    const headingMatch = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const name = headingMatch[2].trim();
+      while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+        stack.pop();
+      }
+      const nextNode: DescriptionOutlineNode = {
+        name: name || "Untitled section",
+        description: "",
+        children: [],
+      };
+      if (stack.length === 0 || level === highestLevel) {
+        rootChildren.push(nextNode);
+      } else {
+        stack[stack.length - 1].node.children.push(nextNode);
+      }
+      stack.push({ level, node: nextNode });
+      continue;
+    }
+
+    if (stack.length === 0) {
+      rootLines.push(line);
+      continue;
+    }
+
+    const currentNode = stack[stack.length - 1].node;
+    currentNode.description = currentNode.description
+      ? `${currentNode.description}\n${line}`
+      : line;
+  }
+
+  const normalizeOutlineNode = (node: DescriptionOutlineNode): DescriptionOutlineNode => ({
+    ...node,
+    description: trimBlankLines(node.description.split("\n")).join("\n"),
+    children: node.children.map(normalizeOutlineNode),
+  });
+
+  return {
+    rootDescription: trimBlankLines(rootLines).join("\n"),
+    children: rootChildren.map(normalizeOutlineNode),
+  };
+}
+
+function buildOutlineNodes(parentId: string, outlineChildren: DescriptionOutlineNode[]): RequirementNode[] {
+  return outlineChildren.map((outlineNode, index) => {
+    const nextId = parentId === "ROOT" ? `REQ-${index + 1}` : `${parentId}.${index + 1}`;
+    const children = buildOutlineNodes(nextId, outlineNode.children);
+    return {
+      id: nextId,
+      name: outlineNode.name,
+      type: children.length > 0 ? "FOLDER" : "ATOMIC",
+      description: outlineNode.description,
+      dependencies: [],
+      children,
+      scenarios: [],
+    };
+  });
+}
+
+export function autoStructureNodeFromDescription(node: RequirementNode, nextDescription: string): RequirementNode {
+  const outline = parseDescriptionOutline(nextDescription);
+  if (!outline) {
+    return {
+      ...node,
+      description: nextDescription,
+    };
+  }
+
+  const nextChildren = buildOutlineNodes(node.id, outline.children);
+  return {
+    ...node,
+    description: outline.rootDescription,
+    children: nextChildren,
+    type: nextChildren.length > 0 ? "FOLDER" : node.type,
+  };
+}
+
 function cloneWithReindexedIds(
   node: RequirementNode,
   nextId: string,
