@@ -253,8 +253,6 @@ async def stream_submission_events(
         event_queue = SubmissionEventStream.subscribe(submission_id)
         try:
             yield ": connected\n\n"
-            for event in SubmissionEventStream.snapshot(submission_id):
-                yield SubmissionEventStream.encode_sse(event)
             while True:
                 if await request.is_disconnected():
                     break
