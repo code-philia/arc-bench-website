@@ -6,6 +6,29 @@
 * Python 3.11+: For the backend.
 * Docker: For running the application in a containerized environment.
 
+## Submodule
+
+This repository includes `agentic-requirement-compiler` as a git submodule.
+
+If you clone this repository from scratch, initialize the submodule with:
+
+```bash
+git submodule update --init --recursive
+```
+
+To update `agentic-requirement-compiler` to the latest `main` from its remote repository:
+
+```bash
+git submodule update --remote agentic-requirement-compiler
+```
+
+After updating the submodule, commit the new submodule pointer in this repository:
+
+```bash
+git add .gitmodules agentic-requirement-compiler
+git commit -m "Update agentic-requirement-compiler submodule"
+```
+
 ## 1. Compile the Frontend
 
 Open another terminal and run:
