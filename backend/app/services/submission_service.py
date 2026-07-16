@@ -96,6 +96,7 @@ class SubmissionService:
         catalog: str = "playground",
         display_name: str | None = None,
         model_name: str | None = None,
+        agent_source: AgentSourceType = AgentSourceType.UPLOAD,
     ) -> Submission:
         if runtime != RuntimeType.PYTHON:
             raise ValueError("Only Python submissions are supported in v1")
@@ -116,13 +117,18 @@ class SubmissionService:
         submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
         submission_dir.mkdir(parents=True, exist_ok=True)
         archive_path = submission_dir / "agent.zip"
-        if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
-            raise ValueError("Only .zip uploads are supported")
-        with archive_path.open("wb") as output:
-            shutil.copyfileobj(upload.file, output)
+        if agent_source == AgentSourceType.BUILTIN_ARC_AGENT:
+            self._write_builtin_arc_agent_archive(archive_path)
+            original_filename = "builtin-arc-agent.zip"
+            self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Built-in ARC agent package prepared")
+        else:
+            if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
+                raise ValueError("Only .zip uploads are supported")
+            with archive_path.open("wb") as output:
+                shutil.copyfileobj(upload.file, output)
+            original_filename = upload.filename
+            self.append_event_log_for_identity(submission_id, user_id, user.username, f"[ok] Uploaded archive saved to {archive_path.name}")
         self._validate_python_agent_archive(archive_path)
-        original_filename = upload.filename
-        self.append_event_log_for_identity(submission_id, user_id, user.username, f"[ok] Uploaded archive saved to {archive_path.name}")
         self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Archive validation passed")
 
         normalized_display_name = self._normalize_display_name(display_name)
@@ -135,7 +141,7 @@ class SubmissionService:
             model_name=normalized_model_name,
             requirement_id=requirement_id,
             runtime=runtime.value,
-            agent_source=AgentSourceType.UPLOAD.value,
+            agent_source=agent_source.value,
             original_filename=original_filename,
             archive_path=str(archive_path),
             status=SubmissionStatus.PENDING.value,
@@ -769,6 +775,46 @@ class SubmissionService:
         missing = [name for name in ("main.py", "requirements.txt") if name not in root_files]
         if missing:
             raise ValueError(f"Uploaded zip must include {', '.join(missing)} at the archive root")
+
+    def _write_builtin_arc_agent_archive(self, archive_path: Path) -> None:
+        source_dir = Path(self.settings.builtin_arc_agent_source_dir).resolve()
+        if not source_dir.is_dir():
+            raise ValueError(f"Built-in ARC agent source directory not found: {source_dir}")
+
+        required_files = ["main.py", "requirements.txt"]
+        missing = [name for name in required_files if not (source_dir / name).is_file()]
+        if missing:
+            raise ValueError(f"Built-in ARC agent source is missing {', '.join(missing)}")
+
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(source_dir.rglob("*")):
+                if path.is_dir():
+                    continue
+                relative_path = path.relative_to(source_dir)
+                if self._should_exclude_builtin_arc_agent_path(relative_path):
+                    continue
+                archive.write(path, relative_path.as_posix())
+
+    @staticmethod
+    def _should_exclude_builtin_arc_agent_path(relative_path: Path) -> bool:
+        excluded_parts = {
+            ".arc",
+            ".git",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".venv",
+            "__pycache__",
+            "build",
+            "dist",
+            "env",
+            "node_modules",
+            "venv",
+        }
+        excluded_files = {".DS_Store", ".env", ".env.local", ".env.development", ".env.production"}
+        parts = set(relative_path.parts)
+        return bool(parts & excluded_parts) or relative_path.name in excluded_files or relative_path.suffix == ".pyc"
 
     def list_submissions(self, user_id: str, requirement_id: str | None = None) -> list[SubmissionSummary]:
         query = select(Submission).where(Submission.user_id == user_id).order_by(desc(Submission.created_at))

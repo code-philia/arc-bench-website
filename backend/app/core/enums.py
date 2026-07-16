@@ -8,6 +8,7 @@ class RuntimeType(str, Enum):
 
 class AgentSourceType(str, Enum):
     UPLOAD = "upload"
+    BUILTIN_ARC_AGENT = "builtin_arc_agent"
 
 
 class SubmissionStatus(str, Enum):

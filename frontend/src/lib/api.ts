@@ -263,6 +263,7 @@ export const api = {
     requirementId: string;
     runtime: string;
     file?: File | null;
+    agentSource?: "upload" | "builtin_arc_agent";
     displayName?: string;
     modelName?: string;
     catalog?: "playground" | "competition" | "benchmark" | "my_tasks";
@@ -271,6 +272,7 @@ export const api = {
     form.append("requirement_id", payload.requirementId);
     form.append("runtime", payload.runtime);
     form.append("catalog", payload.catalog ?? "playground");
+    form.append("agent_source", payload.agentSource ?? "upload");
     if (payload.displayName && payload.displayName.trim()) {
       form.append("display_name", payload.displayName.trim());
     }

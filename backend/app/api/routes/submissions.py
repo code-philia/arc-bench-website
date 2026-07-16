@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_current_user
-from app.core.enums import RuntimeType, SubmissionStatus
+from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.submission import (
@@ -60,6 +60,7 @@ def create_submission(
     catalog: str = Form(default="playground"),
     display_name: str | None = Form(None),
     model_name: str | None = Form(None),
+    agent_source: AgentSourceType = Form(AgentSourceType.UPLOAD),
     file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
@@ -73,6 +74,7 @@ def create_submission(
             catalog=catalog,
             display_name=display_name,
             model_name=model_name,
+            agent_source=agent_source,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

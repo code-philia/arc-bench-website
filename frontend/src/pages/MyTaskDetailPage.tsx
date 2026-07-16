@@ -42,6 +42,7 @@ export default function MyTaskDetailPage() {
   const [activeSubmission, setActiveSubmission] = useState<SubmissionDetail | null>(null);
   const [submissionTab, setSubmissionTab] = useState<"submit" | "history">("submit");
   const [runtime, setRuntime] = useState("python");
+  const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent">("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState("");
@@ -154,7 +155,7 @@ export default function MyTaskDetailPage() {
       message.error(errorMessage);
       return;
     }
-    if (!file) {
+    if (agentSource === "upload" && !file) {
       const errorMessage = "Agent package is required.";
       setUploadError(errorMessage);
       message.error(errorMessage);
@@ -167,7 +168,8 @@ export default function MyTaskDetailPage() {
       const created = await api.createSubmission({
         requirementId: task.id,
         runtime,
-        file,
+        file: agentSource === "upload" ? file : null,
+        agentSource,
         displayName: normalizedDisplayName,
         modelName: normalizedModelName,
         catalog: "my_tasks",
@@ -299,12 +301,38 @@ export default function MyTaskDetailPage() {
               <>
                 <div className="submission-subsection">
                   <div className="submission-subsection-title">Upload Agent</div>
-                  <a
-                    className="btn-outline competition-download-btn submission-download-btn"
-                    href={`/api/my-tasks/${task.id}/starter-agent`}
-                  >
-                    <DownloadOutlined /> Download Agent Template
-                  </a>
+                  <div className="agent-source-selector">
+                    <button
+                      type="button"
+                      className={`agent-source-card${agentSource === "upload" ? " active" : ""}`}
+                      onClick={() => {
+                        setAgentSource("upload");
+                        setUploadError(null);
+                      }}
+                    >
+                      <span className="agent-source-title">Upload .zip</span>
+                      <span className="agent-source-copy">Use your own agent package.</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`agent-source-card${agentSource === "builtin_arc_agent" ? " active" : ""}`}
+                      onClick={() => {
+                        setAgentSource("builtin_arc_agent");
+                        setUploadError(null);
+                      }}
+                    >
+                      <span className="agent-source-title">Built-in ARC Agent</span>
+                      <span className="agent-source-copy">Package the local ARC agent source and submit it.</span>
+                    </button>
+                  </div>
+                  {agentSource === "upload" ? (
+                    <a
+                      className="btn-outline competition-download-btn submission-download-btn"
+                      href={`/api/my-tasks/${task.id}/starter-agent`}
+                    >
+                      <DownloadOutlined /> Download Agent Template
+                    </a>
+                  ) : null}
                   <div className="env-selector">
                     <button className={`env-option${runtime === "python" ? " active" : ""}`} type="button" onClick={() => setRuntime("python")}>
                       Python
@@ -316,22 +344,32 @@ export default function MyTaskDetailPage() {
                       Go
                     </button>
                   </div>
-                  <label className="upload-zone">
-                    <input
-                      className="visually-hidden"
-                      type="file"
-                      accept=".zip"
-                      onChange={(event) => {
-                        setFile(event.target.files?.[0] ?? null);
-                        setUploadError(null);
-                      }}
-                    />
-                    <div className="upload-icon">
-                      <UploadOutlined />
+                  {agentSource === "upload" ? (
+                    <label className="upload-zone">
+                      <input
+                        className="visually-hidden"
+                        type="file"
+                        accept=".zip"
+                        onChange={(event) => {
+                          setFile(event.target.files?.[0] ?? null);
+                          setUploadError(null);
+                        }}
+                      />
+                      <div className="upload-icon">
+                        <UploadOutlined />
+                      </div>
+                      <div className="upload-text">Drop your agent code here</div>
+                      <div className="upload-hint">Python only | root main.py + requirements.txt | SDK events should be written during execution</div>
+                    </label>
+                  ) : (
+                    <div className="builtin-agent-panel">
+                      <div className="file-icon">ARC</div>
+                      <div className="file-info">
+                        <div className="file-name">agentic-requirement-compiler/src</div>
+                        <div className="file-size">Packaged on submit and executed as a standard Python agent.</div>
+                      </div>
                     </div>
-                    <div className="upload-text">Drop your agent code here</div>
-                    <div className="upload-hint">Python only | root main.py + requirements.txt | SDK events should be written during execution</div>
-                  </label>
+                  )}
                   {!user ? (
                     <div className="inline-alert">Login is required before uploading an agent or viewing your submission history.</div>
                   ) : null}
@@ -366,7 +404,7 @@ export default function MyTaskDetailPage() {
                       onChange={(event) => setModelName(event.target.value)}
                     />
                   </div>
-                  {file ? (
+                  {agentSource === "upload" && file ? (
                     <div className="uploaded-file">
                       <div className="file-icon">.zip</div>
                       <div className="file-info">
@@ -382,7 +420,7 @@ export default function MyTaskDetailPage() {
                   <button
                     className="btn-primary"
                     type="button"
-                    disabled={!file || !user || submitting || task.task_type !== "web"}
+                    disabled={(agentSource === "upload" && !file) || !user || submitting || task.task_type !== "web"}
                     onClick={() => void handleUpload()}
                   >
                     {submitting ? "Submitting..." : "Submit"}
