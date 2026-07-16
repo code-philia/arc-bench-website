@@ -401,8 +401,7 @@ export default function PlaygroundRequirementDetailPage() {
                     <div className="builtin-agent-panel">
                       <div className="file-icon">ARC</div>
                       <div className="file-info">
-                        <div className="file-name">agentic-requirement-compiler/src</div>
-                        <div className="file-size">Packaged on submit and executed as a standard Python agent.</div>
+                        <div className="file-name">ARC Agent</div>
                       </div>
                     </div>
                   )}
