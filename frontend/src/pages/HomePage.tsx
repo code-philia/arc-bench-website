@@ -162,6 +162,11 @@ export default function HomePage() {
           </div>
         </section>
       </div>
+      <footer className="home-icp-footer" aria-label="ICP filing">
+        <a href="https://beian.miit.gov.cn" target="_blank" rel="noreferrer">
+          蒙ICP备2026006682号
+        </a>
+      </footer>
     </div>
   );
 }

@@ -513,10 +513,17 @@ button {
 }
 
 .home-layout-redesign {
+  flex: 1;
+  width: min(1320px, calc(100% - 32px));
   padding-top: 44px;
+  padding-bottom: 28px;
+  display: flex;
+  align-items: center;
 }
 
 .home-page-redesign {
+  display: flex;
+  flex-direction: column;
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 10%, transparent) 0, transparent 36%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 30%, var(--bg-deep) 70%) 0%, var(--bg-deep) 100%);
@@ -760,6 +767,26 @@ button {
 .home-surface-stat span {
   color: var(--text-muted);
   font-size: 0.72rem;
+}
+
+.home-icp-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: auto;
+  padding: 20px 16px 22px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.home-icp-footer a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.home-icp-footer a:hover,
+.home-icp-footer a:focus-visible {
+  color: var(--accent);
 }
 
 .home-preview-band {
