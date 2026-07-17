@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-TaskType = Literal["web", "mobile", "kernel", "mixed"]
+TaskType = Literal["web", "mobile", "kernel", "mixed", "cli"]
 
 
 class UserTaskCreateRequest(BaseModel):

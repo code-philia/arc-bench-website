@@ -517,6 +517,8 @@ def resolve_python_agent_entrypoint() -> Path:
 
 def map_task_category_to_app_type(category: str) -> str:
     normalized = str(category or "").strip().lower()
+    if normalized == "cli":
+        return "cli"
     if normalized in {"android", "mobile", "mobileapp", "mobile_app"}:
         return "android"
     return "web"
@@ -1010,6 +1012,75 @@ def parse_playwright_results() -> dict:
     }
 
 
+def run_cli_template(stdout_file, stderr_file) -> dict:
+    app_dir = TEMPLATE_DIR / "app"
+    tests_dir = TEMPLATE_DIR / "tests"
+    if not app_dir.exists():
+        raise RuntimeError("CLI template is incomplete: expected app/ directory")
+
+    cli_env = {
+        **os.environ,
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONPATH": str(TEMPLATE_DIR),
+    }
+    compile_targets = ["app"]
+    if tests_dir.exists():
+        compile_targets.append("tests")
+
+    append_runner_event("run_tests", "Running CLI compile check")
+    compile_result = run_command(
+        ["python3", "-m", "compileall", *compile_targets],
+        cwd=TEMPLATE_DIR,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=False,
+        label="cli-compileall",
+        env=cli_env,
+    )
+    tests = [
+        {
+            "name": "CLI compile check",
+            "status": "passed" if compile_result.returncode == 0 else "failed",
+            "duration_ms": 0,
+            "error": None if compile_result.returncode == 0 else (compile_result.stderr or "compileall failed"),
+        }
+    ]
+
+    unittest_result = None
+    if tests_dir.exists():
+        append_runner_event("run_tests", "Running CLI unittest suite")
+        unittest_result = run_command(
+            ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
+            cwd=TEMPLATE_DIR,
+            stdout_file=stdout_file,
+            stderr_file=stderr_file,
+            check=False,
+            label="cli-unittest",
+            env=cli_env,
+        )
+        tests.append(
+            {
+                "name": "CLI unittest suite",
+                "status": "passed" if unittest_result.returncode == 0 else "failed",
+                "duration_ms": 0,
+                "error": None if unittest_result.returncode == 0 else (unittest_result.stderr or "unittest failed"),
+            }
+        )
+    else:
+        append_runner_event("run_tests", "No CLI tests directory found; compile check is the only runner verification")
+
+    failed = sum(1 for test in tests if test["status"] != "passed")
+    passed = len(tests) - failed
+    score = round((passed / len(tests)) * 100, 1) if tests else 0.0
+    return {
+        "passed": passed,
+        "failed": failed,
+        "score": score,
+        "duration_seconds": 0,
+        "tests": tests,
+    }
+
+
 def stop_process(process: subprocess.Popen | None, label: str) -> None:
     if process is None or process.poll() is not None:
         return
@@ -1114,9 +1185,21 @@ def main() -> int:
             )
 
             task = spec.get("task", {})
-            category = task.get("category", "web")
-            if category != "web":
+            category = str(task.get("category", "web")).strip().lower() or "web"
+            if category not in {"web", "cli"}:
                 raise RuntimeError(f"Unsupported task category inside runner: {category}")
+
+            if category == "cli":
+                append_runner_event("run_tests", "Preparing CLI verification")
+                results = run_cli_template(stdout_file, stderr_file)
+                append_runner_event(
+                    "run_tests",
+                    f"CLI verification parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}",
+                    status="success",
+                )
+                RESULT_PATH.write_text(json.dumps(results, indent=2), encoding="utf-8")
+                append_runner_event("run_tests", "Result file written", status="success")
+                return 0 if results["failed"] == 0 else 1
 
             runtime = run_web_template(stdout_file, stderr_file)
             managed_processes.extend([

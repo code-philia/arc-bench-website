@@ -289,7 +289,7 @@ class UserTaskService:
                     raw_task_type = payload.get("task_type")
                     if isinstance(raw_title, str) and raw_title.strip():
                         title = raw_title.strip()
-                    if raw_task_type in {"web", "mobile", "kernel", "mixed"}:
+                    if raw_task_type in {"web", "mobile", "kernel", "mixed", "cli"}:
                         task_type = raw_task_type
             except json.JSONDecodeError:
                 pass
@@ -348,4 +348,6 @@ class UserTaskService:
         normalized = str(task_type or "").strip().lower()
         if normalized == "web":
             return self.settings.playground_templates_root
+        if normalized == "cli":
+            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
         return None

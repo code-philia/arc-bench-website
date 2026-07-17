@@ -96,12 +96,14 @@ class SubmissionService:
         catalog: str = "playground",
         display_name: str | None = None,
         model_name: str | None = None,
+        task_type: str | None = None,
         agent_source: AgentSourceType = AgentSourceType.UPLOAD,
     ) -> Submission:
         if runtime != RuntimeType.PYTHON:
             raise ValueError("Only Python submissions are supported in v1")
 
         user = self._get_submission_user(user_id)
+        normalized_task_type = self._normalize_task_type_hint(task_type)
         if catalog == "my_tasks":
             _task, requirement = UserTaskService(self.db).get_owned_task_for_submission(user, requirement_id)
         else:
@@ -109,8 +111,12 @@ class SubmissionService:
             requirement = self.db.get(Requirement, requirement_id)
         if not requirement:
             raise LookupError(f"Requirement '{requirement_id}' not found")
-        if requirement.category != "web":
-            raise ValueError("Only web requirements are supported in v1")
+        if normalized_task_type and normalized_task_type != str(requirement.category or "").strip().lower():
+            raise ValueError(
+                f"Task type mismatch: frontend reported '{normalized_task_type}' but backend resolved '{requirement.category}'"
+            )
+        if requirement.category not in {"web", "cli"}:
+            raise ValueError("Only web and cli requirements are supported in v1")
 
         submission_id = uuid.uuid4().hex[:12]
         draft_submission = Submission(id=submission_id, user_id=user_id)
@@ -705,6 +711,17 @@ class SubmissionService:
             return None
         if len(normalized) > 120:
             raise ValueError("Submission name must be 120 characters or fewer")
+        return normalized
+
+    @staticmethod
+    def _normalize_task_type_hint(task_type: str | None) -> str | None:
+        if task_type is None:
+            return None
+        normalized = str(task_type).strip().lower()
+        if not normalized:
+            return None
+        if normalized not in {"web", "mobile", "kernel", "mixed", "cli"}:
+            raise ValueError(f"Unsupported task type: {task_type}")
         return normalized
 
     @staticmethod

@@ -65,7 +65,7 @@ class ExecutionService:
         *,
         reuse_workspace: bool,
     ) -> None:
-        if requirement.category != "web":
+        if requirement.category not in {"web", "cli"}:
             raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
 
         submission = submission_service.get_submission(submission_id)

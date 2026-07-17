@@ -187,6 +187,7 @@ class AgentStarterService:
         archive.writestr("requirements.txt", content)
 
     def _write_readme(self, archive: zipfile.ZipFile, *, task_type: str) -> None:
+        runner_app_type = task_type if task_type in {"web", "android", "cli"} else "web"
         content = textwrap.dedent(
             f"""
             # ARC-Bench Agent Starter
@@ -208,7 +209,7 @@ class AgentStarterService:
             - requirements live under `/workspace/task`
             - output project should be written into `/workspace/template`
             - runner events should be written to `/workspace/artifacts/runner-events.jsonl`
-            - the runner launches `python3 main.py /workspace/task --output-dir /workspace/template --app-type {task_type if task_type in {"web", "android"} else "web"}`
+            - the runner launches `python3 main.py /workspace/task --output-dir /workspace/template --app-type {runner_app_type}`
             - for web tasks, the runner also appends `--web-port 3000`
             """
         ).strip() + "\n"
@@ -235,6 +236,8 @@ class AgentStarterService:
 
     def _resolve_template_root(self, task_type: str) -> Path:
         normalized = str(task_type or "").strip().lower()
+        if normalized == "cli":
+            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
         arc_bench_root = self.settings.requirements_root.parent.parent
         if normalized == "mobile":
             return arc_bench_root / "mobileapp" / "template"

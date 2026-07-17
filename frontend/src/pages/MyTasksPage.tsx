@@ -11,6 +11,7 @@ function typeLabel(type: string) {
   if (type === "mobile") return "Mobile";
   if (type === "kernel") return "Kernel";
   if (type === "mixed") return "Mixed";
+  if (type === "cli") return "CLI";
   return type;
 }
 

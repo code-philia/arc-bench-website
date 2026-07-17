@@ -35,7 +35,7 @@ import type { SubmissionTaskAssets, UserTaskDraft } from "../lib/types";
 
 type CreateTaskFormState = {
   title: string;
-  taskType: "web" | "mobile" | "kernel" | "mixed";
+  taskType: "web" | "mobile" | "kernel" | "mixed" | "cli";
 };
 
 function downloadFile(file: File) {
@@ -63,7 +63,7 @@ function collectDependencyOptions(node: RequirementNode, bucket: Array<{ id: str
 
 function serializeTaskPayload(payload: {
   title: string;
-  task_type: "web" | "mobile" | "kernel" | "mixed";
+  task_type: "web" | "mobile" | "kernel" | "mixed" | "cli";
   summary: string;
   root_requirement_id: string;
   node_count: number;
@@ -682,6 +682,7 @@ export default function CreateTaskPage() {
               <option value="mobile">Mobile</option>
               <option value="kernel">Kernel</option>
               <option value="mixed">Mixed</option>
+              <option value="cli">CLI</option>
             </select>
           </label>
         </div>

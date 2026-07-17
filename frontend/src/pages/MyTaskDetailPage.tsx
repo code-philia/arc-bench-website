@@ -135,12 +135,6 @@ export default function MyTaskDetailPage() {
       navigate("/login", { state: { from: `/playground/my-tasks/${task.id}` } });
       return;
     }
-    if (task.task_type !== "web") {
-      const errorMessage = "Only web custom tasks can be submitted in the current runner.";
-      setUploadError(errorMessage);
-      message.error(errorMessage);
-      return;
-    }
     const normalizedDisplayName = displayName.trim();
     const normalizedModelName = modelName.trim();
     if (!normalizedDisplayName) {
@@ -170,6 +164,7 @@ export default function MyTaskDetailPage() {
         runtime,
         file: agentSource === "upload" ? file : null,
         agentSource,
+        taskType: task.task_type,
         displayName: normalizedDisplayName,
         modelName: normalizedModelName,
         catalog: "my_tasks",
@@ -372,9 +367,6 @@ export default function MyTaskDetailPage() {
                   {!user ? (
                     <div className="inline-alert">Login is required before uploading an agent or viewing your submission history.</div>
                   ) : null}
-                  {task.task_type !== "web" ? (
-                    <div className="inline-alert">Current runner only supports web custom tasks.</div>
-                  ) : null}
                   <div className="submission-name-field">
                     <label className="field-label" htmlFor="my-task-submission-name">
                       Submission Name
@@ -419,7 +411,7 @@ export default function MyTaskDetailPage() {
                   <button
                     className="btn-primary"
                     type="button"
-                    disabled={(agentSource === "upload" && !file) || !user || submitting || task.task_type !== "web"}
+                    disabled={(agentSource === "upload" && !file) || !user || submitting}
                     onClick={() => void handleUpload()}
                   >
                     {submitting ? "Submitting..." : "Submit"}

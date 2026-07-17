@@ -26,7 +26,7 @@ function resultSummary(submission: SubmissionDetail) {
 }
 
 function normalizeTaskType(value: string) {
-  if (value === "web" || value === "mobile" || value === "kernel" || value === "mixed") {
+  if (value === "web" || value === "mobile" || value === "kernel" || value === "mixed" || value === "cli") {
     return value;
   }
   return "web";
@@ -36,6 +36,7 @@ function taskTypeLabel(value: string) {
   if (value === "web") return "Web Applications";
   if (value === "mobile") return "Mobile Applications";
   if (value === "kernel") return "Kernel Operators";
+  if (value === "cli") return "CLI Tasks";
   return "Mixed Tasks";
 }
 

@@ -264,6 +264,7 @@ export const api = {
     runtime: string;
     file?: File | null;
     agentSource?: "upload" | "builtin_arc_agent";
+    taskType?: "web" | "mobile" | "kernel" | "mixed" | "cli";
     displayName?: string;
     modelName?: string;
     catalog?: "playground" | "competition" | "benchmark" | "my_tasks";
@@ -273,6 +274,9 @@ export const api = {
     form.append("runtime", payload.runtime);
     form.append("catalog", payload.catalog ?? "playground");
     form.append("agent_source", payload.agentSource ?? "upload");
+    if (payload.taskType) {
+      form.append("task_type", payload.taskType);
+    }
     if (payload.displayName && payload.displayName.trim()) {
       form.append("display_name", payload.displayName.trim());
     }
@@ -321,7 +325,7 @@ export const api = {
   },
   createMyTask(payload: {
     title: string;
-    task_type: "web" | "mobile" | "kernel" | "mixed";
+    task_type: "web" | "mobile" | "kernel" | "mixed" | "cli";
     summary: string;
     root_requirement_id: string;
     node_count: number;
@@ -337,7 +341,7 @@ export const api = {
   },
   updateMyTask(taskId: string, payload: {
     title: string;
-    task_type: "web" | "mobile" | "kernel" | "mixed";
+    task_type: "web" | "mobile" | "kernel" | "mixed" | "cli";
     summary: string;
     root_requirement_id: string;
     node_count: number;
@@ -357,7 +361,7 @@ export const api = {
   },
   saveMyTaskDraft(draftId: string, payload: {
     title: string;
-    task_type: "web" | "mobile" | "kernel" | "mixed";
+    task_type: "web" | "mobile" | "kernel" | "mixed" | "cli";
     yaml_content: string;
     markdown_content: string;
   }) {

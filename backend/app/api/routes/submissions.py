@@ -60,6 +60,7 @@ def create_submission(
     catalog: str = Form(default="playground"),
     display_name: str | None = Form(None),
     model_name: str | None = Form(None),
+    task_type: str | None = Form(None),
     agent_source: AgentSourceType = Form(AgentSourceType.UPLOAD),
     file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
@@ -74,6 +75,7 @@ def create_submission(
             catalog=catalog,
             display_name=display_name,
             model_name=model_name,
+            task_type=task_type,
             agent_source=agent_source,
         )
     except ValueError as exc:

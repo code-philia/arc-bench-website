@@ -255,7 +255,7 @@ export type SubmissionSseEvent = {
 export type UserTaskSummary = {
   id: string;
   title: string;
-  task_type: "web" | "mobile" | "kernel" | "mixed";
+  task_type: "web" | "mobile" | "kernel" | "mixed" | "cli";
   summary: string;
   root_requirement_id: string;
   node_count: number;
@@ -273,7 +273,7 @@ export type UserTaskDraft = {
   draft_id: string;
   references_base_url: string;
   title: string;
-  task_type: "web" | "mobile" | "kernel" | "mixed";
+  task_type: "web" | "mobile" | "kernel" | "mixed" | "cli";
   yaml_content: string;
   markdown_content: string;
 };

@@ -58,7 +58,7 @@ function resultSummary(submission: SubmissionDetail) {
 }
 
 function normalizeTaskType(value: string) {
-  if (value === "web" || value === "mobile" || value === "kernel" || value === "mixed") {
+  if (value === "web" || value === "mobile" || value === "kernel" || value === "mixed" || value === "cli") {
     return value;
   }
   return "web";
@@ -101,7 +101,7 @@ const NODEJS_HIGHLIGHT_PATTERN =
 const JAVA_HIGHLIGHT_PATTERN =
   /(\/\/.*$|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|@\w+|\b(?:package|import|public|private|protected|static|final|class|interface|enum|extends|implements|void|new|return|if|else|for|while|switch|case|break|continue|try|catch|finally|throw|throws|this|super|null|true|false)\b|\b(?:String|Integer|Long|Double|Float|Boolean|List|ArrayList|Map|HashMap|Set|HashSet|Optional|Exception|RuntimeException|Activity|Fragment|Bundle|Intent|View|TextView|RecyclerView)\b|\b\d+(?:\.\d+)?\b|[{}()[\].,;:+\-*/%=&|!<>?]+)/g;
 
-function resolveCodeGrammar(taskType: "web" | "mobile" | "kernel" | "mixed"): CodeGrammar | null {
+function resolveCodeGrammar(taskType: "web" | "mobile" | "kernel" | "mixed" | "cli"): CodeGrammar | null {
   if (taskType === "web") {
     return "nodejs";
   }
@@ -693,7 +693,7 @@ function SubmissionFilePanel({
   emptyMessage: string;
   submissionId: string;
   submission: SubmissionDetail | null;
-  taskType: "web" | "mobile" | "kernel" | "mixed";
+  taskType: "web" | "mobile" | "kernel" | "mixed" | "cli";
   setSource: (source: SubmissionSourcePayload | null) => void;
   refreshCommitHistory: (silent?: boolean) => Promise<SubmissionCommitHistoryPayload>;
   refreshTraceabilityForCurrentView: () => void;
