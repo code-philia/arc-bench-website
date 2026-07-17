@@ -469,6 +469,40 @@ def build_npm_environment() -> dict[str, str]:
     }
 
 
+def log_source_mirror_configuration() -> None:
+    pip_index_url = os.environ.get("ARCBENCH_PIP_INDEX_URL", "").strip() or os.environ.get("PIP_INDEX_URL", "").strip()
+    pip_trusted_host = os.environ.get("ARCBENCH_PIP_TRUSTED_HOST", "").strip() or os.environ.get("PIP_TRUSTED_HOST", "").strip()
+    pip_extra_index_url = os.environ.get("ARCBENCH_PIP_EXTRA_INDEX_URL", "").strip() or os.environ.get("PIP_EXTRA_INDEX_URL", "").strip()
+    npm_env = build_npm_environment()
+    append_debug_log(
+        "Source mirror configuration: "
+        "apt_mirror=https://mirrors.aliyun.com/ubuntu (baked into runner image), "
+        f"npm_registry={str(npm_env.get('NPM_CONFIG_REGISTRY', '')).strip() or '<default>'}, "
+        f"npm_replace_registry_host={str(npm_env.get('NPM_CONFIG_REPLACE_REGISTRY_HOST', '')).strip() or '<default>'}, "
+        f"pip_index_url={pip_index_url or '<default>'}, "
+        f"pip_trusted_host={pip_trusted_host or '<default>'}, "
+        f"pip_extra_index_url={pip_extra_index_url or '<none>'}"
+    )
+
+
+def log_pip_mirror_configuration(pip_env: dict[str, str]) -> None:
+    append_debug_log(
+        "Applying pip mirror configuration: "
+        f"PIP_INDEX_URL={str(pip_env.get('PIP_INDEX_URL', '')).strip() or '<default>'}, "
+        f"PIP_TRUSTED_HOST={str(pip_env.get('PIP_TRUSTED_HOST', '')).strip() or '<default>'}, "
+        f"PIP_EXTRA_INDEX_URL={str(pip_env.get('PIP_EXTRA_INDEX_URL', '')).strip() or '<none>'}, "
+        f"PIP_CACHE_DIR={str(pip_env.get('PIP_CACHE_DIR', '')).strip() or '<none>'}"
+    )
+
+
+def log_npm_mirror_configuration(label: str, env: dict[str, str]) -> None:
+    append_debug_log(
+        f"Applying npm mirror configuration for {label}: "
+        f"NPM_CONFIG_REGISTRY={str(env.get('NPM_CONFIG_REGISTRY', '')).strip() or '<default>'}, "
+        f"NPM_CONFIG_REPLACE_REGISTRY_HOST={str(env.get('NPM_CONFIG_REPLACE_REGISTRY_HOST', '')).strip() or '<default>'}"
+    )
+
+
 def read_spec() -> dict:
     if not SPEC_PATH.exists():
         raise RuntimeError("runner-spec.json is missing from the workspace")
@@ -556,11 +590,15 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
         "PIP_CACHE_DIR": str(PIP_CACHE_DIR),
     }
     pip_index_url = os.environ.get("ARCBENCH_PIP_INDEX_URL", "").strip()
+    pip_trusted_host = os.environ.get("ARCBENCH_PIP_TRUSTED_HOST", "").strip()
     pip_extra_index_url = os.environ.get("ARCBENCH_PIP_EXTRA_INDEX_URL", "").strip()
     if pip_index_url:
         pip_env["PIP_INDEX_URL"] = pip_index_url
+    if pip_trusted_host:
+        pip_env["PIP_TRUSTED_HOST"] = pip_trusted_host
     if pip_extra_index_url:
         pip_env["PIP_EXTRA_INDEX_URL"] = pip_extra_index_url
+    log_pip_mirror_configuration(pip_env)
 
     last_error: subprocess.CalledProcessError | None = None
     for attempt in range(1, PIP_INSTALL_ATTEMPTS + 1):
@@ -724,6 +762,8 @@ def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
 def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str, install_args: list[str] | None = None) -> None:
     append_runner_event(step_key, f"Installing dependencies for {label}")
     command = ["npm", "install", "--no-audit", "--no-fund", *(install_args or [])]
+    npm_env = build_npm_environment()
+    log_npm_mirror_configuration(label, npm_env)
     run_command(
         command,
         cwd=project_dir,
@@ -731,7 +771,7 @@ def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label
         stderr_file=stderr_file,
         check=True,
         label=f"{label}-npm-install",
-        env=build_npm_environment(),
+        env=npm_env,
     )
     append_runner_event(step_key, f"Dependencies installed for {label}", status="success")
 
@@ -801,6 +841,8 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
     append_runner_event("run_tests", "Installing Playwright dependencies")
+    npm_env = build_npm_environment()
+    log_npm_mirror_configuration("playwright tests", npm_env)
     run_command(
         ["npm", "install", "--no-audit", "--no-fund"],
         cwd=TESTS_DIR,
@@ -808,7 +850,7 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
         stderr_file=stderr_file,
         check=True,
         label="tests-npm-install",
-        env=build_npm_environment(),
+        env=npm_env,
     )
     append_runner_event("run_tests", "Playwright environment is ready", status="success")
 
@@ -1042,6 +1084,7 @@ def main() -> int:
         RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
     spec = read_spec()
     append_debug_log(f"Runner started with spec: {spec}")
+    log_source_mirror_configuration()
     if resume_from_checkpoint and runtime_state_restored and restore_traceability_storage_from_workspace():
         append_runner_event(
             "deploy_agent",

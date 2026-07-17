@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
-    runner_timeout_seconds: int = 1200
+    runner_timeout_seconds: int = 0
     agent_health_timeout_seconds: int = 90
     runner_network_mode: str | None = None
     runner_dns_servers: str | None = None

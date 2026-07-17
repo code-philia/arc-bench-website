@@ -111,6 +111,7 @@ class DockerManager:
             "PIP_INDEX_URL": self.settings.pip_index_url,
             "PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
             "ARCBENCH_PIP_INDEX_URL": self.settings.pip_index_url,
+            "ARCBENCH_PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
         }
         if self.settings.pip_extra_index_url:
             environment["PIP_EXTRA_INDEX_URL"] = self.settings.pip_extra_index_url
