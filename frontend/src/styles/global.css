@@ -4484,16 +4484,17 @@ button {
 .traceability-card-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .traceability-card {
-  padding: 10px 12px;
+  position: relative;
+  padding: 7px 9px;
   border: 1px solid var(--border);
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   transition: border-color 0.14s ease, background 0.14s ease;
 }
@@ -4513,15 +4514,24 @@ button {
 
 .traceability-card-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+}
+
+.traceability-card-summary {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .traceability-card-id {
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   font-weight: 800;
   color: var(--text);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .traceability-card-path {
@@ -4533,28 +4543,32 @@ button {
 }
 
 .traceability-card-title {
-  margin-top: 8px;
+  margin-top: 2px;
   color: var(--text);
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.4;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .traceability-chip-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .traceability-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 22px;
-  padding: 0 7px;
-  font-size: 0.7rem;
+  min-height: 18px;
+  padding: 0 5px;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   border: 1px solid transparent;
@@ -4627,6 +4641,57 @@ button {
   color: var(--text);
   font-size: 0.84rem;
   line-height: 1.55;
+}
+
+.traceability-floating-tooltip {
+  position: fixed;
+  z-index: 1200;
+  display: grid;
+  width: min(360px, 72vw);
+  max-height: 320px;
+  gap: 6px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 96%, white);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--bg-deep) 18%, transparent);
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow: auto;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.traceability-hover-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.traceability-hover-row span {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.traceability-hover-row strong {
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.traceability-hover-description {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
 }
 
 .traceability-meta-grid {

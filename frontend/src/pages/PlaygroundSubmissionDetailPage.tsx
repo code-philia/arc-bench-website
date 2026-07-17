@@ -1,5 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { DownOutlined, MinusOutlined, PlusOutlined, RadarChartOutlined, UpOutlined } from "@ant-design/icons";
+import type { FocusEvent as ReactFocusEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
@@ -83,6 +85,20 @@ function parsePositiveLineNumber(value: string | number | null | undefined) {
 function formatTraceabilitySourceLocation(filePath: string, firstLine: string | null) {
   const lineNumber = parsePositiveLineNumber(firstLine);
   return lineNumber ? `${filePath}:${lineNumber}` : filePath;
+}
+
+function traceabilityFileName(filePath: string) {
+  const segments = filePath.split(/[\\/]/);
+  return segments[segments.length - 1] || filePath;
+}
+
+function TraceabilityDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="traceability-hover-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 function codeLines(content: string) {
@@ -413,6 +429,25 @@ function TraceabilityPanel({
 }) {
   const selectedCardRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const [hoverTooltip, setHoverTooltip] = useState<{ x: number; y: number; content: ReactNode } | null>(null);
+
+  const showTraceabilityTooltip = (event: ReactFocusEvent<HTMLElement> | ReactMouseEvent<HTMLElement>, content: ReactNode) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 360;
+    const gap = 10;
+    const margin = 12;
+    const placeLeft = rect.right + gap + tooltipWidth > window.innerWidth - margin;
+    const x = placeLeft
+      ? Math.max(margin, rect.left - tooltipWidth - gap)
+      : rect.right + gap;
+    const y = Math.min(
+      Math.max(rect.top + (rect.height / 2), 170),
+      Math.max(170, window.innerHeight - 170),
+    );
+    setHoverTooltip({ x, y, content });
+  };
+
+  const hideTraceabilityTooltip = () => setHoverTooltip(null);
 
   useEffect(() => {
     const item = selectedCardRef.current;
@@ -450,7 +485,7 @@ function TraceabilityPanel({
   }
 
   return (
-    <div className="traceability-panel" ref={panelRef}>
+    <div className="traceability-panel" ref={panelRef} onScroll={hideTraceabilityTooltip}>
       <div className="traceability-panel-header">
         <div className="traceability-panel-kicker">Selected Requirement</div>
         <div className="traceability-panel-title">{nodeId}</div>
@@ -466,6 +501,18 @@ function TraceabilityPanel({
           {traceability.interfaces.map((item) => {
             const isCardSelected = selectedItemKind === "interface" && selectedItemId === item.interface_id;
             const displayContent = parseInterfaceDisplayContent(item.content);
+            const interfaceName = displayContent.title || item.interface_id;
+            const tooltipContent = (
+              <>
+                <TraceabilityDetailRow label="Source" value={formatTraceabilitySourceLocation(item.file_path, item.first_line)} />
+                <TraceabilityDetailRow label="Req IDs" value={item.req_ids.length ? item.req_ids.join(", ") : "None"} />
+                <TraceabilityDetailRow label="Callers" value={item.callers.length ? item.callers.join(", ") : "None"} />
+                <TraceabilityDetailRow label="Callees" value={item.callees.length ? item.callees.join(", ") : "None"} />
+                {displayContent.description ? (
+                  <div className="traceability-hover-description">{displayContent.description}</div>
+                ) : null}
+              </>
+            );
             return (
             <article
               key={item.interface_id}
@@ -473,6 +520,10 @@ function TraceabilityPanel({
               className={`traceability-card${isCardSelected ? " selected" : ""}`}
               role="button"
               tabIndex={0}
+              onMouseEnter={(event) => showTraceabilityTooltip(event, tooltipContent)}
+              onMouseLeave={hideTraceabilityTooltip}
+              onFocus={(event) => showTraceabilityTooltip(event, tooltipContent)}
+              onBlur={hideTraceabilityTooltip}
               onClick={() => {
                 onSelectItem("interface", item.interface_id);
                 onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
@@ -486,35 +537,15 @@ function TraceabilityPanel({
               }}
             >
               <div className="traceability-card-top">
-                <div>
+                <div className="traceability-card-summary">
                   <div className="traceability-card-id">{item.interface_id}</div>
-                  <div className="traceability-card-path">{formatTraceabilitySourceLocation(item.file_path, item.first_line)}</div>
-                  {displayContent.title ? (
-                    <div className="traceability-card-title">{displayContent.title}</div>
-                  ) : null}
-                  {displayContent.description ? (
-                    <div className="traceability-card-content">{displayContent.description}</div>
-                  ) : null}
+                  <div className="traceability-card-title">{interfaceName}</div>
                 </div>
                 <div className="traceability-chip-row">
                   <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
                   <span className={`traceability-chip ${item.implemented ? "implemented" : "planned"}`}>
                     {item.implemented ? "Implemented" : "Planned"}
                   </span>
-                </div>
-              </div>
-              <div className="traceability-meta-grid">
-                <div>
-                  <span className="traceability-meta-label">Req IDs</span>
-                  <span>{item.req_ids.join(", ")}</span>
-                </div>
-                <div>
-                  <span className="traceability-meta-label">Callers</span>
-                  <span>{item.callers.length ? item.callers.join(", ") : "None"}</span>
-                </div>
-                <div>
-                  <span className="traceability-meta-label">Callees</span>
-                  <span>{item.callees.length ? item.callees.join(", ") : "None"}</span>
                 </div>
               </div>
             </article>
@@ -531,6 +562,15 @@ function TraceabilityPanel({
         <div className="traceability-card-list">
           {traceability.tests.map((item) => {
             const isCardSelected = selectedItemKind === "test" && selectedItemId === item.test_id;
+            const testName = item.scenario_id || traceabilityFileName(item.file_path) || item.test_id;
+            const tooltipContent = (
+              <>
+                <TraceabilityDetailRow label="Source" value={formatTraceabilitySourceLocation(item.file_path, item.first_line)} />
+                <TraceabilityDetailRow label="Requirement" value={item.req_id} />
+                <TraceabilityDetailRow label="Scenario" value={item.scenario_id ?? "Not linked"} />
+                <TraceabilityDetailRow label="Status" value={item.status ?? "Not executed"} />
+              </>
+            );
             return (
             <article
               key={item.test_id}
@@ -538,6 +578,10 @@ function TraceabilityPanel({
               className={`traceability-card${isCardSelected ? " selected" : ""}`}
               role="button"
               tabIndex={0}
+              onMouseEnter={(event) => showTraceabilityTooltip(event, tooltipContent)}
+              onMouseLeave={hideTraceabilityTooltip}
+              onFocus={(event) => showTraceabilityTooltip(event, tooltipContent)}
+              onBlur={hideTraceabilityTooltip}
               onClick={() => {
                 onSelectItem("test", item.test_id);
                 onOpenSource({ filePath: item.file_path, firstLine: item.first_line });
@@ -551,9 +595,9 @@ function TraceabilityPanel({
               }}
             >
               <div className="traceability-card-top">
-                <div>
+                <div className="traceability-card-summary">
                   <div className="traceability-card-id">{item.test_id}</div>
-                  <div className="traceability-card-path">{formatTraceabilitySourceLocation(item.file_path, item.first_line)}</div>
+                  <div className="traceability-card-title">{testName}</div>
                 </div>
                 <div className="traceability-chip-row">
                   <span className={`traceability-chip type-${item.type.toLowerCase()}`}>{item.type}</span>
@@ -564,21 +608,21 @@ function TraceabilityPanel({
                   ) : null}
                 </div>
               </div>
-              <div className="traceability-meta-grid">
-                <div>
-                  <span className="traceability-meta-label">Requirement</span>
-                  <span>{item.req_id}</span>
-                </div>
-                <div>
-                  <span className="traceability-meta-label">Scenario</span>
-                  <span>{item.scenario_id ?? "Not linked"}</span>
-                </div>
-              </div>
             </article>
             );
           })}
         </div>
       </section>
+      {hoverTooltip ? createPortal(
+        <div
+          className="traceability-floating-tooltip"
+          role="tooltip"
+          style={{ left: hoverTooltip.x, top: hoverTooltip.y }}
+        >
+          {hoverTooltip.content}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }

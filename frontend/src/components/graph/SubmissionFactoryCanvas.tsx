@@ -88,7 +88,7 @@ const INTERFACE_NODE_HEIGHT = 88;
 const TEST_NODE_WIDTH = 196;
 const TEST_NODE_HEIGHT = 90;
 const LANE_HEADER_WIDTH = 160;
-const LANE_HEADER_HEIGHT = 40;
+const LANE_HEADER_HEIGHT = 34;
 const LANE_CONTAINER_MIN_HEIGHT = 88;
 const LEFT_MARGIN = 72;
 const TOP_MARGIN = 78;
@@ -105,7 +105,7 @@ const INTERFACE_LANE_HEADER_GAP = 22;
 const SECTION_FRAME_PADDING_X = 44;
 const SECTION_FRAME_PADDING_TOP = 64;
 const SECTION_FRAME_PADDING_BOTTOM = 42;
-const SECTION_HEADER_HEIGHT = 100;
+const SECTION_HEADER_HEIGHT = 72;
 const SECTION_MIN_WIDTH = 344;
 const FLOW_LANE_WIDTH = 108;
 const INTERFACE_LANE_ORDERS: InterfaceLane[] = ["ui", "api", "func", "db"];
@@ -263,21 +263,21 @@ function sectionFrameStyle(section: "requirements" | "interfaces" | "tests") {
   switch (section) {
     case "requirements":
       return {
-        fill: "#f3f4f6",
+        fill: "rgba(255, 255, 255, 0)",
         stroke: "#9ca3af",
-        accent: "#e5e7eb",
+        accent: "#f8fafc",
       };
     case "interfaces":
       return {
-        fill: "#f3f4f6",
+        fill: "rgba(255, 255, 255, 0)",
         stroke: "#9ca3af",
-        accent: "#e5e7eb",
+        accent: "#f8fafc",
       };
     case "tests":
       return {
-        fill: "#f3f4f6",
+        fill: "rgba(255, 255, 255, 0)",
         stroke: "#9ca3af",
-        accent: "#e5e7eb",
+        accent: "#f8fafc",
       };
   }
 }
@@ -719,8 +719,8 @@ function buildGraphModel({
           y: containerCenterY,
           size: [interfaceAvailableWidth, containerHeight],
           radius: 16,
-          fill: laneVisual.fill,
-          fillOpacity: 0.42,
+          fill: "rgba(255, 255, 255, 0)",
+          fillOpacity: 0,
           stroke: laneVisual.stroke,
           strokeOpacity: 0.44,
           lineWidth: 1.1,
@@ -742,12 +742,13 @@ function buildGraphModel({
           y: headerY,
           size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
           radius: 8,
-          fill: laneVisual.accent,
-          stroke: laneVisual.accent,
+          fill: "#f8fafc",
+          stroke: laneVisual.stroke,
+          strokeOpacity: 0.38,
           labelText: lane.toUpperCase(),
-          labelFill: "#ffffff",
+          labelFill: laneVisual.accent,
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 25,
+          labelFontSize: 18,
           labelFontWeight: 600,
           labelLineHeight: LANE_HEADER_HEIGHT,
           labelPlacement: "center",
@@ -886,8 +887,8 @@ function buildGraphModel({
           y: containerCenterY,
           size: [testAvailableWidth, containerHeight],
           radius: 16,
-          fill: laneVisual.fill,
-          fillOpacity: 0.42,
+          fill: "rgba(255, 255, 255, 0)",
+          fillOpacity: 0,
           stroke: laneVisual.stroke,
           strokeOpacity: 0.44,
           lineWidth: 1.1,
@@ -909,13 +910,14 @@ function buildGraphModel({
           y: headerY,
           size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
           radius: 8,
-          fill: laneVisual.accent,
-          stroke: laneVisual.accent,
+          fill: "#f8fafc",
+          stroke: laneVisual.stroke,
+          strokeOpacity: 0.38,
           labelText: lane === "e2e" ? "E2E" : lane.toUpperCase(),
-          labelFill: "#ffffff",
+          labelFill: laneVisual.accent,
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 20,
-          labelFontWeight: 700,
+          labelFontSize: 18,
+          labelFontWeight: 600,
           labelLineHeight: LANE_HEADER_HEIGHT,
           labelPlacement: "center",
           labelTextAlign: "center",
@@ -1096,7 +1098,7 @@ function buildGraphModel({
         size: [section.width, sectionHeight],
         radius: 0,
         fill: section.style.fill,
-        fillOpacity: 0.44,
+        fillOpacity: 0,
         stroke: section.style.stroke,
         strokeOpacity: 0.52,
         lineWidth: 1.6,
@@ -1122,9 +1124,9 @@ function buildGraphModel({
         labelText: section.title,
         labelFill: "#4c4c4c",
         labelFontFamily: "'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif",
-        labelFontSize: 60,
+        labelFontSize: 42,
         labelFontWeight: 500,
-        labelLineHeight: 120,
+        labelLineHeight: SECTION_HEADER_HEIGHT,
         labelPlacement: "center",
       },
       states: [],
