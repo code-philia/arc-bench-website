@@ -2656,40 +2656,53 @@ export default function PlaygroundSubmissionDetailPage() {
                       }}
                     />
                   </div>
-                  {canvasDetailNode ? (
-                    <div
-                      data-quickstart-id="quickstart-submission-node-detail"
-                      className={`create-task-detail-drawer detail-placement-bottom ${canvasDetailExpanded ? "expanded" : "collapsed"}`}
-                    >
-                      <div className="create-task-detail-top">
-                        <div>
-                          <strong>{canvasDetailNode.id}</strong>
-                          <span>{canvasDetailNode.name}</span>
-                        </div>
-                        <div className="create-task-detail-actions">
+                  <div
+                    data-quickstart-id="quickstart-submission-node-detail"
+                    className={`create-task-detail-drawer detail-placement-bottom ${canvasDetailExpanded ? "expanded" : "collapsed"} ${canvasDetailNode ? "" : "empty"}`}
+                  >
+                    <div className="create-task-detail-top">
+                      <div>
+                        {canvasDetailNode ? (
+                          <>
+                            <strong>{canvasDetailNode.id}</strong>
+                            <span>{canvasDetailNode.name}</span>
+                          </>
+                        ) : (
+                          <>
+                            <strong>&nbsp;</strong>
+                            <span>&nbsp;</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="create-task-detail-actions">
+                        {canvasDetailNode ? (
                           <div className={`task-node-chip ${canvasDetailNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
                             {canvasDetailNode.type}
                           </div>
-                          <button
-                            type="button"
-                            className="icon-only-btn"
-                            onClick={() => {
-                              const nextExpanded = !canvasDetailExpanded;
-                              if (executionPaused) {
-                                setEditableDetailExpanded(nextExpanded);
-                              } else {
-                                setDetailExpanded(nextExpanded);
-                                if (useQuickStartSubmission) {
-                                  quickStart.setDetailExpanded(nextExpanded);
-                                }
+                        ) : (
+                          <div className="task-node-chip empty">&nbsp;</div>
+                        )}
+                        <button
+                          type="button"
+                          className="icon-only-btn"
+                          onClick={() => {
+                            const nextExpanded = !canvasDetailExpanded;
+                            if (executionPaused) {
+                              setEditableDetailExpanded(nextExpanded);
+                            } else {
+                              setDetailExpanded(nextExpanded);
+                              if (useQuickStartSubmission) {
+                                quickStart.setDetailExpanded(nextExpanded);
                               }
-                            }}
-                          >
-                            {canvasDetailExpanded ? <DownOutlined /> : <UpOutlined />}
-                          </button>
-                        </div>
+                            }
+                          }}
+                        >
+                          {canvasDetailExpanded ? <DownOutlined /> : <UpOutlined />}
+                        </button>
                       </div>
-                      {canvasDetailExpanded ? (
+                    </div>
+                    {canvasDetailExpanded ? (
+                      canvasDetailNode ? (
                         executionPaused ? (
                           <RequirementNodeDetailContent
                             node={canvasDetailNode}
@@ -2716,9 +2729,11 @@ export default function PlaygroundSubmissionDetailPage() {
                             taskAssets={submissionTaskAssets}
                           />
                         )
-                      ) : null}
-                    </div>
-                  ) : null}
+                      ) : (
+                        <div className="create-task-detail-empty-body" />
+                      )
+                    ) : null}
+                  </div>
                 </>
               </div>
             ) : null}

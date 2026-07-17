@@ -104,6 +104,7 @@ type RequirementTreeCanvasProps = {
   mode?: "editable" | "readonly";
   detailPlacement?: "bottom" | "right";
   showDetailToggle?: boolean;
+  alwaysShowDetail?: boolean;
   onAddChild?: () => void;
   onAddSibling?: () => void;
   onDeleteNode?: () => void;
@@ -1210,6 +1211,7 @@ function TreeCanvasInner({
   mode = "readonly",
   detailPlacement = "bottom",
   showDetailToggle = true,
+  alwaysShowDetail = false,
   onAddChild,
   onAddSibling,
   onDeleteNode,
@@ -1520,6 +1522,7 @@ function TreeCanvasInner({
   const detailContent = selectedNode
     ? (renderDetailContent ? renderDetailContent(selectedNode) : <RequirementNodeDetailContent node={selectedNode} mode="readonly" />)
     : null;
+  const shouldShowDetailDrawer = Boolean(selectedNode) || alwaysShowDetail;
   const handleConnectDependency = (connection: Connection) => {
     if (!onConnectDependency || !connection.source || !connection.target || connection.source === connection.target) {
       return;
@@ -1810,21 +1813,34 @@ function TreeCanvasInner({
           <span className="create-task-detail-resizer-handle" />
         </div>
       ) : null}
-      {selectedNode ? (
+      {shouldShowDetailDrawer ? (
         <div
           data-quickstart-id={detailTestId}
-          className={`create-task-detail-drawer detail-placement-${detailPlacement} ${detailExpanded ? "expanded" : "collapsed"}`}
+          className={`create-task-detail-drawer detail-placement-${detailPlacement} ${detailExpanded ? "expanded" : "collapsed"} ${selectedNode ? "" : "empty"}`}
           style={detailPlacement === "right" && detailExpanded ? { width: `${detailWidth}px` } : undefined}
         >
           <div className="create-task-detail-top">
             <div>
-              <strong>{selectedNode.id}</strong>
-              <span>{selectedNode.name}</span>
+              {selectedNode ? (
+                <>
+                  <strong>{selectedNode.id}</strong>
+                  <span>{selectedNode.name}</span>
+                </>
+              ) : (
+                <>
+                  <strong>&nbsp;</strong>
+                  <span>&nbsp;</span>
+                </>
+              )}
             </div>
             <div className="create-task-detail-actions">
-              <div className={`task-node-chip ${selectedNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
-                {selectedNode.type}
-              </div>
+              {selectedNode ? (
+                <div className={`task-node-chip ${selectedNode.type === "ATOMIC" ? "atomic" : "folder"}`}>
+                  {selectedNode.type}
+                </div>
+              ) : (
+                <div className="task-node-chip empty">&nbsp;</div>
+              )}
               {showDetailToggle ? (
                 <button
                   type="button"
@@ -1836,7 +1852,7 @@ function TreeCanvasInner({
               ) : null}
             </div>
           </div>
-          {detailExpanded ? detailContent : null}
+          {detailExpanded ? (detailContent ?? <div className="create-task-detail-empty-body" />) : null}
         </div>
       ) : null}
     </div>

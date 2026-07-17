@@ -7028,6 +7028,10 @@ button {
   background: rgba(0, 212, 170, 0.08);
 }
 
+.task-node-chip.empty {
+  visibility: hidden;
+}
+
 .create-task-markdown-body-only .readme-content {
   padding-top: 26px;
 }
@@ -7989,6 +7993,10 @@ button {
 
 .scenario-editor.compact {
   margin-top: 14px;
+}
+
+.create-task-detail-empty-body {
+  min-height: 220px;
 }
 
 .field-stack {
