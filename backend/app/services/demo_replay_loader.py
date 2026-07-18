@@ -49,12 +49,12 @@ def resolve_demo_replay_paths(workspace_path: Path) -> DemoReplayPaths | None:
 def load_demo_replay_steps(workspace_path: Path, replay_paths: DemoReplayPaths) -> list[DemoReplayStep]:
     module = load_demo_agent_module()
     config = module.ReplayConfig(
-        requirement_dir=workspace_path / "task",
+        requirement_dir=workspace_path / "template" / "requirements",
         source_template_dir=replay_paths.source_template_dir,
         queue_path=replay_paths.queue_path,
         tasks_dir=replay_paths.tasks_dir,
         target_template_dir=workspace_path / "template",
-        artifacts_dir=workspace_path / "artifacts",
+        arc_dir=workspace_path / "template" / ".arc",
         submission_dir=workspace_path / "submission",
         step_delay_seconds=0.0,
         interface_delay_seconds=0.0,

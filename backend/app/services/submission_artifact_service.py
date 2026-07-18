@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 import re
 
 from app.models.submission import Submission
 from app.services.runtime_path_service import RuntimePathService
-from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
 
 LANGUAGE_BY_SUFFIX = {
@@ -62,7 +59,6 @@ class GitChangedFileRecord:
 class SubmissionArtifactService:
     def __init__(self) -> None:
         self.runtime_paths = RuntimePathService()
-        self.traceability_seed_builder = TraceabilitySeedBuilder()
 
     def read_node_visual_states(self, submission: Submission) -> dict[str, str]:
         snapshot = self._read_traceability_snapshot(submission)
@@ -85,7 +81,6 @@ class SubmissionArtifactService:
         snapshot = self._read_traceability_snapshot(submission)
         if snapshot is None:
             return {"interfaces": [], "tests": []}
-        test_status_by_id = self._read_demo_test_statuses(submission)
 
         interfaces: list[dict] = []
         tests: list[dict] = []
@@ -125,10 +120,7 @@ class SubmissionArtifactService:
                     "type": str(row.get("type") or ""),
                     "file_path": str(row.get("file_path") or ""),
                     "first_line": self._normalize_first_line_reference(row.get("first_line")),
-                    "status": self._resolve_test_status(
-                        test_status_by_id.get(test_id),
-                        row.get("passed"),
-                    ),
+                    "status": self._resolve_test_status(row.get("passed")),
                 }
             )
 
@@ -215,16 +207,16 @@ class SubmissionArtifactService:
             )
         return {"availability": "available", "commits": commits}
 
-    def _get_traceability_snapshot_path(self, submission: Submission) -> Path | None:
+    def _get_traceability_dir(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return None
-        snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
-        return snapshot_path if snapshot_path.is_file() else None
+        traceability_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "traceability"
+        return traceability_dir if traceability_dir.is_dir() else None
 
     def refresh_traceability_snapshot_for_workspace(self, workspace_path: Path, *, force: bool = False) -> bool:
-        snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
-        return snapshot_path.is_file()
+        traceability_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "traceability"
+        return traceability_dir.is_dir() and any(traceability_dir.glob("*.json"))
 
     def _get_project_root(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -233,66 +225,35 @@ class SubmissionArtifactService:
         template_root = workspace_path / "template"
         return template_root if template_root.is_dir() else None
 
-    def _read_demo_test_statuses(self, submission: Submission) -> dict[str, str]:
-        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
-        if workspace_path is None:
-            return {}
-        status_path = workspace_path / "artifacts" / "demo-test-statuses.json"
-        if not status_path.is_file():
+    def _read_traceability_snapshot(self, submission: Submission) -> dict[str, object] | None:
+        traceability_dir = self._get_traceability_dir(submission)
+        if traceability_dir is None:
+            return None
+        payload: dict[str, object] = {}
+        for table_name in (
+            "requirements",
+            "scenarios",
+            "interfaces",
+            "tests",
+            "call_edges",
+            "node_states",
+            "node_contracts",
+        ):
+            table_payload = self._read_traceability_table(traceability_dir / f"{table_name}.json")
+            payload[table_name] = list(table_payload.values())
+        return payload
+
+    @staticmethod
+    def _read_traceability_table(path: Path) -> dict[str, dict]:
+        if not path.is_file():
             return {}
         try:
-            payload = json.loads(status_path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return {}
         if not isinstance(payload, dict):
             return {}
-        tests = payload.get("tests")
-        if not isinstance(tests, dict):
-            return {}
-        normalized: dict[str, str] = {}
-        for test_id, raw_status in tests.items():
-            key = str(test_id).strip()
-            status = self._normalize_demo_test_status(raw_status)
-            if key and status:
-                normalized[key] = status
-        return normalized
-
-    def _read_traceability_snapshot(self, submission: Submission) -> dict[str, object] | None:
-        snapshot_path = self._get_traceability_snapshot_path(submission)
-        if snapshot_path is None:
-            return None
-        try:
-            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        return payload if isinstance(payload, dict) else None
-
-    def _refresh_traceability_snapshot_from_db(
-        self,
-        snapshot_path: Path,
-        db_path: Path,
-        *,
-        force: bool = False,
-    ) -> bool:
-        if not db_path.is_file():
-            return snapshot_path.is_file()
-
-        if not force and snapshot_path.is_file():
-            try:
-                if snapshot_path.stat().st_mtime_ns >= db_path.stat().st_mtime_ns:
-                    return True
-            except OSError:
-                pass
-
-        for delay in (0.0, 0.05, 0.15, 0.3):
-            if delay > 0:
-                time.sleep(delay)
-            try:
-                self.traceability_seed_builder.write_snapshot_file_from_database(snapshot_path, db_path)
-                return True
-            except (OSError, sqlite3.Error, ValueError):
-                continue
-        return snapshot_path.is_file()
+        return {str(key): value for key, value in payload.items() if isinstance(value, dict)}
 
     def _read_diff_source(self, submission: Submission, *, file_path: str, commit_oid: str | None) -> dict[str, str | int]:
         if not commit_oid or not commit_oid.strip():
@@ -517,18 +478,8 @@ class SubmissionArtifactService:
         first_non_empty_line = next((line.strip() for line in normalized.split("\n") if line.strip()), "")
         return first_non_empty_line or None
 
-    @staticmethod
-    def _normalize_demo_test_status(raw_value: object) -> str | None:
-        normalized = str(raw_value or "").strip().lower()
-        if normalized in {"passed", "failed"}:
-            return normalized
-        return None
-
     @classmethod
-    def _resolve_test_status(cls, demo_status: object, db_passed: object) -> str | None:
-        normalized_demo_status = cls._normalize_demo_test_status(demo_status)
-        if normalized_demo_status:
-            return normalized_demo_status
+    def _resolve_test_status(cls, db_passed: object) -> str | None:
         if db_passed is None:
             return None
         normalized_db_passed = str(db_passed).strip().lower()

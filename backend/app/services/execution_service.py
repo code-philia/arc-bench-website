@@ -71,9 +71,9 @@ class ExecutionService:
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
         start_agent_description = "Running uploaded agent"
-        stdout_path = workspace_path / "artifacts" / "stdout.log"
-        stderr_path = workspace_path / "artifacts" / "stderr.log"
-        result_path = workspace_path / "artifacts" / "result.json"
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
+        stdout_path = arc_dir / "stdout.log"
+        playwright_report_path = arc_dir / "playwright-report.json"
         debug_log = DebugLogService(workspace_path)
 
         container = None
@@ -101,7 +101,7 @@ class ExecutionService:
 
         def import_runner_events() -> list[dict]:
             nonlocal processed_runner_event_count
-            runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+            runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
             if not runner_events_path.exists():
                 return []
             imported_events: list[dict] = []
@@ -144,7 +144,6 @@ class ExecutionService:
                 message = str(event.get("message", "")).strip()
                 status = str(event.get("status", "info")).strip() or "info"
                 if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
-                    emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
 
             if refresh_flags["preview"]:
@@ -157,7 +156,7 @@ class ExecutionService:
                 if not snapshot_updated:
                     debug_log.append(
                         "backend",
-                        "Traceability refresh was requested, but traceability.snapshot.json is not available yet",
+                        "Traceability refresh was requested, but .arc/traceability is not available yet",
                     )
             if any(refresh_flags.values()):
                 SubmissionEventStream.publish(
@@ -211,7 +210,7 @@ class ExecutionService:
                 debug_log = DebugLogService(workspace_path)
                 manager = DockerManager()
                 manager.remove_submission_container(submission_id)
-                runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+                runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
                 if runner_events_path.exists():
                     processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
                 emit_event("deploy_agent", "Reusing rewound workspace")
@@ -223,9 +222,9 @@ class ExecutionService:
                 debug_log = DebugLogService(workspace_path)
                 debug_log.append("backend", f"Workspace assembled at {workspace_path}")
                 emit_event("deploy_agent", "Workspace assembled", status="success")
-            stdout_path = workspace_path / "artifacts" / "stdout.log"
-            stderr_path = workspace_path / "artifacts" / "stderr.log"
-            result_path = workspace_path / "artifacts" / "result.json"
+            arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
+            stdout_path = arc_dir / "stdout.log"
+            playwright_report_path = arc_dir / "playwright-report.json"
             submission_service.mark_running(submission, workspace_path)
             HostDemoPreviewService.mark_stale(submission.id)
             submission_service.update_steps(
@@ -387,10 +386,18 @@ class ExecutionService:
                 return
             emit_event("run_tests", "Collecting test artifacts")
             stdout, stderr = manager.collect_logs(container)
-            if stdout and not stdout_path.exists():
-                stdout_path.write_text(stdout, encoding="utf-8")
-            if stderr and not stderr_path.exists():
-                stderr_path.write_text(stderr, encoding="utf-8")
+            stdout_path.parent.mkdir(parents=True, exist_ok=True)
+            if not stdout_path.exists():
+                stdout_path.write_text("", encoding="utf-8")
+            with stdout_path.open("a", encoding="utf-8") as output:
+                if stdout:
+                    output.write(stdout)
+                    if not stdout.endswith("\n"):
+                        output.write("\n")
+                if stderr:
+                    output.write(stderr)
+                    if not stderr.endswith("\n"):
+                        output.write("\n")
             debug_log.append("backend", f"Collected container logs: stdout_bytes={len(stdout.encode('utf-8'))}, stderr_bytes={len(stderr.encode('utf-8'))}")
             emit_event("run_tests", "Test artifacts collected", status="success")
 
@@ -404,8 +411,8 @@ class ExecutionService:
                 ),
             )
 
-            parsed = self.result_parser.parse(result_path)
-            debug_log.append("backend", f"Parsed result file at {result_path}: {parsed}")
+            parsed = self.result_parser.parse_playwright_report(playwright_report_path)
+            debug_log.append("backend", f"Parsed Playwright report at {playwright_report_path}: {parsed}")
             emit_event(
                 "run_tests",
                 f"Test results parsed: passed={parsed['passed']}, failed={parsed['failed']}, score={parsed['score']}",
@@ -428,8 +435,8 @@ class ExecutionService:
                 failed_count=parsed["failed"],
                 score=parsed["score"],
                 stdout_path=stdout_path,
-                stderr_path=stderr_path,
-                result_path=result_path if result_path.exists() else None,
+                stderr_path=None,
+                result_path=None,
                 failure_reason=failure_reason,
             )
             debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
@@ -442,9 +449,10 @@ class ExecutionService:
             debug_log.append("backend", f"Execution failed during {active_step_key}: {exc}")
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
             if stdout_path.exists() is False:
-                stdout_path.write_text("", encoding="utf-8")
-            if stderr_path.exists() is False:
-                stderr_path.write_text(str(exc), encoding="utf-8")
+                stdout_path.write_text(str(exc), encoding="utf-8")
+            else:
+                with stdout_path.open("a", encoding="utf-8") as output:
+                    output.write(f"\n{exc}\n")
             submission_service.update_steps(
                 submission,
                 submission_service.build_failed_step_states(
@@ -460,8 +468,8 @@ class ExecutionService:
                 failed_count=0,
                 score=0.0,
                 stdout_path=stdout_path,
-                stderr_path=stderr_path,
-                result_path=result_path if result_path.exists() else None,
+                stderr_path=None,
+                result_path=None,
                 failure_reason=str(exc),
             )
             debug_log.append("backend", "Failure state persisted to database")

@@ -35,7 +35,6 @@ from app.services.requirement_catalog import RequirementCatalogService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
-from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -213,12 +212,9 @@ def get_submission_logs(
         submission = service.get_submission(submission_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    events = ""
+    events = "\n".join(service.read_event_lines(submission))
     stdout = ""
     stderr = ""
-    event_log_path = service.get_event_log_path(submission)
-    if event_log_path.exists():
-        events = "\n".join(service.read_event_lines(submission))
     stdout_path = runtime_paths.resolve_existing_path(submission.stdout_path)
     stderr_path = runtime_paths.resolve_existing_path(submission.stderr_path)
     if stdout_path:

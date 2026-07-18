@@ -5,7 +5,6 @@ import shutil
 import time
 import uuid
 import zipfile
-import sqlite3
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal, Optional, List
@@ -43,6 +42,7 @@ from app.services.demo_replay_loader import (
 )
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.requirement_catalog import RequirementCatalogService
+from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
@@ -126,16 +126,13 @@ class SubmissionService:
         if agent_source == AgentSourceType.BUILTIN_ARC_AGENT:
             self._write_builtin_arc_agent_archive(archive_path)
             original_filename = "builtin-arc-agent.zip"
-            self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Built-in ARC agent package prepared")
         else:
             if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
                 raise ValueError("Only .zip uploads are supported")
             with archive_path.open("wb") as output:
                 shutil.copyfileobj(upload.file, output)
             original_filename = upload.filename
-            self.append_event_log_for_identity(submission_id, user_id, user.username, f"[ok] Uploaded archive saved to {archive_path.name}")
         self._validate_python_agent_archive(archive_path)
-        self.append_event_log_for_identity(submission_id, user_id, user.username, "[ok] Archive validation passed")
 
         normalized_display_name = self._normalize_display_name(display_name)
         normalized_model_name = self._normalize_model_name(model_name)
@@ -162,19 +159,19 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return None
-        return workspace_path / "artifacts" / "checkpoint.json"
+        return self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "checkpoint.json"
 
     def get_pause_request_path(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return None
-        return workspace_path / "artifacts" / "pause.request.json"
+        return self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "pause.request.json"
 
     def get_resume_request_path(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return None
-        return workspace_path / "artifacts" / "resume.request.json"
+        return self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "resume.request.json"
 
     def read_checkpoint(self, submission: Submission) -> dict:
         checkpoint_path = self.get_submission_checkpoint_path(submission)
@@ -356,7 +353,7 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return {"requirements_md": "", "requirements_yaml": "", "prerequisites_md": ""}
-        task_dir = workspace_path / "task"
+        task_dir = self.runtime_paths.get_template_root_from_workspace(workspace_path) / "requirements"
         requirements_md = self._read_text(task_dir / "requirements.md")
         requirements_yaml = self._read_text(task_dir / "requirements.yaml")
         prerequisites_md = self._read_text(task_dir / "prerequisites.md")
@@ -377,7 +374,7 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
-        task_dir = workspace_path / "task"
+        task_dir = self.runtime_paths.get_template_root_from_workspace(workspace_path) / "requirements"
         task_dir.mkdir(parents=True, exist_ok=True)
         self._write_text_atomic(task_dir / "requirements.md", requirements_md)
         self._write_text_atomic(task_dir / "requirements.yaml", requirements_yaml)
@@ -490,17 +487,15 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
-        traceability_db_path = workspace_path / "artifacts" / "traceability.db"
-        traceability_snapshot_path = workspace_path / "artifacts" / "traceability.snapshot.json"
-        traceability_seed_path = workspace_path / "artifacts" / "traceability-seed.json"
-        demo_test_status_path = workspace_path / "artifacts" / "demo-test-statuses.json"
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
+        traceability_dir = arc_dir / "traceability"
+        traceability_seed_path = arc_dir / "traceability-seed.json"
         from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
         seed_builder = TraceabilitySeedBuilder()
-        seed_builder.write_sqlite_database_from_yaml_text(traceability_db_path, requirements_yaml)
-        seed_builder.write_snapshot_file_from_yaml_text(traceability_snapshot_path, requirements_yaml)
-        seed_builder.write_seed_file_from_yaml_text(traceability_seed_path, requirements_yaml)
-        WorkspaceAssembler()._write_demo_test_status_seed(demo_test_status_path)  # noqa: SLF001
+        seed = seed_builder.build_from_yaml_text(requirements_yaml)
+        self._write_json_atomic(traceability_seed_path, seed)
+        self._write_traceability_tables_from_seed(traceability_dir, seed)
 
     def get_submission_task_asset_path(self, submission: Submission, asset_kind: str, asset_path: str) -> Path:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -511,7 +506,7 @@ class SubmissionService:
         if normalized_kind not in {"assets", "reference"}:
             raise FileNotFoundError(f"Unknown submission task asset kind: {asset_kind}")
 
-        asset_root = workspace_path / "task" / normalized_kind
+        asset_root = self.runtime_paths.get_template_root_from_workspace(workspace_path) / "requirements" / normalized_kind
         if not asset_root.is_dir():
             raise FileNotFoundError(f"Submission task asset directory is not available: {normalized_kind}")
 
@@ -670,37 +665,13 @@ class SubmissionService:
             return
         self.rebuild_demo_submission_to_checkpoint(submission)
 
-    @staticmethod
-    def _is_demo_runtime_restore_complete(workspace_path: Path) -> bool:
-        artifacts_dir = workspace_path / "artifacts"
+    def _is_demo_runtime_restore_complete(self, workspace_path: Path) -> bool:
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
         required_paths = (
-            artifacts_dir / "traceability.db",
-            artifacts_dir / "traceability.snapshot.json",
-            artifacts_dir / "demo-test-statuses.json",
-            artifacts_dir / "runner-events.jsonl",
+            arc_dir / "traceability",
+            arc_dir / "runner-events.jsonl",
         )
-        return all(path.is_file() for path in required_paths)
-
-    def append_event_log(self, submission_id: str, message: str) -> Path:
-        submission = self.get_submission(submission_id)
-        submission_dir = self.runtime_paths.get_submission_root(
-            submission,
-            username=self._get_submission_user(submission.user_id or "").username,
-        )
-        submission_dir.mkdir(parents=True, exist_ok=True)
-        log_path = submission_dir / "events.log"
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        with log_path.open("a", encoding="utf-8") as output:
-            output.write(f"[{timestamp}] {message}\n")
-        return log_path
-
-    def append_event_log_for_identity(self, submission_id: str, user_id: str, username: str, message: str) -> Path:
-        log_path = self.runtime_paths.get_event_log_path_by_identity(username, user_id, submission_id)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        with log_path.open("a", encoding="utf-8") as output:
-            output.write(f"[{timestamp}] {message}\n")
-        return log_path
+        return all(path.exists() for path in required_paths)
 
     @staticmethod
     def _normalize_display_name(display_name: str | None) -> str | None:
@@ -741,32 +712,32 @@ class SubmissionService:
         step_key: Literal["deploy_agent", "start_agent", "run_tests"],
         message: str,
         status: Literal["info", "success", "error"] = "info",
-    ) -> Path:
+    ) -> Path | None:
         submission = self.get_submission(submission_id)
-        submission_dir = self.runtime_paths.get_submission_root(
-            submission,
-            username=self._get_submission_user(submission.user_id or "").username,
-        )
-        submission_dir.mkdir(parents=True, exist_ok=True)
-        log_path = submission_dir / "events.log"
         payload = {
             "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             "step_key": step_key,
             "status": status,
             "message": message,
         }
-        with log_path.open("a", encoding="utf-8") as output:
-            output.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        log_path: Path | None = None
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None and submission.user_id:
+            username = self._get_submission_user(submission.user_id).username
+            candidate_workspace_path = self.runtime_paths.get_workspace_root(submission, username=username)
+            if candidate_workspace_path.exists():
+                workspace_path = candidate_workspace_path
+        if workspace_path is not None:
+            log_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as output:
+                output.write(json.dumps(payload, ensure_ascii=True) + "\n")
         SubmissionEventStream.publish(
             submission_id,
             reason=f"step:{step_key}",
             logs=True,
         )
         return log_path
-
-    def get_event_log_path(self, submission: Submission) -> Path:
-        username = self._get_submission_user(submission.user_id or "").username if submission.user_id else None
-        return self.runtime_paths.get_event_log_path(submission, username=username)
 
     @staticmethod
     def _validate_python_agent_archive(archive_path: Path) -> None:
@@ -847,15 +818,10 @@ class SubmissionService:
         return submission
 
     def to_detail(self, submission: Submission) -> SubmissionDetail:
-        events: list[dict] = []
-        event_log_path = self.get_event_log_path(submission)
-        if event_log_path.exists():
-            events = self.read_events(submission)
+        events = self.read_events(submission)
         steps = [StepState.model_validate(step) for step in json.loads(submission.steps_json or "[]")]
         steps = self.attach_step_logs(steps, events)
-        tests = []
-        if submission.result_path and Path(submission.result_path).exists():
-            tests = json.loads(Path(submission.result_path).read_text(encoding="utf-8")).get("tests", [])
+        tests = self._read_submission_tests(submission)
         node_states = self.artifact_service.read_node_visual_states(submission)
         visual_events = self.read_visual_events(submission)
         node_states = self._overlay_visual_event_states(node_states, visual_events)
@@ -894,6 +860,16 @@ class SubmissionService:
             pause_available=bool(self.get_pause_request_path(submission)),
         )
 
+    def _read_submission_tests(self, submission: Submission) -> list[dict]:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is not None:
+            report_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "playwright-report.json"
+            if report_path.is_file():
+                return ResultParser().parse_playwright_report(report_path).get("tests", [])
+        if submission.result_path and Path(submission.result_path).exists():
+            return json.loads(Path(submission.result_path).read_text(encoding="utf-8")).get("tests", [])
+        return []
+
     @staticmethod
     def _overlay_visual_event_states(
         node_states: dict[str, str],
@@ -918,11 +894,15 @@ class SubmissionService:
         return resolved
 
     def read_events(self, submission: Submission) -> list[dict]:
-        event_log_path = self.get_event_log_path(submission)
-        if not event_log_path.exists():
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            return []
+
+        runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
+        if not runner_events_path.exists():
             return []
         events: list[dict] = []
-        for raw_line in event_log_path.read_text(encoding="utf-8").splitlines():
+        for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line:
                 continue
@@ -953,7 +933,7 @@ class SubmissionService:
         if not workspace_path:
             return []
 
-        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
         if not runner_events_path.exists():
             return []
 
@@ -999,7 +979,7 @@ class SubmissionService:
         if not workspace_path:
             return []
 
-        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
         if not runner_events_path.exists():
             return []
 
@@ -1037,7 +1017,7 @@ class SubmissionService:
         if not workspace_path:
             return []
 
-        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
         if not runner_events_path.exists():
             return []
 
@@ -1210,32 +1190,25 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
-        artifacts_dir = workspace_path / "artifacts"
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
         for filename in [
             "stdout.log",
-            "stderr.log",
-            "result.json",
+            "playwright-report.json",
             "runner-events.jsonl",
-            "traceability.db",
-            "traceability.db-shm",
-            "traceability.db-wal",
-            "traceability.snapshot.json",
-            "demo-test-statuses.json",
             "preview-ready.json",
             "pause.request.json",
             "resume.request.json",
         ]:
-            target = artifacts_dir / filename
+            target = arc_dir / filename
             if target.exists():
                 target.unlink()
-        event_log_path = self.get_event_log_path(submission)
-        if event_log_path.exists():
-            event_log_path.unlink()
+        traceability_dir = arc_dir / "traceability"
+        if traceability_dir.is_dir():
+            shutil.rmtree(traceability_dir)
 
-    @staticmethod
-    def _get_demo_state_checkpoint_dir(workspace_path: Path, completed_index: int) -> Path:
+    def _get_demo_state_checkpoint_dir(self, workspace_path: Path, completed_index: int) -> Path:
         normalized_index = max(int(completed_index or 0), 0)
-        return workspace_path / "artifacts" / "state-checkpoints" / f"step-{normalized_index:04d}"
+        return self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "state-checkpoints" / f"step-{normalized_index:04d}"
 
     @staticmethod
     def _append_runner_state_event(runner_events_path: Path, *, state: str, message: str) -> None:
@@ -1258,7 +1231,7 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return
-        runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+        runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
         runner_events_path.parent.mkdir(parents=True, exist_ok=True)
         enriched_payload = {
             "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1296,13 +1269,10 @@ class SubmissionService:
             payload["message"] = message
         self._append_runner_event(submission, payload)
 
-    def _write_traceability_snapshot_from_db(self, workspace_path: Path) -> None:
-        artifacts_dir = workspace_path / "artifacts"
-        snapshot_path = artifacts_dir / "traceability.snapshot.json"
-        db_path = artifacts_dir / "traceability.db"
-        if not db_path.is_file():
-            return
-        self.artifact_service._refresh_traceability_snapshot_from_db(snapshot_path, db_path, force=True)  # noqa: SLF001
+    def _notify_traceability_tables_changed(self, workspace_path: Path) -> None:
+        traceability_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "traceability"
+        if traceability_dir.is_dir():
+            self.artifact_service.refresh_traceability_snapshot_for_workspace(workspace_path, force=True)
 
     def _parse_git_status_paths(self, status_output: str) -> list[str]:
         dirty_files: list[str] = []
@@ -1450,53 +1420,39 @@ class SubmissionService:
         completed_index: int,
         paused_message: str,
     ) -> None:
-        artifacts_dir = workspace_path / "artifacts"
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
         state_checkpoint_dir = self._get_demo_state_checkpoint_dir(workspace_path, completed_index)
-        runner_events_path = artifacts_dir / "runner-events.jsonl"
-        event_log_path = self.get_event_log_path(submission)
+        runner_events_path = arc_dir / "runner-events.jsonl"
 
         restored_from_saved_checkpoint = False
-        required_files = (
-            "traceability.db",
-            "traceability.snapshot.json",
-            "demo-test-statuses.json",
-            "runner-events.jsonl",
-        )
-        optional_files = (
-            "traceability.db-wal",
-            "traceability.db-shm",
-        )
+        required_files = ("runner-events.jsonl",)
+        required_dirs = ("traceability",)
         if state_checkpoint_dir.is_dir():
             missing_files: list[str] = []
             for filename in required_files:
-                if filename == "demo-test-statuses.json" and completed_index == 0:
-                    continue
                 if not (state_checkpoint_dir / filename).is_file():
                     missing_files.append(filename)
+            for dirname in required_dirs:
+                if not (state_checkpoint_dir / dirname).is_dir():
+                    missing_files.append(dirname)
             if missing_files:
                 raise FileNotFoundError(
                     f"Checkpoint state is incomplete for step {completed_index}: {', '.join(missing_files)}"
                 )
+            for dirname in required_dirs:
+                source_dir = state_checkpoint_dir / dirname
+                target_dir = arc_dir / dirname
+                if target_dir.exists():
+                    shutil.rmtree(target_dir)
+                shutil.copytree(source_dir, target_dir)
             for filename in required_files:
                 source_path = state_checkpoint_dir / filename
                 if source_path.is_file():
                     self._write_atomic_bytes(
-                        artifacts_dir / filename,
+                        arc_dir / filename,
                         source_path.read_bytes(),
                     )
                     continue
-                if filename == "demo-test-statuses.json" and completed_index == 0:
-                    self._write_atomic_bytes(
-                        artifacts_dir / filename,
-                        (json.dumps({"tests": {}, "requirements": {}}, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
-                    )
-            for filename in optional_files:
-                source_path = state_checkpoint_dir / filename
-                if source_path.is_file():
-                    self._write_atomic_bytes(
-                        artifacts_dir / filename,
-                        source_path.read_bytes(),
-                    )
             restored_from_saved_checkpoint = True
 
         if not restored_from_saved_checkpoint:
@@ -1516,8 +1472,6 @@ class SubmissionService:
             state="paused",
             message=paused_message,
         )
-        if event_log_path.exists():
-            event_log_path.unlink()
 
     @staticmethod
     def _restore_demo_target_tree_to_base(workspace_path: Path, replay_paths: DemoReplayPaths) -> None:
@@ -1656,6 +1610,45 @@ class SubmissionService:
             path,
             (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
         )
+
+    @staticmethod
+    def _read_json_table(path: Path) -> dict[str, dict]:
+        if not path.is_file():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {str(key): value for key, value in payload.items() if isinstance(value, dict)}
+
+    @staticmethod
+    def _write_json_table(path: Path, rows: dict[str, dict]) -> None:
+        SubmissionService._write_json_atomic(path, dict(sorted(rows.items())))
+
+    def _write_traceability_tables_from_seed(self, traceability_dir: Path, seed: dict[str, list[dict]]) -> None:
+        requirements = {
+            str(item.get("req_id", "")).strip(): item
+            for item in seed.get("requirements", [])
+            if isinstance(item, dict) and str(item.get("req_id", "")).strip()
+        }
+        scenarios = {
+            str(item.get("scenario_id", "")).strip(): item
+            for item in seed.get("scenarios", [])
+            if isinstance(item, dict) and str(item.get("scenario_id", "")).strip()
+        }
+        for table_name in (
+            "requirements",
+            "scenarios",
+            "interfaces",
+            "tests",
+            "call_edges",
+            "node_states",
+            "node_contracts",
+        ):
+            rows = requirements if table_name == "requirements" else scenarios if table_name == "scenarios" else {}
+            self._write_json_table(traceability_dir / f"{table_name}.json", rows)
 
     @staticmethod
     def _write_atomic_bytes(path: Path, content: bytes) -> None:
@@ -1884,24 +1877,21 @@ describe('{test_id}', () => {{
         return file_path
 
     def _register_test_in_traceability(self, submission: Submission, test_id: str, req_id: str, test_type: str, file_path: str, scenario_id: Optional[str] = None) -> None:
-        artifacts_dir = self.runtime_paths.resolve_existing_path(submission.workspace_path)
-        if not artifacts_dir:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
             return
-        artifacts_dir = artifacts_dir / "artifacts"
-        db_path = artifacts_dir / "traceability.db"
-
-        if not db_path.exists():
-            return
-
-        conn = sqlite3.connect(db_path)
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO tests (
-                    test_id, req_id, interface_ids, type, file_path, first_line, passed
-                ) VALUES (?, ?, ?, ?, ?, 1, NULL)
-            """, (test_id, req_id, "[]", test_type, file_path))
-            conn.commit()
-        finally:
-            conn.close()
-        self._write_traceability_snapshot_from_db(artifacts_dir.parent)
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
+        tests_path = arc_dir / "traceability" / "tests.json"
+        tests = self._read_json_table(tests_path)
+        tests[str(test_id or "").strip()] = {
+            "test_id": str(test_id or "").strip(),
+            "req_id": str(req_id or "").strip(),
+            "interface_ids": [],
+            "type": str(test_type or "").strip(),
+            "file_path": str(file_path or "").strip(),
+            "first_line": "1",
+            "passed": None,
+            "scenario_id": str(scenario_id or "").strip() or None,
+        }
+        self._write_json_table(tests_path, tests)
+        self._notify_traceability_tables_changed(workspace_path)

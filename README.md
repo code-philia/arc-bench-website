@@ -101,7 +101,9 @@ ARC Bench executes uploaded Python agents with a fixed CLI contract. Your zip bu
 At runtime, the runner installs dependencies from `requirements.txt`, then launches:
 
 ```bash
-python3 main.py /workspace/task --output-dir /workspace/template --app-type web --web-port 3000
+python3 main.py requirements --output-dir . --app-type web --web-port 3000
 ```
+
+The runner starts the process from the generated project root. Requirements are available in `requirements/`, and SDK runtime files are written under `.arc/`.
 
 If your agent uses the ArcBench SDK, call `AgentRuntime.from_env()` and write progress through the SDK instead of constructing event payloads manually.

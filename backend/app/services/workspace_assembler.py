@@ -23,17 +23,15 @@ class WorkspaceAssembler:
             shutil.rmtree(workspace_root)
         submission_dir = workspace_root / "submission"
         template_dir = workspace_root / "template"
-        task_dir = workspace_root / "task"
         tests_dir = workspace_root / "tests"
-        artifacts_dir = workspace_root / "artifacts"
-        prompt_dir = workspace_root / "prompt"
+        requirements_dir = template_dir / "requirements"
+        arc_dir = template_dir / ".arc"
 
         submission_dir.mkdir(parents=True, exist_ok=True)
         template_dir.mkdir(parents=True, exist_ok=True)
-        task_dir.mkdir(parents=True, exist_ok=True)
         tests_dir.mkdir(parents=True, exist_ok=True)
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        prompt_dir.mkdir(parents=True, exist_ok=True)
+        requirements_dir.mkdir(parents=True, exist_ok=True)
+        arc_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(submission.archive_path, "r") as archive:
             archive.extractall(submission_dir)
@@ -45,25 +43,24 @@ class WorkspaceAssembler:
             if fallback_template_root.is_dir():
                 template_source_root = fallback_template_root
         shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
-        shutil.copytree(Path(requirement.assets_path), task_dir / "assets", dirs_exist_ok=True)
-        shutil.copytree(Path(requirement.references_path), task_dir / "reference", dirs_exist_ok=True)
+        shutil.copytree(Path(requirement.assets_path), requirements_dir / "assets", dirs_exist_ok=True)
+        shutil.copytree(Path(requirement.references_path), requirements_dir / "reference", dirs_exist_ok=True)
         requirement_markdown_path = Path(requirement.requirements_path)
         requirement_yaml_path = requirement_markdown_path.with_name("requirements.yaml")
-        shutil.copy2(requirement_markdown_path, task_dir / "requirements.md")
+        shutil.copy2(requirement_markdown_path, requirements_dir / "requirements.md")
         if requirement_yaml_path.exists():
-            shutil.copy2(requirement_yaml_path, task_dir / "requirements.yaml")
+            shutil.copy2(requirement_yaml_path, requirements_dir / "requirements.yaml")
         prerequisites_path = Path(requirement.prerequisites_path)
         if prerequisites_path.exists():
-            shutil.copy2(prerequisites_path, task_dir / "prerequisites.md")
+            shutil.copy2(prerequisites_path, requirements_dir / "prerequisites.md")
         else:
-            (task_dir / "prerequisites.md").write_text("", encoding="utf-8")
+            (requirements_dir / "prerequisites.md").write_text("", encoding="utf-8")
         shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
         self.traceability_seed_builder.write_seed_file(
-            artifacts_dir / "traceability-seed.json",
+            arc_dir / "traceability-seed.json",
             requirement,
-            requirement_yaml_path=task_dir / "requirements.yaml",
+            requirement_yaml_path=requirements_dir / "requirements.yaml",
         )
-        self._write_demo_test_status_seed(artifacts_dir / "demo-test-statuses.json")
 
         (workspace_root / "runner-spec.json").write_text(
             json.dumps(
@@ -71,16 +68,13 @@ class WorkspaceAssembler:
                     "agent_source": submission.agent_source,
                     "submission_dir": "/workspace/submission",
                     "template_dir": "/workspace/template",
-                    "task_dir": "/workspace/task",
                     "tests_dir": "/workspace/tests",
-                    "artifacts_dir": "/workspace/artifacts",
+                    "arc_dir": ".arc",
                     "project_dir": "/workspace/template",
-                    "requirement_dir": "/workspace/task",
-                    "output_dir": "/workspace/template",
-                    "runner_events_path": "/workspace/artifacts/runner-events.jsonl",
-                    "traceability_db_path": "/tmp/arcbench/traceability.db",
-                    "traceability_snapshot_path": "/workspace/artifacts/traceability.snapshot.json",
-                    "prompt_path": "/workspace/prompt/task_prompt.txt",
+                    "requirement_dir": "requirements",
+                    "output_dir": ".",
+                    "runner_events_path": ".arc/runner-events.jsonl",
+                    "traceability_dir": ".arc/traceability",
                     "task": {
                         "category": requirement.category,
                         "requirement_id": requirement.id,
@@ -92,20 +86,12 @@ class WorkspaceAssembler:
             encoding="utf-8",
         )
 
-        debug_log_path = workspace_root / "execution.debug.log"
+        debug_log_path = arc_dir / "execution.debug.log"
         debug_log_path.write_text(
             "Workspace assembled successfully.\n",
             encoding="utf-8",
         )
         return workspace_root
-
-    def _write_demo_test_status_seed(self, output_path: Path) -> None:
-        payload = {
-            "tests": {},
-            "requirements": {},
-        }
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     @staticmethod
     def _flatten_single_root(agent_dir: Path) -> None:

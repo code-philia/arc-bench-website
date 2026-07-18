@@ -2,9 +2,7 @@ import json
 import os
 import re
 import signal
-import sqlite3
 import subprocess
-import shutil
 import threading
 import time
 from pathlib import Path
@@ -16,22 +14,20 @@ from urllib.request import urlopen
 WORKSPACE_ROOT = Path("/workspace")
 SUBMISSION_DIR = WORKSPACE_ROOT / "submission"
 TEMPLATE_DIR = WORKSPACE_ROOT / "template"
-TASK_DIR = WORKSPACE_ROOT / "task"
+REQUIREMENTS_DIR = TEMPLATE_DIR / "requirements"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
 SDK_DIR = WORKSPACE_ROOT / "sdk"
-PROMPT_PATH = WORKSPACE_ROOT / "prompt" / "task_prompt.txt"
 SPEC_PATH = WORKSPACE_ROOT / "runner-spec.json"
-ARTIFACTS_DIR = WORKSPACE_ROOT / "artifacts"
-RESULT_PATH = ARTIFACTS_DIR / "result.json"
-STDOUT_PATH = ARTIFACTS_DIR / "stdout.log"
-STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
-DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
-RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
-TRACEABILITY_SNAPSHOT_PATH = ARTIFACTS_DIR / "traceability.snapshot.json"
-TRACEABILITY_SEED_PATH = ARTIFACTS_DIR / "traceability-seed.json"
-PAUSE_REQUEST_PATH = ARTIFACTS_DIR / "pause.request.json"
-RESUME_REQUEST_PATH = ARTIFACTS_DIR / "resume.request.json"
-CHECKPOINT_PATH = ARTIFACTS_DIR / "checkpoint.json"
+ARC_DIR = TEMPLATE_DIR / ".arc"
+STDOUT_PATH = ARC_DIR / "stdout.log"
+DEBUG_LOG_PATH = ARC_DIR / "execution.debug.log"
+RUNNER_EVENTS_PATH = ARC_DIR / "runner-events.jsonl"
+TRACEABILITY_DIR = ARC_DIR / "traceability"
+TRACEABILITY_SEED_PATH = ARC_DIR / "traceability-seed.json"
+PAUSE_REQUEST_PATH = ARC_DIR / "pause.request.json"
+RESUME_REQUEST_PATH = ARC_DIR / "resume.request.json"
+CHECKPOINT_PATH = ARC_DIR / "checkpoint.json"
+PLAYWRIGHT_REPORT_PATH = ARC_DIR / "playwright-report.json"
 PIP_CACHE_DIR = Path("/tmp/arcbench/pip-cache")
 PIP_INSTALL_ATTEMPTS = 3
 PIP_DEFAULT_TIMEOUT_SECONDS = 120
@@ -39,23 +35,41 @@ PIP_RESUME_RETRIES = 8
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
-NPM_REGISTRY = "https://repo.huaweicloud.com/repository/npm/"
 
 
-def resolve_traceability_db_path() -> Path:
+TRACEABILITY_TABLES = (
+    "requirements",
+    "scenarios",
+    "interfaces",
+    "tests",
+    "call_edges",
+    "node_states",
+    "node_contracts",
+)
+
+
+def resolve_template_path(path_value: str | None, default_path: Path) -> Path:
+    value = str(path_value or "").strip()
+    if not value:
+        return default_path
+    path = Path(value)
+    return path if path.is_absolute() else TEMPLATE_DIR / path
+
+
+def resolve_traceability_dir() -> Path:
     spec_path = SPEC_PATH
     if spec_path.is_file():
         try:
             payload = json.loads(spec_path.read_text(encoding="utf-8"))
-            configured = str(payload.get("traceability_db_path") or "").strip()
+            configured = str(payload.get("traceability_dir") or "").strip()
             if configured:
-                return Path(configured)
+                return resolve_template_path(configured, TRACEABILITY_DIR)
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
-    return Path("/tmp/arcbench/traceability.db")
+    return TRACEABILITY_DIR
 
 
-TRACEABILITY_DB_PATH = resolve_traceability_db_path()
+TRACEABILITY_DIR = resolve_traceability_dir()
 
 
 def append_debug_log(message: str) -> None:
@@ -101,251 +115,27 @@ def _write_json_atomic(path: Path, payload: dict) -> None:
     tmp_path.replace(path)
 
 
-def _parse_json_list(value) -> list:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    try:
-        parsed = json.loads(str(value))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return []
-    return parsed if isinstance(parsed, list) else []
-
-
-def _parse_bool(value) -> bool | None:
-    if value is None:
-        return None
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true"}:
-        return True
-    if normalized in {"0", "false"}:
-        return False
-    return None
-
-
-def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
-    row = connection.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
-        (table_name,),
-    ).fetchone()
-    return row is not None
-
-
-def write_traceability_snapshot(connection: sqlite3.Connection) -> None:
-    payload = {
-        "requirements": [],
-        "scenarios": [],
-        "interfaces": [],
-        "tests": [],
-        "call_edges": [],
-        "node_states": [],
-        "node_contracts": [],
-    }
-    if _table_exists(connection, "requirements"):
-        payload["requirements"] = [
-            {
-                "req_id": str(row["req_id"] or "").strip(),
-                "name": str(row["name"] or "").strip(),
-                "description": str(row["description"] or "").strip(),
-                "visual_reference": _parse_json_list(row["visual_reference"]),
-                "scenarios": _parse_json_list(row["scenarios"]),
-                "parent_id": str(row["parent_id"] or "").strip() or None,
-                "children_ids": _parse_json_list(row["children_ids"]),
-                "dependencies": _parse_json_list(row["dependencies"]),
-            }
-            for row in connection.execute("SELECT * FROM requirements ORDER BY req_id").fetchall()
-        ]
-    if _table_exists(connection, "scenarios"):
-        payload["scenarios"] = [
-            {
-                "scenario_id": str(row["scenario_id"] or "").strip(),
-                "name": str(row["name"] or "").strip(),
-                "req_id": str(row["req_id"] or "").strip(),
-                "steps": _parse_json_list(row["steps"]),
-            }
-            for row in connection.execute("SELECT * FROM scenarios ORDER BY scenario_id").fetchall()
-        ]
-    if _table_exists(connection, "interfaces"):
-        payload["interfaces"] = [
-            {
-                "interface_id": str(row["interface_id"] or "").strip(),
-                "req_ids": _parse_json_list(row["req_ids"]),
-                "type": str(row["type"] or "").strip(),
-                "content": str(row["content"] or "").strip(),
-                "file_path": str(row["file_path"] or "").strip() or None,
-                "first_line": str(row["first_line"] or "").strip() or None,
-                "implemented": bool(row["implemented"]),
-                "callers": _parse_json_list(row["callers"]),
-                "callees": _parse_json_list(row["callees"]),
-            }
-            for row in connection.execute("SELECT * FROM interfaces ORDER BY interface_id").fetchall()
-        ]
-    if _table_exists(connection, "tests"):
-        payload["tests"] = [
-            {
-                "test_id": str(row["test_id"] or "").strip(),
-                "req_id": str(row["req_id"] or "").strip(),
-                "interface_ids": _parse_json_list(row["interface_ids"]),
-                "type": str(row["type"] or "").strip(),
-                "file_path": str(row["file_path"] or "").strip() or None,
-                "passed": _parse_bool(row["passed"]),
-                "first_line": str(row["first_line"] or "").strip() or None,
-            }
-            for row in connection.execute("SELECT * FROM tests ORDER BY test_id").fetchall()
-        ]
-    if _table_exists(connection, "call_edges"):
-        payload["call_edges"] = [dict(row) for row in connection.execute(
-            "SELECT * FROM call_edges ORDER BY source_req_id, target_req_id, from_interface_id, to_interface_id"
-        ).fetchall()]
-    if _table_exists(connection, "node_states"):
-        payload["node_states"] = [dict(row) for row in connection.execute("SELECT * FROM node_states ORDER BY req_id").fetchall()]
-    if _table_exists(connection, "node_contracts"):
-        payload["node_contracts"] = []
-        for row in connection.execute("SELECT * FROM node_contracts ORDER BY req_id").fetchall():
-            content_text = str(row["content"] or "").strip()
-            try:
-                content = json.loads(content_text) if content_text else {}
-            except json.JSONDecodeError:
-                content = {}
-            payload["node_contracts"].append(
-                {
-                    "req_id": str(row["req_id"] or "").strip(),
-                    "content": content,
-                    "updated_at": str(row["updated_at"] or "").strip() or None,
-                }
-            )
-    _write_json_atomic(TRACEABILITY_SNAPSHOT_PATH, payload)
-
-
 def reset_traceability_storage() -> None:
-    for path in (
-        TRACEABILITY_DB_PATH,
-        TRACEABILITY_SNAPSHOT_PATH,
-        TRACEABILITY_DB_PATH.with_suffix(".db-journal"),
-        TRACEABILITY_DB_PATH.with_suffix(".db-wal"),
-        TRACEABILITY_DB_PATH.with_suffix(".db-shm"),
-    ):
-        try:
-            path.unlink()
-            append_debug_log(f"Removed stale traceability artifact: {path}")
-        except FileNotFoundError:
-            continue
+    if not TRACEABILITY_DIR.exists():
+        return
+    for path in TRACEABILITY_DIR.glob("*.json"):
+        path.unlink()
+        append_debug_log(f"Removed stale traceability table: {path}")
 
 
 def restore_traceability_storage_from_workspace() -> bool:
-    source_db_path = ARTIFACTS_DIR / "traceability.db"
-    if not source_db_path.is_file():
+    if not TRACEABILITY_DIR.is_dir() or not any(TRACEABILITY_DIR.glob("*.json")):
         return False
-    TRACEABILITY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    reset_traceability_storage()
-    shutil.copy2(source_db_path, TRACEABILITY_DB_PATH)
-    for suffix in ("-wal", "-shm"):
-        source_sidecar = ARTIFACTS_DIR / f"traceability.db{suffix}"
-        target_sidecar = TRACEABILITY_DB_PATH.parent / f"{TRACEABILITY_DB_PATH.name}{suffix}"
-        if source_sidecar.is_file():
-            shutil.copy2(source_sidecar, target_sidecar)
-    append_debug_log(
-        f"Restored traceability database from workspace checkpoint: {source_db_path} -> {TRACEABILITY_DB_PATH}"
-    )
+    append_debug_log(f"Traceability store is already in workspace checkpoint location: {TRACEABILITY_DIR}")
     return True
 
 
-def initialize_traceability_db() -> None:
-    TRACEABILITY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+def initialize_traceability_store() -> None:
+    TRACEABILITY_DIR.mkdir(parents=True, exist_ok=True)
     reset_traceability_storage()
-    append_debug_log(f"Initializing traceability database at {TRACEABILITY_DB_PATH}")
-    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
-    connection.row_factory = sqlite3.Row
-    try:
-        cursor = connection.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS requirements (
-                req_id TEXT PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                visual_reference TEXT,
-                scenarios TEXT,
-                parent_id TEXT,
-                children_ids TEXT,
-                dependencies TEXT
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS scenarios (
-                scenario_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                req_id TEXT NOT NULL,
-                steps TEXT NOT NULL
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS interfaces (
-                interface_id TEXT PRIMARY KEY,
-                req_ids TEXT,
-                type TEXT,
-                content TEXT,
-                file_path TEXT,
-                first_line TEXT,
-                implemented INTEGER,
-                callers TEXT,
-                callees TEXT
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tests (
-                test_id TEXT PRIMARY KEY,
-                req_id TEXT,
-                interface_ids TEXT,
-                type TEXT,
-                file_path TEXT,
-                passed INTEGER,
-                first_line TEXT
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS call_edges (
-                source_req_id TEXT,
-                target_req_id TEXT,
-                from_interface_id TEXT,
-                to_interface_id TEXT,
-                edge_type TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (source_req_id, target_req_id, from_interface_id, to_interface_id)
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS node_states (
-                req_id TEXT PRIMARY KEY,
-                state TEXT,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS node_contracts (
-                req_id TEXT PRIMARY KEY,
-                content TEXT,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        connection.commit()
-        write_traceability_snapshot(connection)
-    finally:
-        connection.close()
+    append_debug_log(f"Initializing traceability store at {TRACEABILITY_DIR}")
+    for table_name in TRACEABILITY_TABLES:
+        _write_json_atomic(TRACEABILITY_DIR / f"{table_name}.json", {})
 
 
 def seed_traceability_requirements() -> tuple[int, int]:
@@ -359,54 +149,18 @@ def seed_traceability_requirements() -> tuple[int, int]:
     if not isinstance(requirements, list) or not isinstance(scenarios, list):
         raise RuntimeError("traceability-seed.json must contain requirements and scenarios arrays")
 
-    connection = sqlite3.connect(TRACEABILITY_DB_PATH)
-    connection.row_factory = sqlite3.Row
-    try:
-        cursor = connection.cursor()
-        cursor.executemany(
-            """
-            INSERT OR REPLACE INTO requirements (
-                req_id, name, description, visual_reference, scenarios, parent_id, children_ids, dependencies
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    str(item.get("req_id", "")).strip(),
-                    str(item.get("name", "")).strip(),
-                    str(item.get("description", "")).strip(),
-                    json.dumps(item.get("visual_reference", []), ensure_ascii=False),
-                    json.dumps(item.get("scenarios", []), ensure_ascii=False),
-                    item.get("parent_id"),
-                    json.dumps(item.get("children_ids", []), ensure_ascii=False),
-                    json.dumps(item.get("dependencies", []), ensure_ascii=False),
-                )
-                for item in requirements
-                if str(item.get("req_id", "")).strip()
-            ],
-        )
-        cursor.executemany(
-            """
-            INSERT OR REPLACE INTO scenarios (
-                scenario_id, name, req_id, steps
-            )
-            VALUES (?, ?, ?, ?)
-            """,
-            [
-                (
-                    str(item.get("scenario_id", "")).strip(),
-                    str(item.get("name", "")).strip(),
-                    str(item.get("req_id", "")).strip(),
-                    json.dumps(item.get("steps", []), ensure_ascii=False),
-                )
-                for item in scenarios
-                if str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
-            ],
-        )
-        connection.commit()
-        write_traceability_snapshot(connection)
-    finally:
-        connection.close()
+    requirements_by_id = {
+        str(item.get("req_id", "")).strip(): item
+        for item in requirements
+        if isinstance(item, dict) and str(item.get("req_id", "")).strip()
+    }
+    scenarios_by_id = {
+        str(item.get("scenario_id", "")).strip(): item
+        for item in scenarios
+        if isinstance(item, dict) and str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
+    }
+    _write_json_atomic(TRACEABILITY_DIR / "requirements.json", requirements_by_id)
+    _write_json_atomic(TRACEABILITY_DIR / "scenarios.json", scenarios_by_id)
 
     return len(requirements), len(scenarios)
 def stream_pipe(pipe, sink_file, section: str) -> None:
@@ -462,11 +216,13 @@ def run_command(command: list[str], cwd: Path, stdout_file, stderr_file, check: 
 
 
 def build_npm_environment() -> dict[str, str]:
-    return {
-        **os.environ,
-        "NPM_CONFIG_REGISTRY": NPM_REGISTRY,
-        "NPM_CONFIG_REPLACE_REGISTRY_HOST": "always",
-    }
+    npm_env = dict(os.environ)
+    # Use the registry configured inside the runner image. Only force npm's
+    # safe default for lockfile host replacement to avoid double-prefixing
+    # mirror tarball URLs from existing package-lock files.
+    npm_env.pop("NPM_CONFIG_REGISTRY", None)
+    npm_env["NPM_CONFIG_REPLACE_REGISTRY_HOST"] = "npmjs"
+    return npm_env
 
 
 def log_source_mirror_configuration() -> None:
@@ -477,8 +233,7 @@ def log_source_mirror_configuration() -> None:
     append_debug_log(
         "Source mirror configuration: "
         "apt_mirror=https://mirrors.aliyun.com/ubuntu (baked into runner image), "
-        f"npm_registry={str(npm_env.get('NPM_CONFIG_REGISTRY', '')).strip() or '<default>'}, "
-        f"npm_replace_registry_host={str(npm_env.get('NPM_CONFIG_REPLACE_REGISTRY_HOST', '')).strip() or '<default>'}, "
+        "npm_config=container npm config, "
         f"pip_index_url={pip_index_url or '<default>'}, "
         f"pip_trusted_host={pip_trusted_host or '<default>'}, "
         f"pip_extra_index_url={pip_extra_index_url or '<none>'}"
@@ -497,9 +252,9 @@ def log_pip_mirror_configuration(pip_env: dict[str, str]) -> None:
 
 def log_npm_mirror_configuration(label: str, env: dict[str, str]) -> None:
     append_debug_log(
-        f"Applying npm mirror configuration for {label}: "
-        f"NPM_CONFIG_REGISTRY={str(env.get('NPM_CONFIG_REGISTRY', '')).strip() or '<default>'}, "
-        f"NPM_CONFIG_REPLACE_REGISTRY_HOST={str(env.get('NPM_CONFIG_REPLACE_REGISTRY_HOST', '')).strip() or '<default>'}"
+        f"Using container npm configuration for {label}: "
+        f"NPM_CONFIG_REGISTRY={str(env.get('NPM_CONFIG_REGISTRY', '')).strip() or '<unset>'}, "
+        f"NPM_CONFIG_REPLACE_REGISTRY_HOST={str(env.get('NPM_CONFIG_REPLACE_REGISTRY_HOST', '')).strip() or '<unset>'}"
     )
 
 
@@ -525,7 +280,7 @@ def map_task_category_to_app_type(category: str) -> str:
 
 
 def build_generation_agent_command(entrypoint: Path) -> list[str]:
-    command = ["python3", entrypoint.name]
+    command = ["python3", str(entrypoint)]
     spec = read_spec()
     task_payload = spec.get("task") if isinstance(spec, dict) else {}
     category = ""
@@ -534,9 +289,9 @@ def build_generation_agent_command(entrypoint: Path) -> list[str]:
     app_type = map_task_category_to_app_type(category)
     command.extend(
         [
-            str(TASK_DIR),
+            str(spec.get("requirement_dir") or "requirements"),
             "--output-dir",
-            str(TEMPLATE_DIR),
+            str(spec.get("output_dir") or "."),
             "--app-type",
             app_type,
         ]
@@ -655,21 +410,19 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
 def build_agent_environment() -> dict[str, str]:
     env = {
         **os.environ,
-        "ARCBENCH_TASK_PROMPT": PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() else "",
-        "ARCBENCH_PROMPT_PATH": str(PROMPT_PATH),
         "ARCBENCH_TEMPLATE_DIR": str(TEMPLATE_DIR),
-        "ARCBENCH_TASK_DIR": str(TASK_DIR),
+        "ARCBENCH_PROJECT_DIR": ".",
+        "ARCBENCH_REQUIREMENT_DIR": "requirements",
+        "ARCBENCH_TASK_DIR": "requirements",
         "ARCBENCH_SUBMISSION_DIR": str(SUBMISSION_DIR),
-        "ARCBENCH_OUTPUT_DIR": str(TEMPLATE_DIR),
-        "ARCBENCH_ARTIFACTS_DIR": str(ARTIFACTS_DIR),
-        "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
-        "ARCBENCH_TRACEABILITY_DB_PATH": str(TRACEABILITY_DB_PATH),
-        "ARCBENCH_TRACEABILITY_SNAPSHOT_PATH": str(TRACEABILITY_SNAPSHOT_PATH),
-        "ARCBENCH_TRACEABILITY_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
+        "ARCBENCH_OUTPUT_DIR": ".",
+        "ARCBENCH_ARC_DIR": ".arc",
+        "ARCBENCH_RUNNER_EVENTS_PATH": ".arc/runner-events.jsonl",
+        "ARCBENCH_TRACEABILITY_DIR": ".arc/traceability",
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
-        "ARCBENCH_CHECKPOINT_PATH": str(CHECKPOINT_PATH),
-        "ARCBENCH_PAUSE_REQUEST_PATH": str(PAUSE_REQUEST_PATH),
-        "ARCBENCH_RESUME_REQUEST_PATH": str(RESUME_REQUEST_PATH),
+        "ARCBENCH_CHECKPOINT_PATH": ".arc/checkpoint.json",
+        "ARCBENCH_PAUSE_REQUEST_PATH": ".arc/pause.request.json",
+        "ARCBENCH_RESUME_REQUEST_PATH": ".arc/resume.request.json",
         "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
     return env
@@ -688,7 +441,7 @@ def log_agent_environment_summary(env: dict[str, str]) -> None:
         f"VISUAL_BASE_URL={str(env.get('VISUAL_BASE_URL', '')).strip() or '<missing>'}, "
         f"VISUAL_MODEL={str(env.get('VISUAL_MODEL', '')).strip() or '<missing>'}, "
         f"ARCBENCH_RUNNER_EVENTS_PATH={str(env.get('ARCBENCH_RUNNER_EVENTS_PATH', '')).strip() or '<missing>'}, "
-        f"ARCBENCH_TRACEABILITY_DB_PATH={str(env.get('ARCBENCH_TRACEABILITY_DB_PATH', '')).strip() or '<missing>'}"
+        f"ARCBENCH_TRACEABILITY_DIR={str(env.get('ARCBENCH_TRACEABILITY_DIR', '')).strip() or '<missing>'}"
     )
 
 
@@ -700,7 +453,7 @@ def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProces
     append_runner_event("start_agent", "Launching generation agent")
     return run_command(
         command,
-        cwd=SUBMISSION_DIR,
+        cwd=TEMPLATE_DIR,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
         check=False,
@@ -820,7 +573,7 @@ export default defineConfig({{
   timeout: 30000,
   fullyParallel: false,
   workers: {PLAYWRIGHT_WORKERS},
-  reporter: [['json', {{ outputFile: '../artifacts/playwright-report.json' }}]],
+  reporter: [['json', {{ outputFile: '{PLAYWRIGHT_REPORT_PATH.as_posix()}' }}]],
   use: {{
     baseURL: '{base_url}',
     channel: 'chromium',
@@ -939,7 +692,7 @@ def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.P
 
 
 def parse_playwright_results() -> dict:
-    report_path = ARTIFACTS_DIR / "playwright-report.json"
+    report_path = PLAYWRIGHT_REPORT_PATH
     if not report_path.exists():
         return {"passed": 0, "failed": 0, "score": 100.0, "duration_seconds": 0, "tests": []}
 
@@ -1147,7 +900,7 @@ def run_web_template(stdout_file, stderr_file) -> dict:
 
 
 def main() -> int:
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    ARC_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint = read_checkpoint()
     resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
     runtime_state_restored = bool(checkpoint.get("runtime_state_restored"))
@@ -1163,7 +916,7 @@ def main() -> int:
             status="success",
         )
     else:
-        initialize_traceability_db()
+        initialize_traceability_store()
         seeded_requirements, seeded_scenarios = seed_traceability_requirements()
         append_runner_event(
             "deploy_agent",
@@ -1174,7 +927,8 @@ def main() -> int:
     managed_processes: list[tuple[subprocess.Popen | None, str]] = []
     managed_threads: list[threading.Thread | None] = []
 
-    with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file, STDERR_PATH.open("w", encoding="utf-8") as stderr_file:
+    with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file:
+        stderr_file = stdout_file
         try:
             install_agent_dependencies(stdout_file, stderr_file)
             run_generation_agent_with_resume(stdout_file, stderr_file)
@@ -1197,8 +951,6 @@ def main() -> int:
                     f"CLI verification parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}",
                     status="success",
                 )
-                RESULT_PATH.write_text(json.dumps(results, indent=2), encoding="utf-8")
-                append_runner_event("run_tests", "Result file written", status="success")
                 return 0 if results["failed"] == 0 else 1
 
             runtime = run_web_template(stdout_file, stderr_file)
@@ -1222,26 +974,11 @@ def main() -> int:
 
             results = parse_playwright_results()
             append_runner_event("run_tests", f"Playwright results parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}", status="success")
-            RESULT_PATH.write_text(json.dumps(results, indent=2), encoding="utf-8")
-            append_runner_event("run_tests", "Result file written", status="success")
             return 0 if results["failed"] == 0 else 1
         except Exception as exc:  # noqa: BLE001
             append_debug_log(f"Runner failed: {exc}")
             error_step = "run_tests" if (TESTS_DIR / "playwright.config.ts").exists() else "start_agent"
             append_runner_event(error_step, str(exc), status="error")
-            RESULT_PATH.write_text(
-                json.dumps(
-                    {
-                        "passed": 0,
-                        "failed": 0,
-                        "score": 0,
-                        "duration_seconds": 0,
-                        "tests": [],
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
             return 1
         finally:
             for process, label in reversed(managed_processes):

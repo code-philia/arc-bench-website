@@ -10,9 +10,8 @@ It provides:
 
 The package is designed to stay compatible with the current ARC-Bench website backend:
 
-- `runner-events.jsonl`
-- `traceability.db`
-- `demo-test-statuses.json`
+- `.arc/runner-events.jsonl`
+- `.arc/traceability/*.json`
 
 ## Quick start
 

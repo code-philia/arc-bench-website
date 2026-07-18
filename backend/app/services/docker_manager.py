@@ -186,10 +186,6 @@ class DockerManager:
         return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py"])
 
     @staticmethod
-    def collect_result(workspace_path: str | Path) -> Path:
-        return Path(workspace_path) / "artifacts" / "result.json"
-
-    @staticmethod
     def _format_daemon_error(exc: DockerException) -> str:
         message = str(exc)
         lowered = message.lower()

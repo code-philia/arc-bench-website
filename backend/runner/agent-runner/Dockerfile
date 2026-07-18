@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/playwright/python:v1.54.0-noble
 WORKDIR /opt/arcbench
 
 ENV NPM_CONFIG_REGISTRY=https://repo.huaweicloud.com/repository/npm/ \
-    NPM_CONFIG_REPLACE_REGISTRY_HOST=always
+    NPM_CONFIG_REPLACE_REGISTRY_HOST=npmjs
 
 RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
 

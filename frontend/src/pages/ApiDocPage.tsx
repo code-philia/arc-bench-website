@@ -23,12 +23,11 @@ const overviewDiagram = String.raw`Agent code
     | call Agent Runtime SDK
     v
 arcbench_agent_runtime
-    |-- write live traceability.db (/tmp/arcbench/traceability.db)
-    |-- atomically refresh traceability.snapshot.json
-    |-- append runner-events.jsonl
+    |-- write keyed JSON tables (.arc/traceability/*.json)
+    |-- append .arc/runner-events.jsonl
     v
 ArcBench backend file watcher
-    |-- detect new lines in runner-events.jsonl
+    |-- detect new lines in .arc/runner-events.jsonl
     |-- parse fixed event payloads
     |-- read latest traceability snapshot
     |-- notify frontend which panel should refresh
@@ -123,10 +122,8 @@ function OverviewPage() {
         <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Execution Flow</h2>
         <p className={proseClassName}>
           Your agent should call the built-in <code>arcbench_agent_runtime</code> package. The SDK owns the fixed event
-          protocol, appends <code>runner-events.jsonl</code>, writes the container-local live
-          <code> /tmp/arcbench/traceability.db </code>, atomically refreshes
-          <code> /workspace/artifacts/traceability.snapshot.json </code>, and lets the backend drive frontend refreshes
-          by reading the snapshot instead of the live database.
+          protocol, appends <code>.arc/runner-events.jsonl</code>, writes keyed JSON tables under
+          <code> .arc/traceability/ </code>, and lets the backend drive frontend refreshes by reading those tables.
         </p>
         <CodeBlock source={overviewDiagram} />
       </section>
@@ -294,7 +291,7 @@ function TraceabilityPage() {
         <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Automatic Refresh</h2>
         <p className={proseClassName}>
           These APIs write the live database, atomically refresh
-          <code> traceability.snapshot.json </code>, and append fixed-format events into
+          <code> .arc/traceability/*.json </code>, and append fixed-format events into
           <code> runner-events.jsonl </code>. The backend watches new event lines, reloads data from the snapshot, and
           the frontend refreshes the affected traceability views automatically.
         </p>

@@ -45,12 +45,12 @@ class AgentStarterService:
                 parser.add_argument(
                     "requirement_path",
                     nargs="?",
-                    default=os.environ.get("ARCBENCH_TASK_DIR", "/workspace/task"),
+                    default=os.environ.get("ARCBENCH_TASK_DIR", "requirements"),
                     help="Requirement directory containing requirements.yaml.",
                 )
                 parser.add_argument(
                     "--output-dir",
-                    default=os.environ.get("ARCBENCH_OUTPUT_DIR", "/workspace/template"),
+                    default=os.environ.get("ARCBENCH_OUTPUT_DIR", "."),
                     help="Output workspace directory.",
                 )
                 parser.add_argument(
@@ -206,10 +206,10 @@ class AgentStarterService:
 
             Runtime assumptions:
 
-            - requirements live under `/workspace/task`
-            - output project should be written into `/workspace/template`
-            - runner events should be written to `/workspace/artifacts/runner-events.jsonl`
-            - the runner launches `python3 main.py /workspace/task --output-dir /workspace/template --app-type {runner_app_type}`
+            - requirements live under `requirements/` relative to the output project root
+            - output project should be written into the current working directory
+            - runner events should be written to `.arc/runner-events.jsonl`
+            - the runner launches `python3 main.py requirements --output-dir . --app-type {runner_app_type}` from the output project root
             - for web tasks, the runner also appends `--web-port 3000`
             """
         ).strip() + "\n"
