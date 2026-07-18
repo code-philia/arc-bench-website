@@ -156,6 +156,60 @@ class TraceabilityStore:
             "node_contracts": self.list_node_contracts(),
         }
 
+    def store_requirement_tree(self, requirement_tree: dict[str, Any]) -> None:
+        """Persist a nested ARC requirements tree into current-state tables.
+
+        Only requirements and scenarios are replaced here. Generated interfaces,
+        tests, node states, and contracts remain owned by their phase-specific
+        SDK calls and by git history.
+        """
+
+        requirements: dict[str, Any] = {}
+        scenarios: dict[str, Any] = {}
+
+        def walk(node: dict[str, Any], parent_id: str | None = None) -> None:
+            if not isinstance(node, dict):
+                return
+            req_id = str(node.get("id") or node.get("req_id") or "").strip()
+            if not req_id:
+                return
+            children = [child for child in _as_list(node.get("children")) if isinstance(child, dict)]
+            children_ids = [
+                str(child.get("id") or child.get("req_id") or "").strip()
+                for child in children
+                if str(child.get("id") or child.get("req_id") or "").strip()
+            ]
+            node_scenarios = [dict(item) for item in _as_list(node.get("scenarios")) if isinstance(item, dict)]
+            requirements[req_id] = {
+                "req_id": req_id,
+                "id": req_id,
+                "name": str(node.get("name") or "").strip(),
+                "description": str(node.get("description") or "").strip(),
+                "visual_reference": _as_str_list(node.get("visual_reference")),
+                "scenarios": node_scenarios,
+                "parent_id": _as_optional_str(parent_id),
+                "children_ids": children_ids,
+                "dependencies": _as_str_list(node.get("dependencies")),
+            }
+            for scenario in node_scenarios:
+                scenario_id = str(scenario.get("id") or scenario.get("scenario_id") or "").strip()
+                if not scenario_id:
+                    continue
+                scenarios[scenario_id] = {
+                    "scenario_id": scenario_id,
+                    "id": scenario_id,
+                    "name": str(scenario.get("name") or "").strip() or scenario_id,
+                    "req_id": req_id,
+                    "steps": _as_list(scenario.get("steps")),
+                }
+            for child in children:
+                walk(child, req_id)
+
+        walk(requirement_tree)
+        self._write_table("requirements", requirements)
+        self._write_table("scenarios", scenarios)
+        self.events.notify_traceability_changed("requirement_tree_stored")
+
     def _get_row(self, table_name: str, key: str) -> dict[str, Any] | None:
         row = self._read_table(table_name).get(str(key or "").strip())
         return dict(row) if isinstance(row, dict) else None
