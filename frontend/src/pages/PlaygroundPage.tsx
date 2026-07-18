@@ -98,6 +98,10 @@ export default function PlaygroundPage() {
       })),
     [benchmarks],
   );
+  const totalBenchmarkTasks = useMemo(
+    () => benchmarkItems.reduce((sum, item) => sum + item.task_count, 0),
+    [benchmarkItems],
+  );
   const benchmarkBrowseHref = benchmarkItems[0]?.href ?? "/playground/arc-bench/web";
 
   return (
@@ -112,8 +116,23 @@ export default function PlaygroundPage() {
         <div className="playground-home-grid">
           <section className="playground-home-hero" aria-label="Playground quick actions">
             <div className="playground-home-welcome">
+              <div className="playground-home-eyebrow">Agent engineering workspace</div>
               <h1>Welcome back, {welcomeName}!</h1>
-              <p>Build, test, and benchmark your AI agents.</p>
+              <p>Build requirements, run agents, and inspect traceable benchmark evidence in one production workflow.</p>
+              <div className="playground-home-stats" aria-label="Playground summary">
+                <div className="playground-home-stat">
+                  <span>{loading ? "--" : webTaskCount}</span>
+                  <strong>Web tasks</strong>
+                </div>
+                <div className="playground-home-stat">
+                  <span>{benchmarkLoading ? "--" : benchmarkItems.length}</span>
+                  <strong>Benchmark tracks</strong>
+                </div>
+                <div className="playground-home-stat">
+                  <span>{benchmarkLoading ? "--" : totalBenchmarkTasks}</span>
+                  <strong>Benchmark tasks</strong>
+                </div>
+              </div>
             </div>
 
             <div className="playground-actions">
@@ -125,6 +144,9 @@ export default function PlaygroundPage() {
                   <div className="playground-entry-kicker">Interactive drafting</div>
                   <h2>Quick Start</h2>
                   <p>Learn about requirement trees, upload your agent, and run the benchmark workflow end to end.</p>
+                  <span className="playground-entry-card-action">
+                    Start guided flow <RightOutlined />
+                  </span>
                 </div>
               </button>
 
@@ -136,6 +158,9 @@ export default function PlaygroundPage() {
                   <div className="playground-entry-kicker">Custom task authoring</div>
                   <h2>Create Task</h2>
                   <p>Design your own app requirements and upload project material for future task generation workflows.</p>
+                  <span className="playground-entry-card-action">
+                    Open editor <RightOutlined />
+                  </span>
                 </div>
               </Link>
             </div>
@@ -198,7 +223,7 @@ export default function PlaygroundPage() {
               <div className="playground-benchmark-summary-copy">
                 <div className="playground-benchmark-title">ARC-BENCH</div>
                 <p className="playground-benchmark-copy">
-                  Public benchmark tracks from 'arc-bench', packaged with requirement documents, tests, references, and starter project context.
+                  Public benchmark tracks from arc-bench, packaged with requirement documents, tests, references, and starter project context.
                 </p>
               </div>
             </div>

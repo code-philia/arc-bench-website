@@ -108,6 +108,18 @@ export default function RequirementsPage() {
           <span className="current">Home</span>
         </div>
 
+        <section className="competition-home-hero-panel" aria-label="Competition overview">
+          <div className="competition-home-hero-copy">
+            <div className="competition-panel-kicker">
+              <TrophyFilled /> Competition workspace
+            </div>
+            <h1>Competition Hub</h1>
+            <p>
+              Track benchmark packs, compare leaderboard runs, and move from public task banks into reproducible agent submissions.
+            </p>
+          </div>
+        </section>
+
         <div className="competition-home-grid">
           <section className="competition-heroes-panel">
             <div className="competition-heroes-header compact">

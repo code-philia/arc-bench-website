@@ -176,6 +176,18 @@ export default function ResearchPage() {
           <span className="sep">/</span>
           <span className="current">Overview</span>
         </div>
+
+        <section className="research-hero-panel" aria-label="Research overview">
+          <div className="research-hero-copy">
+            <div className="competition-panel-kicker research-kicker-agents">
+              <ReadOutlined /> Research index
+            </div>
+            <h1>Research Map</h1>
+            <p>
+              A curated reference map for related computer-use agents, browser environments, and evaluation suites that inform this benchmark.
+            </p>
+          </div>
+        </section>
         
         <div className="research-grid">
           <section className="research-column-panel leaderboard-card leaderboard-card-clean">

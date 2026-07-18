@@ -2529,28 +2529,16 @@ export default function PlaygroundSubmissionDetailPage() {
 
         {!sidebarMinimized ? (
           <div
+            className="submission-sidebar-resizer"
             onMouseDown={onSidebarResizeMouseDown}
-            style={{
-              width: "14px",
-              cursor: "col-resize",
-              background: "#f8fafc",
-              borderLeft: "1px solid #e2e8f0",
-              borderRight: "1px solid #e2e8f0",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "column",
-              gap: "6px",
-              flexShrink: 0,
-            }}
           >
-            <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
-            <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
-            <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#cbd5e1" }} />
+            <div className="submission-sidebar-resizer-dot" />
+            <div className="submission-sidebar-resizer-dot" />
+            <div className="submission-sidebar-resizer-dot" />
           </div>
         ) : null}
 
-        <main style={{
+        <main className="playground-submission-main-shell" style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
@@ -2829,7 +2817,7 @@ export default function PlaygroundSubmissionDetailPage() {
               />
             </div>
             {activeTab === "results" ? (
-              <div style={{ padding: "24px", flex: 1, overflow: "auto" }}>
+              <div className="submission-results-workspace" style={{ padding: "24px", flex: 1, overflow: "auto" }}>
                 <SubmissionResultCard submission={submission} />
               </div>
             ) : activeTab === "stdio" ? (

@@ -1,4 +1,4 @@
-import { DownloadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, RightOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -63,6 +63,12 @@ function normalizeTaskType(value: string): PlaygroundTaskType | null {
 
 function hasBenchmarkDownload(task: RequirementSummary): task is BenchmarkDetail["tasks"][number] {
   return "downloads" in task;
+}
+
+function taskAccentClass(category: string) {
+  if (category === "android") return "mobile";
+  if (category === "web" || category === "mobile" || category === "kernel" || category === "mixed") return category;
+  return "mixed";
 }
 
 export default function PlaygroundTaskListPage() {
@@ -224,72 +230,82 @@ export default function PlaygroundTaskListPage() {
           {orderedTasks.length === 0 ? (
             <div className="empty-state">No tasks available for this type yet.</div>
           ) : (
-            <table className="task-table">
+            <table className="task-table task-resource-table">
               <thead>
                 <tr>
-                  <th style={{ width: "120px" }}>ID</th>
+                  <th style={{ width: "156px" }}>ID</th>
                   <th>Task</th>
                   <th style={{ width: "120px" }}>Category</th>
                   <th style={{ width: "110px" }}>REQs</th>
                   <th style={{ width: "100px" }}>Tests</th>
                   {isBenchmarkRoute ? <th style={{ width: "92px" }}>Download</th> : null}
+                  <th style={{ width: "52px" }}>
+                    <span className="visually-hidden">Open task</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {orderedTasks.map((task, index) => (
-                  <tr
-                    key={task.id}
-                    data-quickstart-id={index === 0 ? "quickstart-task-item" : undefined}
-                    onClick={() => navigate(
-                      isCompetitionRoute
-                        ? `/requirements/${task.id}`
-                        : isBenchmarkRoute
-                          ? `/playground/arc-bench/${taskType}/${task.id}`
-                          : `/playground/task-bank/${taskType}/${task.id}`,
-                    )}
-                  >
-                    <td className="task-id">{task.display_id}</td>
-                    <td>
-                      <div className="task-name">
-                        <Link
-                          className="inline-link"
-                          to={
-                            isCompetitionRoute
-                              ? `/requirements/${task.id}`
-                              : isBenchmarkRoute
-                                ? `/playground/arc-bench/${taskType}/${task.id}`
-                                : `/playground/task-bank/${taskType}/${task.id}`
-                          }
-                        >
-                          {task.title}
-                        </Link>
-                        <span className="sub">{task.summary}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="model-chip">{task.category}</span>
-                    </td>
-                    <td>{task.module_count}</td>
-                    <td>{task.total_tests}</td>
-                    {isBenchmarkRoute ? (
-                      <td onClick={(event) => event.stopPropagation()}>
-                        {hasBenchmarkDownload(task) && task.downloads?.task_bundle ? (
-                          <a
-                            className="benchmark-task-download-button"
-                            href={task.downloads.task_bundle}
-                            onClick={(event) => event.stopPropagation()}
-                            aria-label={`Download ${task.title}`}
-                          >
-                            <DownloadOutlined />
-                            <span>ZIP</span>
-                          </a>
-                        ) : (
-                          <span className="benchmark-task-download-button disabled">N/A</span>
-                        )}
+                {orderedTasks.map((task, index) => {
+                  const taskHref = isCompetitionRoute
+                    ? `/requirements/${task.id}`
+                    : isBenchmarkRoute
+                      ? `/playground/arc-bench/${taskType}/${task.id}`
+                      : `/playground/task-bank/${taskType}/${task.id}`;
+
+                  return (
+                    <tr
+                      key={task.id}
+                      className={`task-resource-row ${taskAccentClass(task.category)}`}
+                      data-quickstart-id={index === 0 ? "quickstart-task-item" : undefined}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigate(taskHref)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(taskHref);
+                        }
+                      }}
+                    >
+                      <td className="task-id">{task.display_id}</td>
+                      <td>
+                        <div className="task-name">
+                          <Link className="inline-link" to={taskHref}>
+                            {task.title}
+                          </Link>
+                          <span className="sub">{task.summary}</span>
+                        </div>
                       </td>
-                    ) : null}
-                  </tr>
-                ))}
+                      <td>
+                        <span className="model-chip">{task.category}</span>
+                      </td>
+                      <td>{task.module_count}</td>
+                      <td>{task.total_tests}</td>
+                      {isBenchmarkRoute ? (
+                        <td onClick={(event) => event.stopPropagation()}>
+                          {hasBenchmarkDownload(task) && task.downloads?.task_bundle ? (
+                            <a
+                              className="benchmark-task-download-button"
+                              href={task.downloads.task_bundle}
+                              onClick={(event) => event.stopPropagation()}
+                              aria-label={`Download ${task.title}`}
+                            >
+                              <DownloadOutlined />
+                              <span>ZIP</span>
+                            </a>
+                          ) : (
+                            <span className="benchmark-task-download-button disabled">N/A</span>
+                          )}
+                        </td>
+                      ) : null}
+                      <td>
+                        <span className="task-row-action" aria-hidden="true">
+                          <RightOutlined />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
