@@ -87,25 +87,25 @@ const INTERFACE_NODE_WIDTH = 204;
 const INTERFACE_NODE_HEIGHT = 88;
 const TEST_NODE_WIDTH = 196;
 const TEST_NODE_HEIGHT = 90;
-const LANE_HEADER_WIDTH = 160;
-const LANE_HEADER_HEIGHT = 34;
-const LANE_CONTAINER_MIN_HEIGHT = 88;
+const LANE_HEADER_WIDTH = 112;
+const LANE_HEADER_HEIGHT = 24;
+const LANE_CONTAINER_MIN_HEIGHT = 108;
 const LEFT_MARGIN = 72;
 const TOP_MARGIN = 78;
 const REQUIREMENT_COLUMN_GAP = 104;
 const REQUIREMENT_ROW_GAP = 42;
 const INTERFACE_AREA_OFFSET = 420;
-const INTERFACE_COLUMN_GAP = 34;
-const INTERFACE_ROW_GAP = 28;
-const INTERFACE_SECTION_GAP = 34;
-const TRACEABILITY_SECTION_GAP = 42;
-const INTERFACE_LANE_PADDING_X = 28;
-const INTERFACE_LANE_PADDING_Y = 24;
-const INTERFACE_LANE_HEADER_GAP = 22;
-const SECTION_FRAME_PADDING_X = 44;
-const SECTION_FRAME_PADDING_TOP = 64;
-const SECTION_FRAME_PADDING_BOTTOM = 42;
-const SECTION_HEADER_HEIGHT = 72;
+const INTERFACE_COLUMN_GAP = 24;
+const INTERFACE_ROW_GAP = 20;
+const INTERFACE_SECTION_GAP = 18;
+const TRACEABILITY_SECTION_GAP = 30;
+const INTERFACE_LANE_PADDING_X = 18;
+const INTERFACE_LANE_PADDING_Y = 18;
+const INTERFACE_LANE_HEADER_GAP = 14;
+const SECTION_FRAME_PADDING_X = 28;
+const SECTION_FRAME_PADDING_TOP = 56;
+const SECTION_FRAME_PADDING_BOTTOM = 34;
+const SECTION_HEADER_HEIGHT = 44;
 const SECTION_MIN_WIDTH = 344;
 const FLOW_LANE_WIDTH = 108;
 const INTERFACE_LANE_ORDERS: InterfaceLane[] = ["ui", "api", "func", "db"];
@@ -145,13 +145,13 @@ function interfaceLaneFromType(value: string): InterfaceLane {
 function interfaceLaneStyle(lane: InterfaceLane) {
   switch (lane) {
     case "ui":
-      return { fill: "rgba(78, 164, 199, 0.2)", stroke: "#264653", accent: "#264653" };
+      return { fill: "#f0f9ff", stroke: "#bae6fd", accent: "#0284c7" };
     case "api":
-      return { fill: "rgba(42, 157, 143, 0.2)", stroke: "#2a9d8f", accent: "#2a9d8f" };
+      return { fill: "#ecfdf5", stroke: "#bbf7d0", accent: "#059669" };
     case "func":
-      return { fill: "rgba(244, 162, 97, 0.2)", stroke: "#f4a261", accent: "#f4a261" };
+      return { fill: "#fff7ed", stroke: "#fed7aa", accent: "#ea580c" };
     case "db":
-      return { fill: "rgba(149, 118, 201, 0.2)", stroke: "#9576c9", accent: "#9576c9" };
+      return { fill: "#f5f3ff", stroke: "#ddd6fe", accent: "#7c3aed" };
   }
 }
 
@@ -165,11 +165,11 @@ function testLaneFromType(value: string): TestLane {
 function testLaneStyle(lane: TestLane) {
   switch (lane) {
     case "unit":
-      return { fill: "rgba(71, 111, 149, 0.5)", stroke: "#476f95", accent: "#476f95" };
+      return { fill: "#f8fafc", stroke: "#cbd5e1", accent: "#475569" };
     case "integration":
-      return { fill: "rgba(117, 147, 175, 0.5)", stroke: "#7593af", accent: "#7593af" };
+      return { fill: "#f0fdfa", stroke: "#99f6e4", accent: "#0f766e" };
     case "e2e":
-      return { fill: "rgba(163, 183, 202, 0.5)", stroke: "#a3b7ca", accent: "#a3b7ca" };
+      return { fill: "#fef2f2", stroke: "#fecaca", accent: "#dc2626" };
   }
 }
 
@@ -248,10 +248,10 @@ function resolveNodeHighlightLabelLineHeight(datum: NodeData, scale: number): nu
 
 function resolveEdgeHighlightColor(kind: FactoryEdgeKind | string) {
   if (kind === "factory-flow") {
-    return "#f09b07";
+    return "#10b981";
   }
   if (kind === "interface-call") {
-    return "#000000";
+    return "#111827";
   }
   if (kind === "requirement-test") {
     return "#0011ff";
@@ -263,21 +263,21 @@ function sectionFrameStyle(section: "requirements" | "interfaces" | "tests") {
   switch (section) {
     case "requirements":
       return {
-        fill: "rgba(255, 255, 255, 0)",
-        stroke: "#9ca3af",
-        accent: "#f8fafc",
+        fill: "#ffffff",
+        stroke: "#e5e7eb",
+        accent: "#fafafa",
       };
     case "interfaces":
       return {
-        fill: "rgba(255, 255, 255, 0)",
-        stroke: "#9ca3af",
-        accent: "#f8fafc",
+        fill: "#ffffff",
+        stroke: "#e5e7eb",
+        accent: "#fafafa",
       };
     case "tests":
       return {
-        fill: "rgba(255, 255, 255, 0)",
-        stroke: "#9ca3af",
-        accent: "#f8fafc",
+        fill: "#ffffff",
+        stroke: "#e5e7eb",
+        accent: "#fafafa",
       };
   }
 }
@@ -500,6 +500,7 @@ function buildGraphModel({
         shadowBlur: 10,
         shadowOffsetX: 0,
         shadowOffsetY: 4,
+        zIndex: 12,
         labelText: buildNodeLabelText(node.data.id, truncateLabel(node.data.name, 42)),
         labelFill: "#16202a",
         labelFontFamily: nodeLabelFontFamily(),
@@ -530,6 +531,7 @@ function buildGraphModel({
         stroke: "#a9b8ca",
         lineWidth: 2.05,
         opacity: 0.98,
+        zIndex: 10,
       },
       states: [],
       data: {
@@ -702,12 +704,14 @@ function buildGraphModel({
       const containerHeight = Math.max(
         LANE_CONTAINER_MIN_HEIGHT,
         (INTERFACE_LANE_PADDING_Y * 2)
+          + LANE_HEADER_HEIGHT
+          + INTERFACE_LANE_HEADER_GAP
           + (rowCount * INTERFACE_NODE_HEIGHT)
           + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
       );
-      const containerTop = interfaceLaneTop + INTERFACE_LANE_HEADER_GAP;
-      const headerX = interfaceSectionStartX + (LANE_HEADER_WIDTH / 2);
-      const headerY = containerTop - (LANE_HEADER_HEIGHT / 2);
+      const containerTop = interfaceLaneTop;
+      const headerX = interfaceSectionStartX + INTERFACE_LANE_PADDING_X + (LANE_HEADER_WIDTH / 2);
+      const headerY = containerTop + INTERFACE_LANE_PADDING_Y + (LANE_HEADER_HEIGHT / 2);
       const containerCenterY = containerTop + (containerHeight / 2);
       const containerCenterX = interfaceSectionStartX + (interfaceAvailableWidth / 2);
 
@@ -718,13 +722,13 @@ function buildGraphModel({
           x: containerCenterX,
           y: containerCenterY,
           size: [interfaceAvailableWidth, containerHeight],
-          radius: 16,
-          fill: "rgba(255, 255, 255, 0)",
-          fillOpacity: 0,
+          radius: 18,
+          fill: laneVisual.fill,
+          fillOpacity: 0.28,
           stroke: laneVisual.stroke,
-          strokeOpacity: 0.44,
+          strokeOpacity: 1,
           lineWidth: 1.1,
-          lineDash: [7, 6],
+          zIndex: 1,
         },
         states: [],
         data: {
@@ -741,15 +745,15 @@ function buildGraphModel({
           x: headerX,
           y: headerY,
           size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
-          radius: 8,
-          fill: "#f8fafc",
+          radius: 999,
+          fill: "#ffffff",
           stroke: laneVisual.stroke,
-          strokeOpacity: 0.38,
+          strokeOpacity: 1,
           labelText: lane.toUpperCase(),
           labelFill: laneVisual.accent,
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 18,
-          labelFontWeight: 600,
+          labelFontSize: 13,
+          labelFontWeight: 700,
           labelLineHeight: LANE_HEADER_HEIGHT,
           labelPlacement: "center",
           labelTextAlign: "center",
@@ -757,6 +761,7 @@ function buildGraphModel({
           labelOffsetX: 0,
           labelOffsetY: 0,
           lineWidth: 1,
+          zIndex: 6,
         },
         states: [],
         data: {
@@ -775,6 +780,8 @@ function buildGraphModel({
           + (columnIndex * (INTERFACE_NODE_WIDTH + INTERFACE_COLUMN_GAP));
         const y = containerTop
           + INTERFACE_LANE_PADDING_Y
+          + LANE_HEADER_HEIGHT
+          + INTERFACE_LANE_HEADER_GAP
           + (INTERFACE_NODE_HEIGHT / 2)
           + (rowIndex * (INTERFACE_NODE_HEIGHT + INTERFACE_ROW_GAP));
         const states: string[] = [];
@@ -797,20 +804,21 @@ function buildGraphModel({
             x,
             y,
             size: [INTERFACE_NODE_WIDTH, INTERFACE_NODE_HEIGHT],
-            radius: 10,
-            fill: laneVisual.fill,
+            radius: 12,
+            fill: "#ffffff",
             stroke: laneVisual.stroke,
-            lineWidth: 1.35,
-            shadowColor: "rgba(0, 0, 0, 0)",
-            shadowBlur: 0,
+            lineWidth: 1.2,
+            shadowColor: "rgba(15, 23, 42, 0.08)",
+            shadowBlur: 8,
             shadowOffsetX: 0,
-            shadowOffsetY: 0,
+            shadowOffsetY: 3,
+            zIndex: 12,
             labelText: buildNodeLabelText(item.interface_id, parseInterfaceNodeTitle(item)),
-            labelFill: "#142031",
+            labelFill: "#1f2937",
             labelFontFamily: nodeLabelFontFamily(),
-            labelFontSize: 20,
-            labelFontWeight: 700,
-            labelLineHeight: 24,
+            labelFontSize: 18,
+            labelFontWeight: 650,
+            labelLineHeight: 22,
             labelWordWrap: true,
             labelMaxWidth: "82%",
             labelPlacement: "center",
@@ -870,12 +878,14 @@ function buildGraphModel({
       const containerHeight = Math.max(
         LANE_CONTAINER_MIN_HEIGHT,
         (INTERFACE_LANE_PADDING_Y * 2)
+          + LANE_HEADER_HEIGHT
+          + INTERFACE_LANE_HEADER_GAP
           + (rowCount * TEST_NODE_HEIGHT)
           + (Math.max(0, rowCount - 1) * INTERFACE_ROW_GAP),
       );
-      const containerTop = testLaneTop + INTERFACE_LANE_HEADER_GAP;
-      const headerX = testSectionStartX + (LANE_HEADER_WIDTH / 2);
-      const headerY = containerTop - (LANE_HEADER_HEIGHT / 2);
+      const containerTop = testLaneTop;
+      const headerX = testSectionStartX + INTERFACE_LANE_PADDING_X + (LANE_HEADER_WIDTH / 2);
+      const headerY = containerTop + INTERFACE_LANE_PADDING_Y + (LANE_HEADER_HEIGHT / 2);
       const containerCenterY = containerTop + (containerHeight / 2);
       const containerCenterX = testSectionStartX + (testAvailableWidth / 2);
 
@@ -886,13 +896,13 @@ function buildGraphModel({
           x: containerCenterX,
           y: containerCenterY,
           size: [testAvailableWidth, containerHeight],
-          radius: 16,
-          fill: "rgba(255, 255, 255, 0)",
-          fillOpacity: 0,
+          radius: 18,
+          fill: laneVisual.fill,
+          fillOpacity: 0.28,
           stroke: laneVisual.stroke,
-          strokeOpacity: 0.44,
+          strokeOpacity: 1,
           lineWidth: 1.1,
-          lineDash: [7, 6],
+          zIndex: 1,
         },
         states: [],
         data: {
@@ -909,15 +919,15 @@ function buildGraphModel({
           x: headerX,
           y: headerY,
           size: [LANE_HEADER_WIDTH, LANE_HEADER_HEIGHT],
-          radius: 8,
-          fill: "#f8fafc",
+          radius: 999,
+          fill: "#ffffff",
           stroke: laneVisual.stroke,
-          strokeOpacity: 0.38,
+          strokeOpacity: 1,
           labelText: lane === "e2e" ? "E2E" : lane.toUpperCase(),
           labelFill: laneVisual.accent,
           labelFontFamily: nodeLabelFontFamily(),
-          labelFontSize: 18,
-          labelFontWeight: 600,
+          labelFontSize: 13,
+          labelFontWeight: 700,
           labelLineHeight: LANE_HEADER_HEIGHT,
           labelPlacement: "center",
           labelTextAlign: "center",
@@ -925,6 +935,7 @@ function buildGraphModel({
           labelOffsetX: 0,
           labelOffsetY: 0,
           lineWidth: 1,
+          zIndex: 6,
         },
         states: [],
         data: {
@@ -943,6 +954,8 @@ function buildGraphModel({
           + (columnIndex * (TEST_NODE_WIDTH + INTERFACE_COLUMN_GAP));
         const y = containerTop
           + INTERFACE_LANE_PADDING_Y
+          + LANE_HEADER_HEIGHT
+          + INTERFACE_LANE_HEADER_GAP
           + (TEST_NODE_HEIGHT / 2)
           + (rowIndex * (TEST_NODE_HEIGHT + INTERFACE_ROW_GAP));
         const states: string[] = [];
@@ -965,19 +978,20 @@ function buildGraphModel({
             x,
             y,
             size: [TEST_NODE_WIDTH, TEST_NODE_HEIGHT],
-            radius: 10,
+            radius: 12,
             fill: testResultFill(item.status),
             stroke: testResultStroke(item.status),
-            lineWidth: 1.5,
-            shadowColor: "rgba(0, 0, 0, 0)",
-            shadowBlur: 0,
+            lineWidth: 1.25,
+            shadowColor: "rgba(15, 23, 42, 0.08)",
+            shadowBlur: 8,
             shadowOffsetX: 0,
-            shadowOffsetY: 0,
+            shadowOffsetY: 3,
+            zIndex: 12,
             labelText: buildNodeLabelText(item.test_id, parseTestNodeTitle(item), item.first_line),
-            labelFill: "#142031",
+            labelFill: "#1f2937",
             labelFontFamily: nodeLabelFontFamily(),
-            labelFontSize: 20,
-            labelFontWeight: 700,
+            labelFontSize: 18,
+            labelFontWeight: 650,
             labelLineHeight: 22,
             labelWordWrap: true,
             labelMaxWidth: "82%",
@@ -1028,7 +1042,7 @@ function buildGraphModel({
     includeBoundsFromRect(
       interfaceBounds,
       interfaceSectionStartX,
-      TOP_MARGIN + INTERFACE_LANE_HEADER_GAP,
+      TOP_MARGIN,
       interfaceSectionWidth,
       LANE_CONTAINER_MIN_HEIGHT,
     );
@@ -1037,7 +1051,7 @@ function buildGraphModel({
     includeBoundsFromRect(
       testBounds,
       testSectionStartX,
-      TOP_MARGIN + INTERFACE_LANE_HEADER_GAP,
+      TOP_MARGIN,
       testSectionWidth,
       LANE_CONTAINER_MIN_HEIGHT,
     );
@@ -1096,13 +1110,16 @@ function buildGraphModel({
         x: section.left + (section.width / 2),
         y: sectionTop + (sectionHeight / 2),
         size: [section.width, sectionHeight],
-        radius: 0,
+        radius: 18,
         fill: section.style.fill,
-        fillOpacity: 0,
+        fillOpacity: 0.72,
         stroke: section.style.stroke,
-        strokeOpacity: 0.52,
-        lineWidth: 1.6,
-        lineDash: [10, 8],
+        strokeOpacity: 1,
+        lineWidth: 1.2,
+        shadowColor: "rgba(15, 23, 42, 0.05)",
+        shadowBlur: 12,
+        shadowOffsetX: 0,
+        shadowOffsetY: 4,
       },
       states: [],
       data: {
@@ -1115,17 +1132,17 @@ function buildGraphModel({
       type: "rect",
       style: {
         x: section.left + (section.width / 2),
-        y: sectionTop - 2,
+        y: sectionTop + (SECTION_HEADER_HEIGHT / 2),
         size: [section.width, SECTION_HEADER_HEIGHT],
-        radius: 0,
+        radius: 18,
         fill: section.style.accent,
         stroke: section.style.stroke,
-        lineWidth: 1.2,
+        lineWidth: 1.1,
         labelText: section.title,
-        labelFill: "#4c4c4c",
-        labelFontFamily: "'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif",
-        labelFontSize: 42,
-        labelFontWeight: 500,
+        labelFill: "#404040",
+        labelFontFamily: nodeLabelFontFamily(),
+        labelFontSize: 18,
+        labelFontWeight: 650,
         labelLineHeight: SECTION_HEADER_HEIGHT,
         labelPlacement: "center",
       },
@@ -1139,7 +1156,6 @@ function buildGraphModel({
   const assemblyFlowY = sectionTop + (sectionHeight / 2);
   const flowOriginX = requirementFrame.left + requirementFrame.width + 18;
   const interfaceFlowTargetX = interfaceFrame.left - 18;
-  const flowIconX = flowOriginX + ((interfaceFlowTargetX - flowOriginX) / 2);
 
   [
     { id: "flow-anchor:req-interface", x: flowOriginX, y: assemblyFlowY },
@@ -1164,37 +1180,21 @@ function buildGraphModel({
     });
   });
 
-  flowNodes.push({
-    id: "flow-label:arrow",
-    type: "triangle",
-    style: {
-      x: flowIconX,
-      y: assemblyFlowY,
-      size: 42,
-      direction: "right",
-      fill: "l(0) 0:#1d4ed8 0.5:#38bdf8 1:#0f766e",
-      stroke: "#60a5fa",
-      lineWidth: 1.2,
-      shadowColor: "rgba(56, 189, 248, 0.22)",
-      shadowBlur: 10,
-    },
-    states: [],
-    data: {
-      kind: "flow-label",
-    } satisfies FactoryNodeMeta,
-  });
-
   flowEdges.push({
     id: "factory-flow:requirements->interfaces",
     source: "flow-anchor:req-interface",
     target: "flow-anchor:interface",
     type: "cubic-horizontal",
     style: {
-      stroke: "l(0) 0:#1d4ed8 0.5:#38bdf8 1:#0f766e",
-      lineWidth: 8,
-      opacity: 0.9,
-      lineDash: [22, 10],
-      endArrow: false,
+      stroke: "l(0) 0:#10b981 1:#34d399",
+      lineWidth: 4.4,
+      opacity: 0.54,
+      lineDash: [12, 9],
+      endArrow: true,
+      endArrowType: "vee",
+      endArrowFill: "#10b981",
+      endArrowStroke: "#10b981",
+      endArrowSize: 18,
     },
     states: [],
     data: {
@@ -1205,9 +1205,7 @@ function buildGraphModel({
     interfaceRelationPairs.forEach((pair) => {
       const sourceActive = activeInterfaceIds.has(pair.source);
       const targetActive = activeInterfaceIds.has(pair.target);
-      const showRelation = selectedInterfaceId
-        ? (sourceActive || targetActive)
-        : (sourceActive && targetActive);
+      const showRelation = sourceActive || targetActive;
 
       interfaceRelationEdges.push({
         id: pair.id,
@@ -1216,15 +1214,16 @@ function buildGraphModel({
         type: "cubic-horizontal",
         states: hasHighlight && showRelation ? ["related"] : [],
         style: {
-          stroke: "#6d28d9",
+          stroke: "#111827",
           lineWidth: 2.6,
-          lineDash: [10, 6],
-          opacity: 0.14,
+          lineDash: [8, 5],
+          opacity: hasHighlight ? 0.34 : 0.12,
+          zIndex: 30,
           endArrow: true,
           endArrowType: "vee",
-          endArrowFill: "#6d28d9",
-          endArrowStroke: "#6d28d9",
-          endArrowSize: 14,
+          endArrowFill: "#111827",
+          endArrowStroke: "#111827",
+          endArrowSize: 16,
         },
         data: {
           kind: "interface-call" satisfies FactoryEdgeKind,
@@ -1462,30 +1461,30 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 lineWidth: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
                   if (kind === "interface-call") {
-                    return 3.4;
+                    return 4.4;
                   }
                   if (kind === "factory-flow") {
-                    return 4.2;
+                    return 5.2;
                   }
                   return 2.1;
                 },
                 lineDash: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
                   if (kind === "interface-call") {
-                    return [12, 6];
+                    return [10, 5];
                   }
                   if (kind === "factory-flow") {
-                    return [14, 6];
+                    return [12, 7];
                   }
                   return [8, 4];
                 },
                 opacity: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
                   if (kind === "interface-call") {
-                    return 0.98;
+                    return 0.92;
                   }
                   if (kind === "factory-flow") {
-                    return 0.9;
+                    return 0.82;
                   }
                   return 0.46;
                 },
@@ -1500,7 +1499,7 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
                 endArrowSize: (datum: EdgeData) => {
                   const kind = String(((datum.data as { kind?: FactoryEdgeKind } | undefined)?.kind) ?? "");
                   if (kind === "interface-call") {
-                    return 16;
+                    return 18;
                   }
                   if (kind === "factory-flow") {
                     return 17;

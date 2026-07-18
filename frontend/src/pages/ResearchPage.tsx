@@ -158,8 +158,13 @@ const benchmarkEntries: BenchmarkEntry[] = [
 
 function ExternalLink({ href, icon, children }: { href: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="research-link-pill">
-      <span className="research-link-pill-icon" aria-hidden="true">
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex h-8 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 text-xs font-semibold text-[var(--text-dim)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+    >
+      <span className="text-sm" aria-hidden="true">
         {icon}
       </span>
       <span>{children}</span>
@@ -167,112 +172,98 @@ function ExternalLink({ href, icon, children }: { href: string; icon: React.Reac
   );
 }
 
+function ResearchEntryCard({ entry, type }: { entry: AgentEntry | BenchmarkEntry; type: "Agent" | "Benchmark" }) {
+  const isBenchmark = type === "Benchmark";
+
+  return (
+    <article className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[var(--border-light)] hover:bg-[var(--bg-hover)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-[var(--text)]">{entry.name}</h3>
+          <div className="mt-2 flex items-start gap-2 text-xs leading-5 text-[var(--text-muted)]">
+            <GlobalOutlined className="mt-0.5 shrink-0" />
+            <span>{entry.organization}</span>
+          </div>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            isBenchmark ? "bg-[var(--warn-glow)] text-[var(--warn)]" : "bg-[var(--accent-glow)] text-[var(--accent)]"
+          }`}
+        >
+          {type}
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm leading-6 text-[var(--text-dim)]">{entry.summary}</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <ExternalLink href={entry.paper.href} icon={<BookOutlined />}>
+          {entry.paper.label}
+        </ExternalLink>
+        {entry.repo ? (
+          <ExternalLink href={entry.repo.href} icon={<GithubOutlined />}>
+            {entry.repo.label}
+          </ExternalLink>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function ResearchPage() {
   return (
-    <div className="page library-page research-page">
-      <div className="competition-shell research-shell">
-        <div className="breadcrumb research-breadcrumb">
+    <div className="page bg-[var(--bg-deep)] text-[var(--text)]">
+      <div className="mx-auto w-full max-w-[1180px] px-5 py-6 lg:px-8">
+        <div className="mb-5 flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <span>Research</span>
-          <span className="sep">/</span>
-          <span className="current">Overview</span>
+          <span className="text-[var(--border-light)]">/</span>
+          <span className="font-medium text-[var(--text)]">Overview</span>
         </div>
 
-        <section className="research-hero-panel" aria-label="Research overview">
-          <div className="research-hero-copy">
-            <div className="competition-panel-kicker research-kicker-agents">
-              <ReadOutlined /> Research index
-            </div>
-            <h1>Research Map</h1>
-            <p>
-              A curated reference map for related computer-use agents, browser environments, and evaluation suites that inform this benchmark.
-            </p>
+        <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" aria-label="Research overview">
+          <div className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+            <ReadOutlined /> Research index
           </div>
+          <h1 className="mt-4 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">Research Map</h1>
+          <p className="mt-3 max-w-[780px] text-sm leading-6 text-[var(--text-dim)]">
+            A curated reference map for related computer-use agents, browser environments, and evaluation suites that inform this benchmark.
+          </p>
         </section>
-        
-        <div className="research-grid">
-          <section className="research-column-panel leaderboard-card leaderboard-card-clean">
-            <div className="research-panel-header">
-              <div>
-                <div className="competition-panel-kicker research-kicker-agents">
-                  <ExperimentOutlined /> Related Agents
-                </div>
-                <h2>Agent work</h2>
-                <p>Representative agent systems, research groups, and primary references.</p>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+            <div className="mb-4 border-b border-[var(--border)] pb-4">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[var(--accent)]">
+                <ExperimentOutlined /> Related Agents
               </div>
+              <h2 className="mt-2 text-xl font-semibold text-[var(--text)]">Agent work</h2>
+              <p className="mt-1 text-sm leading-6 text-[var(--text-dim)]">
+                Representative agent systems, research groups, and primary references.
+              </p>
             </div>
 
-            <div className="research-card-list">
+            <div className="grid gap-3 lg:grid-cols-2">
               {agentEntries.map((entry) => (
-                <article key={entry.name} className="research-entry-card research-entry-agent">
-                  <div className="research-entry-topline">
-                    <div>
-                      <h3>{entry.name}</h3>
-                      <div className="research-org-line">
-                        <GlobalOutlined />
-                        <span>{entry.organization}</span>
-                      </div>
-                    </div>
-                    <span className="research-type-chip">Agent</span>
-                  </div>
-
-                  <p>{entry.summary}</p>
-
-                  <div className="research-link-row">
-                    <ExternalLink href={entry.paper.href} icon={<BookOutlined />}>
-                      {entry.paper.label}
-                    </ExternalLink>
-                    {entry.repo ? (
-                      <ExternalLink href={entry.repo.href} icon={<GithubOutlined />}>
-                        {entry.repo.label}
-                      </ExternalLink>
-                    ) : null}
-                  </div>
-                </article>
+                <ResearchEntryCard key={entry.name} entry={entry} type="Agent" />
               ))}
             </div>
           </section>
 
-          <aside className="research-column-panel research-column-panel-benchmarks">
-            <div className="competition-bank-shell research-bank-shell">
-              <div className="research-panel-header research-panel-header-side">
-                <div>
-                  <div className="competition-panel-kicker research-kicker-benchmarks">
-                    <LinkOutlined /> Related Benchmarks
-                  </div>
-                  <h2>Benchmark sets</h2>
-                  <p>Evaluation suites that shape the current agent-computer-use research landscape.</p>
-                </div>
+          <aside className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+            <div className="mb-4 border-b border-[var(--border)] pb-4">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[var(--warn)]">
+                <LinkOutlined /> Related Benchmarks
               </div>
+              <h2 className="mt-2 text-xl font-semibold text-[var(--text)]">Benchmark sets</h2>
+              <p className="mt-1 text-sm leading-6 text-[var(--text-dim)]">
+                Evaluation suites that shape the current agent-computer-use research landscape.
+              </p>
+            </div>
 
-              <div className="research-card-list research-card-list-tight">
-                {benchmarkEntries.map((entry) => (
-                  <article key={entry.name} className="research-entry-card research-entry-benchmark">
-                    <div className="research-entry-topline">
-                      <div>
-                        <h3>{entry.name}</h3>
-                        <div className="research-org-line">
-                          <GlobalOutlined />
-                          <span>{entry.organization}</span>
-                        </div>
-                      </div>
-                      <span className="research-type-chip benchmark">Benchmark</span>
-                    </div>
-
-                    <p>{entry.summary}</p>
-
-                    <div className="research-link-row">
-                      <ExternalLink href={entry.paper.href} icon={<BookOutlined />}>
-                        {entry.paper.label}
-                      </ExternalLink>
-                      {entry.repo ? (
-                        <ExternalLink href={entry.repo.href} icon={<GithubOutlined />}>
-                          {entry.repo.label}
-                        </ExternalLink>
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
-              </div>
+            <div className="space-y-3">
+              {benchmarkEntries.map((entry) => (
+                <ResearchEntryCard key={entry.name} entry={entry} type="Benchmark" />
+              ))}
             </div>
           </aside>
         </div>

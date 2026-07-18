@@ -230,54 +230,61 @@ export default function SubmissionDetailPage() {
   }
 
   return (
-    <div className="page submission-page">
-      <div className="submission-hero">
-        <div className="submission-hero-main">
-          <div>
-            <div className="muted">Submission</div>
-            <h1>{submission.display_name || submission.id}</h1>
-            <p className="muted">
-              {submission.requirement_id} / {submission.runtime} / {submission.status}
-            </p>
-            {submission.model_name ? <div className="submission-model-row"><span className="model-chip">{submission.model_name}</span></div> : null}
+    <div className="page submission-page bg-[var(--bg-deep)] px-6 py-7 text-[var(--text)] lg:px-8">
+      <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
+          <div className="flex flex-col gap-5 border-b border-[var(--border)] p-5 lg:flex-row lg:items-start lg:justify-between lg:p-6">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Submission</div>
+              <h1 className="mt-2 truncate text-2xl font-semibold leading-tight tracking-normal text-[var(--text)]">
+                {submission.display_name || submission.id}
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-dim)]">
+                {submission.requirement_id} / {submission.runtime} / {submission.status}
+              </p>
+              {submission.model_name ? (
+                <div className="mt-3">
+                  <span className="model-chip">{submission.model_name}</span>
+                </div>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-3 lg:flex-col lg:items-end">
+              <div className="text-3xl font-semibold leading-none text-[var(--accent)]">{submission.score?.toFixed(1) ?? "--"}</div>
+              <div className={`test-badge ${submission.status === "PASSED" ? "pass" : submission.status === "FAILED" ? "fail" : "pending"}`}>
+                {submission.status}
+              </div>
+            </div>
           </div>
-          <div className="submission-meta-grid">
-            <div className="submission-meta-card">
+          <div className="grid grid-cols-1 divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-6">
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Submission ID</div>
               <div className="submission-meta-value">{submission.id}</div>
             </div>
-            <div className="submission-meta-card">
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Model</div>
               <div className="submission-meta-value">{submission.model_name || "-"}</div>
             </div>
-            <div className="submission-meta-card">
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Created</div>
               <div className="submission-meta-value">{formatDateTime(submission.created_at)}</div>
             </div>
-            <div className="submission-meta-card">
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Started</div>
               <div className="submission-meta-value">{formatDateTime(submission.started_at)}</div>
             </div>
-            <div className="submission-meta-card">
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Duration</div>
               <div className="submission-meta-value">{formatDuration(submission.started_at, submission.finished_at)}</div>
             </div>
-            <div className="submission-meta-card">
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Results</div>
               <div className="submission-meta-value">{resultSummary(submission)}</div>
             </div>
           </div>
         </div>
-        <div className="submission-hero-side">
-          <div className="submission-score">{submission.score?.toFixed(1) ?? "--"}</div>
-          <div className={`test-badge ${submission.status === "PASSED" ? "pass" : submission.status === "FAILED" ? "fail" : "pending"}`}>
-            {submission.status}
-          </div>
-        </div>
-      </div>
 
-      <div className="submission-grid">
-        <section className="action-section">
+        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="action-section rounded-lg border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
           <div className="action-section-title">Run Status</div>
           <SubmissionStepList
             steps={submission.steps}
@@ -287,9 +294,10 @@ export default function SubmissionDetailPage() {
           />
         </section>
 
-        <section className="action-section">
+        <section className="action-section rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+          <div className="px-5 pt-5">
           <div className="action-section-title">Execution Detail</div>
-          <div className="doc-tabs detail-tabs">
+          <div className="doc-tabs detail-tabs rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
             {[
               { key: "results", label: "Results" },
               { key: "events", label: "Events" },
@@ -306,6 +314,7 @@ export default function SubmissionDetailPage() {
               </button>
             ))}
           </div>
+          </div>
           <div className="detail-tab-panel">
             {activeTab === "results" ? (
               <SubmissionResultCard submission={submission} />
@@ -319,8 +328,8 @@ export default function SubmissionDetailPage() {
           </div>
         </section>
 
-        <section className="action-section">
-          <div className="action-section-header">
+        <section className="action-section rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0 shadow-[0_10px_28px_rgba(15,23,42,0.05)] xl:col-start-2">
+          <div className="action-section-header border-b border-[var(--border)] px-5 py-4">
             <div className="action-section-title">Live Website Preview</div>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <button
@@ -371,6 +380,7 @@ export default function SubmissionDetailPage() {
             )}
           </div>
         </section>
+        </div>
       </div>
     </div>
   );

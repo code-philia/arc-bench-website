@@ -74,6 +74,12 @@ function serializeTaskPayload(payload: {
   return JSON.stringify(payload);
 }
 
+const toolbarButtonClassName =
+  "btn-outline create-task-toolbar-btn h-9 rounded-lg border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-medium text-[var(--text-dim)] shadow-none transition hover:border-[var(--accent)] hover:bg-[var(--accent-glow)] hover:text-[var(--accent)]";
+
+const toolbarPrimaryClassName =
+  "btn-primary create-task-toolbar-primary h-9 min-w-[110px] rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--bg-deep)] shadow-none transition hover:border-[var(--accent-grad-end)] hover:bg-[var(--accent-grad-end)] hover:shadow-none";
+
 export default function CreateTaskPage() {
   const navigate = useNavigate();
   const { taskId } = useParams();
@@ -518,41 +524,43 @@ export default function CreateTaskPage() {
   };
 
   return (
-    <div className="page create-task-page create-task-page-locked">
+    <div className="page create-task-page create-task-page-locked bg-[var(--bg-deep)] text-[var(--text)]">
       {modalContextHolder}
-      <div className="create-task-shell create-task-shell-locked">
-        <div className="create-task-topbar">
-          <div className="create-task-topbar-copy">
-            <div className="breadcrumb">
+      <div className="create-task-shell create-task-shell-locked gap-4 overflow-hidden p-4 [background:var(--bg-deep)]">
+        <div className="create-task-topbar rounded-xl border border-[var(--border)] px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)] [background:var(--bg)]">
+          <div className="create-task-topbar-copy min-w-0">
+            <div className="breadcrumb text-sm text-[var(--text-muted)]">
               <span>Playground</span>
-              <span className="sep">/</span>
+              <span className="sep text-[var(--border-light)]">/</span>
               <span>{isEditingTask ? "Edit Task" : "Create Task"}</span>
-              <span className="sep">/</span>
-              <span className="current">{createForm.title || tree.name}</span>
+              <span className="sep text-[var(--border-light)]">/</span>
+              <span className="current font-medium text-[var(--text)]">{createForm.title || tree.name}</span>
             </div>
           </div>
           <div className="create-task-topbar-actions">
-            <span className="task-node-chip">{autosaveLabel}</span>
+            <span className="task-node-chip border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1 text-xs text-[var(--text-dim)]">
+              {autosaveLabel}
+            </span>
             {isEditingTask ? (
-              <button type="button" className="btn-outline create-task-toolbar-btn" onClick={handleReturnToTask}>
+              <button type="button" className={toolbarButtonClassName} onClick={handleReturnToTask}>
                 <ArrowLeftOutlined /> Back to Task
               </button>
             ) : null}
             <button
               type="button"
-              className="btn-outline create-task-toolbar-btn"
+              className={toolbarButtonClassName}
               onClick={() => setPreviewCollapsed((current) => !current)}
             >
               {previewCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               {previewCollapsed ? "Show Preview" : "Hide Preview"}
             </button>
-            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={() => uploadRef.current?.click()}>
+            <button type="button" className={toolbarButtonClassName} onClick={() => uploadRef.current?.click()}>
               <UploadOutlined /> Import YAML
             </button>
-            <button type="button" className="btn-outline create-task-toolbar-btn" onClick={handleExport}>
+            <button type="button" className={toolbarButtonClassName} onClick={handleExport}>
               <SaveOutlined /> Export Docs
             </button>
-            <button type="button" className="btn-primary create-task-toolbar-primary" onClick={() => setIsSaveModalOpen(true)}>
+            <button type="button" className={toolbarPrimaryClassName} onClick={() => setIsSaveModalOpen(true)}>
               {isEditingTask ? "Save" : "Save Task"}
             </button>
             <input
@@ -572,10 +580,10 @@ export default function CreateTaskPage() {
         </div>
 
         <div
-          className={`create-task-layout create-task-layout-locked${previewCollapsed ? " preview-collapsed" : ""}`}
+          className={`create-task-layout create-task-layout-locked !h-auto !min-h-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.06)] [background:var(--bg)]${previewCollapsed ? " preview-collapsed" : ""}`}
           style={{ gridTemplateColumns: previewCollapsed ? "0 12px minmax(420px, 1fr)" : `${previewWidth}px 12px minmax(420px, 1fr)` }}
         >
-          <section className={`readme-panel create-task-preview-panel create-task-preview-panel-locked${previewCollapsed ? " collapsed" : ""}`}>
+          <section className={`readme-panel create-task-preview-panel create-task-preview-panel-locked border-r border-[var(--border)] [background:var(--bg)]${previewCollapsed ? " collapsed" : ""}`}>
             <MarkdownTocDocument
               markdown={markdown}
               assetsBaseUrl=""
@@ -589,7 +597,7 @@ export default function CreateTaskPage() {
           </section>
 
           <div
-            className={`create-task-resizer${previewCollapsed ? " collapsed" : ""}`}
+            className={`create-task-resizer [background:var(--bg-elevated)]${previewCollapsed ? " collapsed" : ""}`}
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize preview panel"
@@ -604,7 +612,7 @@ export default function CreateTaskPage() {
             <span className="create-task-resizer-handle" />
           </div>
 
-          <section className="create-task-editor-panel create-task-editor-panel-locked">
+          <section className="create-task-editor-panel create-task-editor-panel-locked [background:var(--bg)]">
             <RequirementTreeCanvas
               tree={tree}
               selectedNodeId={selectedNodeId}

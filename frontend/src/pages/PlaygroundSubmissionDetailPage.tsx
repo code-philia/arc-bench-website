@@ -2381,15 +2381,15 @@ export default function PlaygroundSubmissionDetailPage() {
   }
 
   return (
-    <div className="page playground-submission-page" style={{
+    <div className="page playground-submission-page bg-[var(--bg-deep)] text-[var(--text)]" style={{
       height: "calc(100vh - 60px)",
       overflow: "hidden",
       display: "flex",
       flexDirection: "column",
     }}>
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div className="gap-1.5 p-2" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <section
-          className="action-section submission-status-panel playground-submission-sidebar"
+          className="action-section submission-status-panel playground-submission-sidebar rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]"
           style={{
             width: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
             minWidth: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
@@ -2401,7 +2401,7 @@ export default function PlaygroundSubmissionDetailPage() {
           {!sidebarMinimized ? (
             <>
               <div className="playground-submission-heading">
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
+                <div className="flex items-start justify-between gap-3">
                   <div>
                     <h1>{submission.display_name || submission.id}</h1>
                     <div className="playground-submission-inline-meta">
@@ -2412,17 +2412,14 @@ export default function PlaygroundSubmissionDetailPage() {
                   <button
                     type="button"
                     onClick={() => setSidebarMinimized(true)}
+                    className="rounded-md border border-[var(--border)] bg-[var(--bg)] text-[var(--text-dim)] transition hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]"
                     style={{
                       width: "28px",
                       height: "28px",
-                      border: "1px solid #e2e8f0",
-                      background: "white",
-                      borderRadius: "6px",
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "#64748b",
                       flexShrink: 0,
                     }}
                     aria-label="Collapse left sidebar"
@@ -2434,17 +2431,17 @@ export default function PlaygroundSubmissionDetailPage() {
               </div>
 
               <div className="submission-side-toolbar">
-                <div className="submission-side-tabs">
+                <div className="submission-side-tabs rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
                   <button
                     type="button"
-                    className={`submission-side-tab ${sidebarTab === "status" ? "active" : ""}`}
+                    className={`submission-side-tab rounded px-3 py-1.5 ${sidebarTab === "status" ? "active" : ""}`}
                     onClick={() => setSidebarTab("status")}
                   >
                     Status
                   </button>
                 <button
                   type="button"
-                  className={`submission-side-tab ${sidebarTab === "traceability" ? "active" : ""}`}
+                  className={`submission-side-tab rounded px-3 py-1.5 ${sidebarTab === "traceability" ? "active" : ""}`}
                   onClick={() => setSidebarTab("traceability")}
                 >
                   Traceability
@@ -2538,7 +2535,7 @@ export default function PlaygroundSubmissionDetailPage() {
           </div>
         ) : null}
 
-        <main className="playground-submission-main-shell" style={{
+        <main className="playground-submission-main-shell rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]" style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
@@ -2547,7 +2544,7 @@ export default function PlaygroundSubmissionDetailPage() {
           background: "var(--bg)",
           minWidth: 0,
         }}>
-          <div className="doc-tabs" style={{ borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
+          <div className="doc-tabs bg-[var(--bg)]" style={{ borderBottom: "1px solid var(--border)", padding: "0 16px" }}>
               {[
                 { key: "canvas", label: "Canvas" },
                 { key: "file", label: "File" },
@@ -2557,7 +2554,7 @@ export default function PlaygroundSubmissionDetailPage() {
               ].map((tab) => (
                 <button
                   key={tab.key}
-                  className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
+                  className={`doc-tab rounded-t-md ${activeTab === tab.key ? " active" : ""}`}
                   type="button"
                   onClick={() => setActiveTab(tab.key as "canvas" | "file" | "diff" | "results" | "stdio")}
                 >
@@ -2817,21 +2814,21 @@ export default function PlaygroundSubmissionDetailPage() {
               />
             </div>
             {activeTab === "results" ? (
-              <div className="submission-results-workspace" style={{ padding: "24px", flex: 1, overflow: "auto" }}>
+              <div className="submission-results-workspace bg-[var(--bg-elevated)]" style={{ padding: "24px", flex: 1, overflow: "auto" }}>
                 <SubmissionResultCard submission={submission} />
               </div>
             ) : activeTab === "stdio" ? (
               <div className="stdio-view">
-                <div className="doc-tabs" style={{ padding: "0 24px", borderBottom: "1px solid var(--border)" }}>
+                <div className="doc-tabs bg-[var(--bg)]" style={{ padding: "0 24px", borderBottom: "1px solid var(--border)" }}>
                   <button
-                    className={`doc-tab${stdioTab === "stdout" ? " active" : ""}`}
+                    className={`doc-tab rounded-t-md${stdioTab === "stdout" ? " active" : ""}`}
                     type="button"
                     onClick={() => setStdioTab("stdout")}
                   >
                     Stdout
                   </button>
                   <button
-                    className={`doc-tab${stdioTab === "stderr" ? " active" : ""}`}
+                    className={`doc-tab rounded-t-md${stdioTab === "stderr" ? " active" : ""}`}
                     type="button"
                     onClick={() => setStdioTab("stderr")}
                   >
@@ -2856,7 +2853,7 @@ export default function PlaygroundSubmissionDetailPage() {
           </div>
         ) : null}
 
-        <aside className="preview-panel-shell" style={{
+        <aside className="preview-panel-shell rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]" style={{
           width: previewPanelWidth,
           overflow: "hidden",
           display: "flex",
@@ -2871,17 +2868,17 @@ export default function PlaygroundSubmissionDetailPage() {
             {!previewMinimized ? (
               <>
                 <div className="preview-panel-header-main">
-                  <div className="preview-panel-tabs">
+                  <div className="preview-panel-tabs rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
                     <button
                       type="button"
-                      className={`preview-panel-tab ${previewTab === "preview" ? "active" : ""}`}
+                      className={`preview-panel-tab rounded px-3 py-1.5 ${previewTab === "preview" ? "active" : ""}`}
                       onClick={() => setPreviewTab("preview")}
                     >
                       Live Preview
                     </button>
                     <button
                       type="button"
-                      className={`preview-panel-tab ${previewTab === "history" ? "active" : ""}`}
+                      className={`preview-panel-tab rounded px-3 py-1.5 ${previewTab === "history" ? "active" : ""}`}
                       onClick={() => setPreviewTab("history")}
                     >
                       Commit History

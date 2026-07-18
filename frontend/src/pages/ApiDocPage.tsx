@@ -9,6 +9,15 @@ const sectionLabels: Record<DocSectionKey, string> = {
   git: "Git",
 };
 
+const sectionBlockClassName =
+  "rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]";
+
+const tableClassName =
+  "w-full border-collapse overflow-hidden text-left text-sm text-[var(--text-dim)] [&_code]:rounded-md [&_code]:bg-[var(--bg-elevated)] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_code]:text-[var(--text)] [&_td]:border-b [&_td]:border-[var(--td-border)] [&_td]:px-4 [&_td]:py-3 [&_th]:border-b [&_th]:border-[var(--border)] [&_th]:bg-[var(--bg-elevated)] [&_th]:px-4 [&_th]:py-3 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:text-[var(--text-muted)] [&_tr:last-child_td]:border-b-0";
+
+const proseClassName =
+  "text-sm leading-6 text-[var(--text-dim)] [&_code]:rounded-md [&_code]:bg-[var(--bg-elevated)] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_code]:text-[var(--text)]";
+
 const overviewDiagram = String.raw`Agent code
     |
     | call Agent Runtime SDK
@@ -94,11 +103,13 @@ runtime.git.rollback_last_commit()
 
 function CodeBlock({ source }: { source: string }) {
   return (
-    <div className="api-doc-code-block">
-      <div className="api-doc-code-toolbar">
-        <span className="api-doc-code-lang-label">Python</span>
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
+      <div className="flex h-10 items-center justify-between border-b border-[var(--border)] px-4">
+        <span className="rounded-full bg-[var(--bg)] px-2.5 py-1 text-[11px] font-semibold uppercase text-[var(--text-muted)]">
+          Python
+        </span>
       </div>
-      <pre className="api-doc-code">
+      <pre className="m-0 overflow-auto p-4 font-mono text-xs leading-6 text-[var(--text)]">
         <code>{source}</code>
       </pre>
     </div>
@@ -108,9 +119,9 @@ function CodeBlock({ source }: { source: string }) {
 function OverviewPage() {
   return (
     <>
-      <section className="api-doc-section-block">
-        <h2>Execution Flow</h2>
-        <p>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Execution Flow</h2>
+        <p className={proseClassName}>
           Your agent should call the built-in <code>arcbench_agent_runtime</code> package. The SDK owns the fixed event
           protocol, appends <code>runner-events.jsonl</code>, writes the container-local live
           <code> /tmp/arcbench/traceability.db </code>, atomically refreshes
@@ -120,9 +131,9 @@ function OverviewPage() {
         <CodeBlock source={overviewDiagram} />
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Upload Entry Contract</h2>
-        <p>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Upload Entry Contract</h2>
+        <p className={proseClassName}>
           Every uploaded Python agent is started with the same fixed CLI shape. ArcBench expects
           <code> main.py </code> and <code> requirements.txt </code> at the zip root, installs dependencies from
           <code> requirements.txt </code>, then invokes <code>main.py</code> with the requirement directory and output
@@ -130,9 +141,10 @@ function OverviewPage() {
         </p>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>What The Frontend Does</h2>
-        <table className="api-doc-table">
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">What The Frontend Does</h2>
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className={tableClassName}>
           <thead>
             <tr>
               <th>SDK action</th>
@@ -158,11 +170,12 @@ function OverviewPage() {
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Usage Rule</h2>
-        <p>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Usage Rule</h2>
+        <p className={proseClassName}>
           Do not construct event payloads manually. Call high-level SDK methods only. Event <code>type</code>,
           refresh flags, and file formats are fixed by the runtime package.
         </p>
@@ -174,9 +187,10 @@ function OverviewPage() {
 function NodeStatePage() {
   return (
     <>
-      <section className="api-doc-section-block">
-        <h2>Node State APIs</h2>
-        <table className="api-doc-table">
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Node State APIs</h2>
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className={tableClassName}>
           <thead>
             <tr>
               <th>Method</th>
@@ -222,10 +236,11 @@ function NodeStatePage() {
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Example</h2>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Example</h2>
         <CodeBlock source={nodeStateExample} />
       </section>
     </>
@@ -235,9 +250,10 @@ function NodeStatePage() {
 function TraceabilityPage() {
   return (
     <>
-      <section className="api-doc-section-block">
-        <h2>Core APIs</h2>
-        <table className="api-doc-table">
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Core APIs</h2>
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className={tableClassName}>
           <thead>
             <tr>
               <th>Method group</th>
@@ -271,11 +287,12 @@ function TraceabilityPage() {
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Automatic Refresh</h2>
-        <p>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Automatic Refresh</h2>
+        <p className={proseClassName}>
           These APIs write the live database, atomically refresh
           <code> traceability.snapshot.json </code>, and append fixed-format events into
           <code> runner-events.jsonl </code>. The backend watches new event lines, reloads data from the snapshot, and
@@ -283,8 +300,8 @@ function TraceabilityPage() {
         </p>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Example</h2>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Example</h2>
         <CodeBlock source={traceabilityExample} />
       </section>
     </>
@@ -294,9 +311,10 @@ function TraceabilityPage() {
 function GitPage() {
   return (
     <>
-      <section className="api-doc-section-block">
-        <h2>Git APIs</h2>
-        <table className="api-doc-table">
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Git APIs</h2>
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className={tableClassName}>
           <thead>
             <tr>
               <th>Method</th>
@@ -342,11 +360,12 @@ function GitPage() {
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Manual File Sync Case</h2>
-        <p>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Manual File Sync Case</h2>
+        <p className={proseClassName}>
           If you bypass the SDK and change git state or traceability artifacts manually, call
           <code> runtime.events.notify_commit_history_changed(...) </code> or
           <code> runtime.events.notify_traceability_changed(...) </code> after the manual write so ArcBench can refresh
@@ -354,8 +373,8 @@ function GitPage() {
         </p>
       </section>
 
-      <section className="api-doc-section-block">
-        <h2>Example</h2>
+      <section className={sectionBlockClassName}>
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Example</h2>
         <CodeBlock source={gitExample} />
       </section>
     </>
@@ -366,24 +385,30 @@ export default function ApiDocPage() {
   const [activeSection, setActiveSection] = useState<DocSectionKey>("overview");
 
   return (
-    <div className="page api-doc-page">
-      <div className="api-doc-shell">
-        <header className="api-doc-header">
-          <div className="api-doc-kicker">ArcBench Runtime API</div>
-          <h1>Agent Runtime SDK</h1>
-          <p>
+    <div className="page bg-[var(--bg-deep)] text-[var(--text)]">
+      <div className="mx-auto w-full max-w-[1180px] px-5 py-6 lg:px-8">
+        <header className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
+          <div className="inline-flex rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+            ArcBench Runtime API
+          </div>
+          <h1 className="mt-4 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">Agent Runtime SDK</h1>
+          <p className="mt-3 max-w-[820px] text-sm leading-6 text-[var(--text-dim)]">
             Use the built-in Python SDK to update requirement states, maintain traceability data, perform git
             operations, and let ArcBench refresh the frontend through the runner event stream automatically.
           </p>
         </header>
 
-        <div className="api-doc-body">
-          <aside className="api-doc-toc">
+        <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="h-fit rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)] lg:sticky lg:top-[76px]">
             {(Object.keys(sectionLabels) as DocSectionKey[]).map((sectionKey) => (
               <button
                 key={sectionKey}
                 type="button"
-                className={`api-doc-nav-button${activeSection === sectionKey ? " active" : ""}`}
+                className={`mb-1 flex h-10 w-full items-center rounded-lg px-3 text-left text-sm font-medium transition last:mb-0 ${
+                  activeSection === sectionKey
+                    ? "bg-[var(--accent-glow)] text-[var(--accent)]"
+                    : "text-[var(--text-dim)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]"
+                }`}
                 onClick={() => setActiveSection(sectionKey)}
               >
                 {sectionLabels[sectionKey]}
@@ -391,7 +416,7 @@ export default function ApiDocPage() {
             ))}
           </aside>
 
-          <article className="api-doc-content">
+          <article className="space-y-4">
             {activeSection === "overview" ? <OverviewPage /> : null}
             {activeSection === "nodes" ? <NodeStatePage /> : null}
             {activeSection === "traceability" ? <TraceabilityPage /> : null}
