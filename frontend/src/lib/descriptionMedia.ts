@@ -45,6 +45,9 @@ export function resolveDescriptionAssetSrc(rawPath: string, taskAssets?: Submiss
   if (/^(https?:|data:|blob:)/i.test(trimmedPath)) {
     return trimmedPath;
   }
+  if (trimmedPath.startsWith("/")) {
+    return trimmedPath;
+  }
   if (trimmedPath.startsWith("./reference/") || trimmedPath.startsWith("reference/")) {
     const relativePath = trimmedPath.replace(/^\.\//, "").replace(/^reference\//, "");
     return taskAssets?.references_base_url ? joinResourceUrl(taskAssets.references_base_url, relativePath) : trimmedPath;

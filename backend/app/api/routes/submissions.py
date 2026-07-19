@@ -240,6 +240,7 @@ def get_submission_logs(
 async def stream_submission_events(
     submission_id: str,
     request: Request,
+    since_version: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> StreamingResponse:
@@ -253,6 +254,9 @@ async def stream_submission_events(
         event_queue = SubmissionEventStream.subscribe(submission_id)
         try:
             yield ": connected\n\n"
+            for event in SubmissionEventStream.snapshot(submission_id):
+                if event.version > since_version:
+                    yield SubmissionEventStream.encode_sse(event)
             while True:
                 if await request.is_disconnected():
                     break
@@ -329,8 +333,8 @@ def update_submission_editable_task(
     return {"detail": "Submission workspace updated"}
 
 
-@router.get("/{submission_id}/task-assets/{asset_kind}/{asset_path:path}")
-def get_submission_task_asset(
+@router.get("/{submission_id}/requirements-assets/{asset_kind}/{asset_path:path}")
+def get_submission_requirements_asset(
     submission_id: str,
     asset_kind: str,
     asset_path: str,

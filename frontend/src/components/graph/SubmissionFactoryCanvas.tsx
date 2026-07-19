@@ -1,12 +1,14 @@
 ﻿import { Graph, type EdgeData, type GraphData, type NodeData } from "@antv/g6";
 import { hierarchy, tree as createTreeLayout } from "d3-hierarchy";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { getFirstDescriptionImage } from "../../lib/descriptionMedia";
 import type { RequirementNode } from "../../lib/taskTree";
 import type {
   RequirementVisualState,
   SubmissionTraceabilityInterface,
   SubmissionTraceabilityPayload,
   SubmissionTraceabilityTest,
+  SubmissionTaskAssets,
 } from "../../lib/types";
 
 type FactoryNodeKind =
@@ -31,6 +33,8 @@ type FactoryEdgeKind =
 type FactoryNodeMeta = {
   kind: FactoryNodeKind;
   requirementId?: string | null;
+  requirementName?: string | null;
+  requirementThumbnail?: string | null;
   interfaceId?: string | null;
   testId?: string | null;
   lane?: InterfaceLane | TestLane;
@@ -62,6 +66,7 @@ type SubmissionFactoryCanvasProps = {
     filePath: string;
     firstLine: string | null;
   }) => void;
+  taskAssets?: SubmissionTaskAssets | null;
 };
 
 export type SubmissionFactoryCanvasHandle = {
@@ -117,6 +122,49 @@ function truncateLabel(value: string, maxLength: number): string {
     return normalized;
   }
   return `${normalized.slice(0, Math.max(0, maxLength - 1))}\u2026`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildRequirementNodeHtml({
+  id,
+  name,
+  thumbnailSrc,
+  selected,
+  related,
+  visualState,
+  fill,
+  stroke,
+}: {
+  id: string;
+  name: string;
+  thumbnailSrc: string | null;
+  selected: boolean;
+  related: boolean;
+  visualState: RequirementVisualState | undefined;
+  fill: string;
+  stroke: string;
+}) {
+  const stateClass = selected ? "is-selected" : related ? "is-related" : "";
+  const imageMarkup = thumbnailSrc
+    ? `<div class="submission-factory-requirement-thumb"><img src="${escapeHtml(thumbnailSrc)}" alt="" loading="eager" decoding="sync" draggable="false" /></div>`
+    : "";
+  return `
+    <div class="submission-factory-requirement-card ${stateClass} ${visualState ? `state-${escapeHtml(visualState)}` : ""}" style="--factory-req-fill: ${escapeHtml(fill)}; --factory-req-stroke: ${escapeHtml(stroke)};">
+      <div class="submission-factory-requirement-copy">
+        <span class="submission-factory-requirement-id">${escapeHtml(id)}</span>
+        <strong class="submission-factory-requirement-name">${escapeHtml(name)}</strong>
+      </div>
+      ${imageMarkup}
+    </div>
+  `;
 }
 
 function requirementStateStyle(state: RequirementVisualState | undefined, nodeType: RequirementNode["type"]) {
@@ -217,8 +265,12 @@ function resolveNodeHighlightFill(datum: NodeData) {
 }
 
 function resolveNodeHighlightSize(datum: NodeData, scale: number): number | [number, number] | undefined {
+  const meta = (datum.data ?? {}) as FactoryNodeMeta;
   const style = (datum.style ?? {}) as { size?: number | [number, number] };
   const baseSize = style.size;
+  if (meta.kind === "requirement") {
+    return baseSize;
+  }
   if (Array.isArray(baseSize)) {
     return [baseSize[0] * scale, baseSize[1] * scale] as [number, number];
   }
@@ -444,6 +496,7 @@ function buildGraphModel({
   selectionActive,
   selectedTraceabilityId,
   selectedTraceabilityKind,
+  taskAssets,
   width,
 }: {
   tree: RequirementNode;
@@ -455,6 +508,7 @@ function buildGraphModel({
   selectionActive: boolean;
   selectedTraceabilityId: string | null | undefined;
   selectedTraceabilityKind: "interface" | "test" | null | undefined;
+  taskAssets?: SubmissionTaskAssets | null;
   width: number;
 }): GraphModel {
   const root = hierarchy(tree, (node) => node.children);
@@ -482,40 +536,26 @@ function buildGraphModel({
     const nodeY = TOP_MARGIN + (node.x - minX);
     requirementIndexById.set(node.data.id, index);
     requirementPositionById.set(node.data.id, { order: index, y: nodeY });
-    const state = nodeStates[node.data.id];
-    const visual = requirementStateStyle(state, node.data.type);
-
     requirementNodes.push({
       id: node.data.id,
-      type: "rect",
+      type: "html",
       style: {
         x: nodeX,
         y: nodeY,
         size: [REQUIREMENT_NODE_WIDTH, REQUIREMENT_NODE_HEIGHT],
-        radius: 12,
-        fill: visual.fill,
-        stroke: visual.stroke,
-        lineWidth: 1.4,
-        shadowColor: "rgba(15, 23, 42, 0.06)",
-        shadowBlur: 10,
-        shadowOffsetX: 0,
-        shadowOffsetY: 4,
+        dx: -REQUIREMENT_NODE_WIDTH / 2,
+        dy: -REQUIREMENT_NODE_HEIGHT / 2,
+        innerHTML: "",
+        pointerEvents: "auto",
+        cursor: "pointer",
         zIndex: 12,
-        labelText: buildNodeLabelText(node.data.id, truncateLabel(node.data.name, 42)),
-        labelFill: "#16202a",
-        labelFontFamily: nodeLabelFontFamily(),
-        labelFontSize: 22,
-        labelFontWeight: 700,
-        labelLineHeight: 26,
-        labelWordWrap: true,
-        labelMaxWidth: "82%",
-        labelPlacement: "center",
-        labelOffsetY: 2,
       },
       states: [],
       data: {
         kind: "requirement",
         requirementId: node.data.id,
+        requirementName: node.data.name,
+        requirementThumbnail: getFirstDescriptionImage(node.data.description, taskAssets),
       } satisfies FactoryNodeMeta,
     });
     includeBounds(requirementBounds, nodeX, nodeY, REQUIREMENT_NODE_WIDTH, REQUIREMENT_NODE_HEIGHT);
@@ -608,7 +648,10 @@ function buildGraphModel({
   const hasHighlight = activeRequirementIds.size > 0 || activeInterfaceIds.size > 0 || activeTestIds.size > 0;
 
   requirementNodes.forEach((node) => {
-    const requirementId = String((node.data as FactoryNodeMeta).requirementId ?? "");
+    const meta = node.data as FactoryNodeMeta;
+    const requirementId = String(meta.requirementId ?? "");
+    const visualState = nodeStates[requirementId];
+    const visual = requirementStateStyle(visualState, "ATOMIC");
     const states: string[] = [];
     if (effectiveSelectedNodeId && requirementId === effectiveSelectedNodeId) {
       states.push("selected");
@@ -618,6 +661,19 @@ function buildGraphModel({
     if (states.length > 0) {
       node.states = states;
     }
+    node.style = {
+      ...(node.style ?? {}),
+      innerHTML: buildRequirementNodeHtml({
+        id: requirementId,
+        name: String(meta.requirementName ?? requirementId),
+        thumbnailSrc: typeof meta.requirementThumbnail === "string" ? meta.requirementThumbnail : null,
+        selected: states.includes("selected"),
+        related: states.includes("related"),
+        visualState,
+        fill: visual.fill,
+        stroke: visual.stroke,
+      }),
+    };
   });
 
   const laneBuckets = new Map<InterfaceLane, SubmissionTraceabilityInterface[]>(INTERFACE_LANE_ORDERS.map((lane) => [lane, []]));
@@ -1265,6 +1321,7 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
   selectedTraceabilityKind,
   onSelectInterface,
   onSelectTest,
+  taskAssets = null,
 }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
@@ -1345,9 +1402,10 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
       selectionActive,
       selectedTraceabilityId,
       selectedTraceabilityKind,
+      taskAssets,
       width: viewport.width || 1400,
     }),
-    [allTraceability, nodeStates, selectedNodeId, selectedTraceabilityId, selectedTraceabilityKind, selectionActive, showInterfaces, showTests, tree, viewport.width],
+    [allTraceability, nodeStates, selectedNodeId, selectedTraceabilityId, selectedTraceabilityKind, selectionActive, showInterfaces, showTests, taskAssets, tree, viewport.width],
   );
 
   useEffect(() => {

@@ -191,8 +191,8 @@ export const api = {
   },
   getSubmissionTaskAssets(submissionId: string): SubmissionTaskAssets {
     return {
-      assets_base_url: `${API_BASE}/submissions/${submissionId}/task-assets/assets/`,
-      references_base_url: `${API_BASE}/submissions/${submissionId}/task-assets/references/`,
+      assets_base_url: `${API_BASE}/submissions/${submissionId}/requirements-assets/assets/`,
+      references_base_url: `${API_BASE}/submissions/${submissionId}/requirements-assets/references/`,
     };
   },
   getSubmissionLogs(submissionId: string) {
@@ -239,8 +239,17 @@ export const api = {
       onEvent: (event: SubmissionSseEvent) => void;
       onError?: () => void;
     },
+    options?: { sinceVersion?: number },
   ) {
-    const source = new EventSource(`${API_BASE}/submissions/${submissionId}/events`, { withCredentials: true });
+    const params = new URLSearchParams();
+    if (options?.sinceVersion && options.sinceVersion > 0) {
+      params.set("since_version", String(options.sinceVersion));
+    }
+    const query = params.toString();
+    const source = new EventSource(
+      `${API_BASE}/submissions/${submissionId}/events${query ? `?${query}` : ""}`,
+      { withCredentials: true },
+    );
     source.addEventListener("submission-update", (rawEvent) => {
       try {
         const payload = JSON.parse((rawEvent as MessageEvent<string>).data) as SubmissionSseEvent;

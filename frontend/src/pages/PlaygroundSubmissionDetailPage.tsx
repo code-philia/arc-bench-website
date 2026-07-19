@@ -1500,6 +1500,9 @@ export default function PlaygroundSubmissionDetailPage() {
   });
   const eventSourceRef = useRef<EventSource | null>(null);
   const sseReconnectRef = useRef<number | null>(null);
+  const lastSseVersionRef = useRef(0);
+  const activeTabRef = useRef<"canvas" | "file" | "diff" | "results" | "stdio">("canvas");
+  const submissionStatusRef = useRef<string | null>(null);
   const activeSelectedNodeIdRef = useRef<string | null>("ROOT");
   const traceabilityOverlayVisibleRef = useRef(false);
   const visualEventCountRef = useRef(0);
@@ -1577,6 +1580,14 @@ export default function PlaygroundSubmissionDetailPage() {
   useEffect(() => {
     activeSelectedNodeIdRef.current = activeSelectedNodeId;
   }, [activeSelectedNodeId]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    submissionStatusRef.current = submission?.status ?? null;
+  }, [submission?.status]);
 
   useEffect(() => {
     traceabilityOverlayVisibleRef.current = traceabilityOverlayVisible;
@@ -1818,7 +1829,7 @@ export default function PlaygroundSubmissionDetailPage() {
     }
 
     const refreshTraceabilityForLiveView = () => {
-      if (traceabilityOverlayVisibleRef.current || (activeTab === "canvas" && submission?.status !== "PAUSED")) {
+      if (traceabilityOverlayVisibleRef.current || (activeTabRef.current === "canvas" && submissionStatusRef.current !== "PAUSED")) {
         void refreshAllTraceability().catch(() => undefined);
         return;
       }
@@ -1828,6 +1839,10 @@ export default function PlaygroundSubmissionDetailPage() {
     };
 
     const handleSseEvent = (event: SubmissionSseEvent) => {
+      if (event.version <= lastSseVersionRef.current) {
+        return;
+      }
+      lastSseVersionRef.current = event.version;
       if (event.refresh.submission) {
         void refreshSubmissionDetail().catch(() => undefined);
       }
@@ -1860,9 +1875,10 @@ export default function PlaygroundSubmissionDetailPage() {
             connect();
           }, 2000);
         },
-      });
+      }, { sinceVersion: lastSseVersionRef.current });
     };
 
+    lastSseVersionRef.current = 0;
     connect();
     return () => {
       eventSourceRef.current?.close();
@@ -1872,7 +1888,7 @@ export default function PlaygroundSubmissionDetailPage() {
         sseReconnectRef.current = null;
       }
     };
-  }, [activeTab, submission?.status, submissionId, user]);
+  }, [submissionId, user]);
 
   const catalogTree = useMemo(() => resolveRequirementCatalogTree(requirement), [requirement]);
 
@@ -2624,6 +2640,7 @@ export default function PlaygroundSubmissionDetailPage() {
                       ref={factoryCanvasRef}
                       key={`factory-canvas:${submissionId}`}
                       tree={pausedCanvasTree ?? tree}
+                      taskAssets={submissionTaskAssets}
                       selectedNodeId={factoryCanvasSelectedNodeId}
                       selectionActive={factoryCanvasSelectionActive}
                       onSelectNode={(nodeId) => {

@@ -3683,6 +3683,9 @@ button {
 }
 
 .playground-submission-page .ide-shell {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: var(--submission-panel-bg);
 }
 
@@ -3728,6 +3731,8 @@ button {
 }
 
 .playground-submission-page .ide-editor {
+  min-height: 0;
+  overflow: hidden;
   background: var(--submission-panel-bg);
 }
 
@@ -3771,6 +3776,7 @@ button {
 
 .playground-submission-page .ide-code-view,
 .playground-submission-page .stdio-code-view {
+  overflow: auto;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--bg-elevated) 34%, transparent) 0 1px, transparent 1px 100%),
     var(--submission-panel-bg);
@@ -4356,6 +4362,97 @@ button {
   color: #64748b;
   font-family: var(--mono);
   font-size: 0.72rem;
+}
+
+.submission-factory-requirement-card {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+  padding: 10px 11px;
+  border: 1.4px solid var(--factory-req-stroke, #8f9baa);
+  border-radius: 6px;
+  background: var(--factory-req-fill, #ffffff);
+  box-shadow: 0 5px 14px rgba(12, 31, 24, 0.08);
+  color: #111827;
+  font-family: var(--sans);
+  user-select: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.submission-factory-requirement-card.is-selected,
+.submission-factory-requirement-card.is-related {
+  background: var(--factory-req-stroke, #0f766e);
+  border-color: var(--factory-req-stroke, #0f766e);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.submission-factory-requirement-card.is-selected {
+  transform: scale(1.04);
+}
+
+.submission-factory-requirement-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.submission-factory-requirement-id {
+  overflow: hidden;
+  color: #4b5563;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submission-factory-requirement-name {
+  align-self: center;
+  display: -webkit-box;
+  overflow: hidden;
+  color: #111827;
+  font-size: 1.05rem;
+  font-weight: 760;
+  line-height: 1.16;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.submission-factory-requirement-card.is-selected .submission-factory-requirement-id,
+.submission-factory-requirement-card.is-related .submission-factory-requirement-id {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.submission-factory-requirement-card.is-selected .submission-factory-requirement-name,
+.submission-factory-requirement-card.is-related .submission-factory-requirement-name {
+  color: #ffffff;
+}
+
+.submission-factory-requirement-thumb {
+  align-self: center;
+  width: 70px;
+  height: 70px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.submission-factory-requirement-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .requirement-tree-layout {

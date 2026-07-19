@@ -135,4 +135,4 @@ class SubmissionEventStream:
     @staticmethod
     def encode_sse(event: SubmissionEvent) -> str:
         payload = json.dumps(event.to_payload(), ensure_ascii=True)
-        return f"event: submission-update\ndata: {payload}\n\n"
+        return f"id: {event.version}\nevent: submission-update\ndata: {payload}\n\n"
