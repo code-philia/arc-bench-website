@@ -86,7 +86,7 @@ class WorkspaceAssembler:
             encoding="utf-8",
         )
 
-        debug_log_path = arc_dir / "execution.debug.log"
+        debug_log_path = workspace_root / "execution.debug.log"
         debug_log_path.write_text(
             "Workspace assembled successfully.\n",
             encoding="utf-8",

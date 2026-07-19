@@ -7,7 +7,7 @@ from pathlib import Path
 class DebugLogService:
     def __init__(self, workspace_path: Path):
         self.workspace_path = workspace_path
-        self.log_path = workspace_path / "template" / ".arc" / "execution.debug.log"
+        self.log_path = workspace_path / "execution.debug.log"
 
     def append(self, source: str, message: str) -> Path:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
