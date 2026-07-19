@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DownOutlined, MinusOutlined, PlusOutlined, RadarChartOutlined, UpOutlined } from "@ant-design/icons";
 import type { FocusEvent as ReactFocusEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -9,7 +9,9 @@ import SubmissionFactoryCanvas, { type SubmissionFactoryCanvasHandle } from "../
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
+import { InteractiveControls, ConfirmDialog, Toast } from "../components/InteractiveControls";
 import { ApiError, api } from "../lib/api";
+import "../styles/interactive-controls.css";
 import {
   cloneRequirementTree,
   findNodeById,
@@ -1394,27 +1396,44 @@ function CommitHistoryPanel({
       <div className="commit-history-list">
         {orderedCommits.map((commit) => {
           const isCommitSelected = selectedCommitOid === commit.oid;
+          const canRewind = onRewind && commit.node_id && commit.phase;
           return (
-            <button
-              key={commit.oid}
-              type="button"
-              ref={isCommitSelected ? selectedItemRef : null}
-              className={`commit-history-item${isCommitSelected ? " commit-active" : ""}`}
-              onClick={() => onSelectCommit(commit)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onSelectCommit(commit);
-                setMenuState({ commit, x: event.clientX, y: event.clientY });
-              }}
-            >
-              <span className="commit-history-main">{commit.message}</span>
-              <span className="commit-history-secondary">{[
-                commit.short_oid,
-                commit.node_id,
-                formatCommitDateTime(commit.committed_at),
-              ].filter(Boolean).join(" ")}</span>
-            </button>
+            <div key={commit.oid} className="commit-history-item-wrapper">
+              <button
+                type="button"
+                ref={isCommitSelected ? selectedItemRef : null}
+                className={`commit-history-item${isCommitSelected ? " commit-active" : ""}`}
+                onClick={() => onSelectCommit(commit)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onSelectCommit(commit);
+                  setMenuState({ commit, x: event.clientX, y: event.clientY });
+                }}
+              >
+                <div className="commit-history-left">
+                  <span className="commit-history-main">{commit.message}</span>
+                  <span className="commit-history-secondary">{[
+                    commit.short_oid,
+                    commit.node_id,
+                    formatCommitDateTime(commit.committed_at),
+                  ].filter(Boolean).join(" ")}</span>
+                </div>
+                {canRewind && (
+                  <button
+                    type="button"
+                    className="commit-rewind-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRewind(commit);
+                    }}
+                    title="Rewind to this commit"
+                  >
+                    ↩️ Rewind
+                  </button>
+                )}
+              </button>
+            </div>
           );
         })}
       </div>
@@ -1541,6 +1560,19 @@ export default function PlaygroundSubmissionDetailPage() {
   const [editableDetailExpanded, setEditableDetailExpanded] = useState(false);
   const [savingEditableTask, setSavingEditableTask] = useState(false);
   const [editableReloadToken, setEditableReloadToken] = useState(0);
+  const [isPausing, setIsPausing] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmDialogData, setConfirmDialogData] = useState<{
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    type: "info" | "warning" | "danger";
+    onConfirm: () => void;
+  } | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastData, setToastData] = useState<{ message: string; type: "info" | "success" | "error" | "warning" } | null>(null);
   const taskType = normalizeTaskType(requirement?.category ?? rawTaskType);
   const executionPaused = submission?.status === "PAUSED";
   const executionPausePending = submission?.status === "PAUSE_REQUESTED";
@@ -1589,6 +1621,41 @@ export default function PlaygroundSubmissionDetailPage() {
     preview_head_oid: null,
     error: error.message,
   });
+
+  const showToast = (message: string, type: "info" | "success" | "error" | "warning" = "info") => {
+    setToastData({ message, type });
+    setToastVisible(true);
+  };
+
+  const hideToast = () => {
+    setToastVisible(false);
+    setTimeout(() => setToastData(null), 300);
+  };
+
+  const showConfirm = (
+    title: string,
+    message: string,
+    confirmText: string,
+    cancelText: string,
+    type: "info" | "warning" | "danger",
+    onConfirm: () => void
+  ) => {
+    setConfirmDialogData({ title, message, confirmText, cancelText, type, onConfirm });
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmCancel = () => {
+    setShowConfirmDialog(false);
+    setTimeout(() => setConfirmDialogData(null), 300);
+  };
+
+  const handleConfirmOk = () => {
+    if (confirmDialogData) {
+      confirmDialogData.onConfirm();
+    }
+    setShowConfirmDialog(false);
+    setTimeout(() => setConfirmDialogData(null), 300);
+  };
 
   const loadPreviewStatus = async (silent = false) => {
     if (!silent) {
@@ -2135,8 +2202,17 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId) {
       return;
     }
-    editableTreeDirtyRef.current = false;
-    setSubmission(await api.pauseSubmission(submissionId));
+    setIsPausing(true);
+    try {
+      editableTreeDirtyRef.current = false;
+      const result = await api.pauseSubmission(submissionId);
+      setSubmission(result);
+      showToast("Execution paused successfully", "success");
+    } catch (error) {
+      showToast("Failed to pause execution", "error");
+    } finally {
+      setIsPausing(false);
+    }
   };
 
   const persistEditableTask = async () => {
@@ -2166,6 +2242,7 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId) {
       return;
     }
+
     if (submission?.can_manual_edit) {
       try {
         const preview = await api.getManualEditCommitPreview(submissionId);
@@ -2173,40 +2250,66 @@ export default function PlaygroundSubmissionDetailPage() {
           const scope = preview.node_id && preview.phase
             ? `${preview.node_id} (${preview.phase})`
             : "the current paused step";
-          const confirmed = window.confirm(
-            `Resume will create one manual commit for ${scope} before continuing.`,
+          
+          // Use our nice confirm dialog instead of window.confirm
+          showConfirm(
+            "Confirm Resume",
+            `Resume will create one manual commit for ${scope} before continuing. Do you want to proceed?`,
+            "Yes, Continue",
+            "Cancel",
+            "warning",
+            async () => {
+              await doResume();
+            }
           );
-          if (!confirmed) {
-            return;
-          }
+          return;
         }
       } catch (error) {
         const fallbackMessage = error instanceof Error ? error.message : "Failed to prepare resume preview.";
         console.error("Failed to load manual edit commit preview", error);
-        const confirmed = window.confirm(
-          `${fallbackMessage}\n\nResume will still try to continue from the paused workspace. Continue?`,
+        
+        showConfirm(
+          "Resume Anyway?",
+          `${fallbackMessage}\n\nResume will still try to continue from the paused workspace. Do you want to proceed?`,
+          "Yes, Continue",
+          "Cancel",
+          "info",
+          async () => {
+            await doResume();
+          }
         );
-        if (!confirmed) {
-          return;
+        return;
+      }
+    }
+
+    await doResume();
+  };
+
+  const doResume = async () => {
+    setIsResuming(true);
+    try {
+      if (submission?.status === "PAUSED" && editableTreeDirtyRef.current) {
+        setSavingEditableTask(true);
+        try {
+          await persistEditableTask();
+        } finally {
+          setSavingEditableTask(false);
         }
       }
-    }
-    if (submission?.status === "PAUSED" && editableTreeDirtyRef.current) {
-      setSavingEditableTask(true);
-      try {
-        await persistEditableTask();
-      } finally {
-        setSavingEditableTask(false);
+      const nextSubmission = await api.resumeSubmission(submissionId);
+      setSubmission(nextSubmission);
+      if (nextSubmission.status !== "PAUSED") {
+        editableTreeDirtyRef.current = false;
+        setEditableTask(null);
+        setEditableTree(null);
+        setEditableNodeId("ROOT");
+        setEditableDetailExpanded(false);
       }
-    }
-    const nextSubmission = await api.resumeSubmission(submissionId);
-    setSubmission(nextSubmission);
-    if (nextSubmission.status !== "PAUSED") {
-      editableTreeDirtyRef.current = false;
-      setEditableTask(null);
-      setEditableTree(null);
-      setEditableNodeId("ROOT");
-      setEditableDetailExpanded(false);
+      showToast("Execution resumed successfully", "success");
+    } catch (error) {
+      showToast("Failed to resume execution", "error");
+    } finally {
+      setIsResuming(false);
     }
   };
 
@@ -2214,24 +2317,76 @@ export default function PlaygroundSubmissionDetailPage() {
     if (!submissionId) {
       return;
     }
-    const nextSubmission = await api.rewindSubmission(submissionId, { commit_oid: commit.oid });
-    const targetNodeId = commit.node_id ?? "ROOT";
-    editableTreeDirtyRef.current = false;
-    visualEventCountRef.current = 0;
-    setSubmission(nextSubmission);
-    setTraceabilityNodeId(targetNodeId);
-    setEditableTask(null);
-    setEditableTree(null);
-    setActiveTab("canvas");
-    setSelectedCommitOid(commit.oid);
-    setSelectedNodeId(targetNodeId);
-    setEditableNodeId(targetNodeId);
-    setEditableReloadToken((current) => current + 1);
-    setFocusNodeId(targetNodeId);
-    setPulseNodeId(null);
-    if (useQuickStartSubmission) {
-      quickStart.setSelectedNode(targetNodeId);
+    
+    showConfirm(
+      "Rewind to This Commit?",
+      `Rewind this submission to commit ${commit.short_oid}? Execution will pause and later commits in the workspace history will be discarded.`,
+      "Rewind",
+      "Cancel",
+      "danger",
+      async () => {
+        try {
+          const nextSubmission = await api.rewindSubmission(submissionId, { commit_oid: commit.oid });
+          const targetNodeId = commit.node_id ?? "ROOT";
+          editableTreeDirtyRef.current = false;
+          visualEventCountRef.current = 0;
+          setSubmission(nextSubmission);
+          setTraceabilityNodeId(targetNodeId);
+          setEditableTask(null);
+          setEditableTree(null);
+          setActiveTab("canvas");
+          setSelectedCommitOid(commit.oid);
+          setSelectedNodeId(targetNodeId);
+          setEditableNodeId(targetNodeId);
+          setEditableReloadToken((current) => current + 1);
+          setFocusNodeId(targetNodeId);
+          setPulseNodeId(null);
+          if (useQuickStartSubmission) {
+            quickStart.setSelectedNode(targetNodeId);
+          }
+          showToast("Rewound to previous commit successfully", "success");
+        } catch (error) {
+          showToast("Failed to rewind submission", "error");
+        }
+      }
+    );
+  };
+
+  const handleRewindClick = () => {
+    // Switch to history tab
+    setPreviewTab("history");
+    // Expand the sidebar if necessary
+    if (sidebarMinimized) {
+      setSidebarMinimized(false);
     }
+    showToast("Select a commit to rewind to from the history panel", "info");
+  };
+
+  const handleEditCodeClick = () => {
+    // Switch to file tab and open the first file
+    setActiveTab("file");
+    if (sidebarMinimized) {
+      setSidebarMinimized(false);
+    }
+    setSidebarTab("status");
+    showToast("You can now edit code and tests from the workspace panel", "info");
+  };
+
+  const handleEditRequirementsClick = () => {
+    // Activate edit mode for requirements
+    if (submission?.status !== "PAUSED") {
+      showToast("Execution must be paused to edit requirements", "warning");
+      return;
+    }
+    // Select the root node and show edit panel
+    setSelectedNodeId("ROOT");
+    setEditableNodeId("ROOT");
+    setActiveTab("canvas");
+    setDetailExpanded(true);
+    if (sidebarMinimized) {
+      setSidebarMinimized(false);
+    }
+    showToast("You can now edit requirements from the canvas", "info");
   };
 
   const handleSaveFix = async () => {
@@ -2429,6 +2584,14 @@ export default function PlaygroundSubmissionDetailPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Interactive Controls Panel */}
+              <InteractiveControls
+                status={submission.status}
+                onRewind={handleRewindClick}
+                onEditCode={handleEditCodeClick}
+                onEditRequirements={handleEditRequirementsClick}
+              />
 
               <div className="submission-side-toolbar">
                 <div className="submission-side-tabs rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
@@ -3009,6 +3172,28 @@ export default function PlaygroundSubmissionDetailPage() {
           ) : null}
         </aside>
       </div>
+
+      {showConfirmDialog && confirmDialogData && (
+        <ConfirmDialog
+          title={confirmDialogData.title}
+          message={confirmDialogData.message}
+          confirmText={confirmDialogData.confirmText}
+          cancelText={confirmDialogData.cancelText}
+          onConfirm={handleConfirmOk}
+          onCancel={handleConfirmCancel}
+          isOpen={showConfirmDialog}
+          type={confirmDialogData.type}
+        />
+      )}
+
+      {toastData && (
+        <Toast
+          message={toastData.message}
+          type={toastData.type}
+          isVisible={toastVisible}
+          onClose={hideToast}
+        />
+      )}
     </div>
   );
 }
