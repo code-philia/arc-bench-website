@@ -1,6 +1,7 @@
 import { FileTextOutlined, GlobalOutlined, PlayCircleOutlined, RightOutlined, StarOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { GithubOutlined } from "@ant-design/icons";
 
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
@@ -265,9 +266,21 @@ export default function PlaygroundPage() {
                 </p>
               </div>
             </div>
-            <Link className="text-sm font-semibold text-[var(--accent)] hover:text-[var(--accent-grad-end)]" to={benchmarkBrowseHref}>
-              View all benchmarks
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link className="text-sm font-semibold text-[var(--accent)] hover:text-[var(--accent-grad-end)]" to={benchmarkBrowseHref}>
+                View all benchmarks
+              </Link>
+              <a
+                className="inline-flex items-center gap-1.5 border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs font-semibold text-[var(--text-dim)] transition hover:border-[var(--border-light)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
+                href="https://github.com/code-philia/ARC.git"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open ARC GitHub repository"
+              >
+                <GithubOutlined />
+                GitHub repo
+              </a>
+            </div>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">

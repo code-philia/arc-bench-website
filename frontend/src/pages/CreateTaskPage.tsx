@@ -581,7 +581,7 @@ export default function CreateTaskPage() {
 
         <div
           className={`create-task-layout create-task-layout-locked !h-auto !min-h-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.06)] [background:var(--bg)]${previewCollapsed ? " preview-collapsed" : ""}`}
-          style={{ gridTemplateColumns: previewCollapsed ? "0 12px minmax(420px, 1fr)" : `${previewWidth}px 12px minmax(420px, 1fr)` }}
+          style={{ gridTemplateColumns: previewCollapsed ? "0 16px minmax(420px, 1fr)" : `${previewWidth}px 16px minmax(420px, 1fr)` }}
         >
           <section className={`readme-panel create-task-preview-panel create-task-preview-panel-locked border-r border-[var(--border)] [background:var(--bg)]${previewCollapsed ? " collapsed" : ""}`}>
             <MarkdownTocDocument

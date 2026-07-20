@@ -64,6 +64,7 @@ export default function MarkdownTocDocument({
   const [activeHeadingId, setActiveHeadingId] = useState<string | null>(tocEntries[0]?.id ?? null);
   const [tocWidth, setTocWidth] = useState(240);
   const [isResizingToc, setIsResizingToc] = useState(false);
+  const isTocCollapsed = tocWidth <= 56;
 
   const syncActiveHeading = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -170,7 +171,7 @@ export default function MarkdownTocDocument({
 
       const maxWidth = Math.min(420, Math.round(window.innerWidth * 0.42));
       const nextWidth = origin.startWidth + (event.clientX - origin.startX);
-      setTocWidth(Math.max(160, Math.min(maxWidth, nextWidth)));
+      setTocWidth(Math.max(0, Math.min(maxWidth, nextWidth)));
     };
 
     const handlePointerUp = () => {
@@ -196,7 +197,12 @@ export default function MarkdownTocDocument({
 
   return (
     <div
-      className={joinClassNames("readme-body", bodyClassName, isResizingToc ? "resizing" : undefined)}
+      className={joinClassNames(
+        "readme-body",
+        bodyClassName,
+        isResizingToc ? "resizing" : undefined,
+        isTocCollapsed ? "toc-collapsed" : undefined,
+      )}
       style={bodyStyle}
     >
       <aside

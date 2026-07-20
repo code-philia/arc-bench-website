@@ -1852,7 +1852,11 @@ function TreeCanvasInner({
               ) : null}
             </div>
           </div>
-          {detailExpanded ? (detailContent ?? <div className="create-task-detail-empty-body" />) : null}
+          {detailExpanded ? (
+            <div className="create-task-detail-body">
+              {detailContent ?? <div className="create-task-detail-empty-body" />}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
