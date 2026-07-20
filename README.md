@@ -22,14 +22,42 @@ To update `agentic-requirement-compiler` to the latest `main` from its remote re
 git submodule update --remote agentic-requirement-compiler
 ```
 
-After updating the submodule, commit the new submodule pointer in this repository:
+## Demo Agent Template Bundle
+
+`runtime/demo-agent/template` is stored as `runtime/demo-agent/template.git.bundle` because the template itself is a git repository. Git cannot commit the nested `template/.git` directory as normal files.
+
+After cloning or pulling updates, restore the demo-agent template repository with:
 
 ```bash
-git add .gitmodules agentic-requirement-compiler
-git commit -m "Update agentic-requirement-compiler submodule"
+cd runtime/demo-agent
+git clone template.git.bundle template
 ```
 
-## 1. Compile the Frontend
+On Windows PowerShell:
+
+```powershell
+Set-Location runtime\demo-agent
+git clone template.git.bundle template
+```
+
+If you update `runtime/demo-agent/template`, regenerate and commit the bundle:
+
+```bash
+git -C runtime/demo-agent/template bundle create ../template.git.bundle --all
+git add runtime/demo-agent/template.git.bundle
+git commit -m "Update demo-agent template bundle"
+```
+
+## 1. Build the Agent Runner Image
+
+Build the local Docker image used to execute submitted agents:
+
+```bash
+docker rmi arcbench-agent-runner:latest
+docker build -t arcbench-agent-runner:latest ./backend/runner/agent-runner
+```
+
+## 2. Compile the Frontend
 
 Open another terminal and run:
 
@@ -39,17 +67,7 @@ npm install
 npm run build
 ```
 
-(Optional) For development purposes, you can start the frontend development server with:
-```bash
-npm run dev
-```
-The frontend will be available at:
-
-```bash
-http://127.0.0.1:5173
-```
-
-## 2. Start the Backend
+## 3. Start the Backend
 
 ### Prepare the Python Environment
 
@@ -91,19 +109,6 @@ The website will be available at:
 http://127.0.0.1:8000
 ```
 
-## 3. Uploaded Agent Contract
+## 4. Quick Start
 
-ARC Bench executes uploaded Python agents with a fixed CLI contract. Your zip bundle must place these files at the archive root:
-
-- `main.py`
-- `requirements.txt`
-
-At runtime, the runner installs dependencies from `requirements.txt`, then launches:
-
-```bash
-python3 main.py requirements --output-dir . --app-type web --web-port 3000
-```
-
-The runner starts the process from the generated project root. Requirements are available in `requirements/`, and SDK runtime files are written under `.arc/`.
-
-If your agent uses the ArcBench SDK, call `AgentRuntime.from_env()` and write progress through the SDK instead of constructing event payloads manually.
+Use the **Quick Start** guide on the Playground page to quickly create a built-in submission.
