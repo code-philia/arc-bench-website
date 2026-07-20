@@ -12,7 +12,12 @@ backend/.pytest_cache
 backend/.mypy_cache
 backend/.ruff_cache
 backend/uvicorn.log
-runtime/
+
+runtime/host-preview
+runtime/user-submissions
+runtime/user-tasks
+runtime/app.db
+
 requirement/
 
 .env
