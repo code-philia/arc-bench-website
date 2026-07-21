@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import threading
@@ -29,6 +30,7 @@ RESUME_REQUEST_PATH = ARC_DIR / "resume.request.json"
 CHECKPOINT_PATH = ARC_DIR / "checkpoint.json"
 PLAYWRIGHT_REPORT_PATH = ARC_DIR / "playwright-report.json"
 PIP_CACHE_DIR = Path("/tmp/arcbench/pip-cache")
+REQUIREMENT_SOURCE_DIR = Path("/tmp/arcbench/requirements-source")
 PIP_INSTALL_ATTEMPTS = 3
 PIP_DEFAULT_TIMEOUT_SECONDS = 120
 PIP_RESUME_RETRIES = 8
@@ -279,6 +281,21 @@ def map_task_category_to_app_type(category: str) -> str:
     return "web"
 
 
+def prepare_agent_requirement_source() -> Path:
+    source_requirements = REQUIREMENTS_DIR
+    source_yaml = source_requirements / "requirements.yaml"
+    if not source_yaml.is_file():
+        raise FileNotFoundError(f"Template requirement workspace is missing requirements.yaml: {source_yaml}")
+    if REQUIREMENT_SOURCE_DIR.exists():
+        shutil.rmtree(REQUIREMENT_SOURCE_DIR)
+    shutil.copytree(source_requirements, REQUIREMENT_SOURCE_DIR)
+    copied_yaml = REQUIREMENT_SOURCE_DIR / "requirements.yaml"
+    if not copied_yaml.is_file():
+        raise FileNotFoundError(f"Copied requirement source is missing requirements.yaml: {copied_yaml}")
+    append_debug_log(f"Prepared agent requirement source from {source_requirements} to {REQUIREMENT_SOURCE_DIR}")
+    return REQUIREMENT_SOURCE_DIR
+
+
 def build_generation_agent_command(entrypoint: Path) -> list[str]:
     command = ["python3", str(entrypoint)]
     spec = read_spec()
@@ -289,7 +306,7 @@ def build_generation_agent_command(entrypoint: Path) -> list[str]:
     app_type = map_task_category_to_app_type(category)
     command.extend(
         [
-            str(spec.get("requirement_dir") or "requirements"),
+            str(prepare_agent_requirement_source()),
             "--output-dir",
             str(spec.get("output_dir") or "."),
             "--app-type",
@@ -419,6 +436,7 @@ def build_agent_environment() -> dict[str, str]:
         "ARCBENCH_ARC_DIR": ".arc",
         "ARCBENCH_RUNNER_EVENTS_PATH": ".arc/runner-events.jsonl",
         "ARCBENCH_TRACEABILITY_DIR": ".arc/traceability",
+        "ARCBENCH_PRESERVE_OUTPUT_WORKSPACE": "1",
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
         "ARCBENCH_CHECKPOINT_PATH": ".arc/checkpoint.json",
         "ARCBENCH_PAUSE_REQUEST_PATH": ".arc/pause.request.json",

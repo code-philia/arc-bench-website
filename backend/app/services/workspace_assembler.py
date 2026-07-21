@@ -30,7 +30,6 @@ class WorkspaceAssembler:
         submission_dir.mkdir(parents=True, exist_ok=True)
         template_dir.mkdir(parents=True, exist_ok=True)
         tests_dir.mkdir(parents=True, exist_ok=True)
-        requirements_dir.mkdir(parents=True, exist_ok=True)
         arc_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(submission.archive_path, "r") as archive:
@@ -43,19 +42,8 @@ class WorkspaceAssembler:
             if fallback_template_root.is_dir():
                 template_source_root = fallback_template_root
         shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
-        shutil.copytree(Path(requirement.assets_path), requirements_dir / "assets", dirs_exist_ok=True)
-        shutil.copytree(Path(requirement.references_path), requirements_dir / "reference", dirs_exist_ok=True)
-        requirement_markdown_path = Path(requirement.requirements_path)
-        requirement_yaml_path = requirement_markdown_path.with_name("requirements.yaml")
-        shutil.copy2(requirement_markdown_path, requirements_dir / "requirements.md")
-        if requirement_yaml_path.exists():
-            shutil.copy2(requirement_yaml_path, requirements_dir / "requirements.yaml")
-        prerequisites_path = Path(requirement.prerequisites_path)
-        if prerequisites_path.exists():
-            shutil.copy2(prerequisites_path, requirements_dir / "prerequisites.md")
-        else:
-            (requirements_dir / "prerequisites.md").write_text("", encoding="utf-8")
-        shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
+        self._copy_requirement_workspace(requirement, requirement_root, requirements_dir)
+        self._copy_optional_tree(Path(requirement.tests_path), tests_dir)
         self.traceability_seed_builder.write_seed_file(
             arc_dir / "traceability-seed.json",
             requirement,
@@ -92,6 +80,54 @@ class WorkspaceAssembler:
             encoding="utf-8",
         )
         return workspace_root
+
+    @staticmethod
+    def _copy_optional_tree(source: Path, destination: Path) -> None:
+        if not source.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+            return
+        shutil.copytree(source, destination, dirs_exist_ok=True)
+
+    def _copy_requirement_workspace(
+        self,
+        requirement: Requirement,
+        requirement_root: Path,
+        requirements_dir: Path,
+    ) -> None:
+        if requirements_dir.exists():
+            shutil.rmtree(requirements_dir)
+        requirements_dir.mkdir(parents=True, exist_ok=True)
+
+        excluded_names = {"template", "tests"}
+        for source_path in requirement_root.iterdir():
+            if source_path.name in excluded_names:
+                continue
+            destination_path = requirements_dir / source_path.name
+            if source_path.is_dir():
+                shutil.copytree(source_path, destination_path, dirs_exist_ok=True)
+            elif source_path.is_file():
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+
+        requirement_markdown_path = Path(requirement.requirements_path)
+        requirement_yaml_path = requirement_markdown_path.with_name("requirements.yaml")
+        prerequisites_path = Path(requirement.prerequisites_path)
+        if requirement_markdown_path.is_file():
+            shutil.copy2(requirement_markdown_path, requirements_dir / "requirements.md")
+        if requirement_yaml_path.is_file():
+            shutil.copy2(requirement_yaml_path, requirements_dir / "requirements.yaml")
+        if prerequisites_path.is_file():
+            shutil.copy2(prerequisites_path, requirements_dir / "prerequisites.md")
+        elif not (requirements_dir / "prerequisites.md").exists():
+            (requirements_dir / "prerequisites.md").write_text("", encoding="utf-8")
+
+        self._copy_optional_tree(Path(requirement.assets_path), requirements_dir / "assets")
+        self._copy_optional_tree(Path(requirement.references_path), requirements_dir / "reference")
+
+        if not (requirements_dir / "requirements.yaml").is_file():
+            raise FileNotFoundError(
+                f"Requirement source is missing requirements.yaml: {requirement_yaml_path}"
+            )
 
     @staticmethod
     def _flatten_single_root(agent_dir: Path) -> None:
