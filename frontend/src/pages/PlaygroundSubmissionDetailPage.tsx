@@ -1171,7 +1171,7 @@ function SubmissionFilePanel({
               title={templateBundleError ?? "Download workspace/template as a zip file"}
             >
               <DownloadOutlined />
-              <span>{templateBundleDownloading ? "Packaging..." : "Template.zip"}</span>
+              <span>{templateBundleDownloading ? "Packaging..." : "project.zip"}</span>
             </button>
             {canManualEdit && fileSource ? (
               <>
@@ -1610,7 +1610,7 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     return findNodeById(editableTree, editableNodeId);
   }, [editableNodeId, editableTree]);
-  const filePanelEmptyMessage = "Select a file from workspace/template to inspect source.";
+  const filePanelEmptyMessage = "Select a file from workspace to inspect source.";
   const diffPanelEmptyMessage = "Select a commit history entry to inspect its diff.";
   const visibleTraceability = traceabilityNodeId === activeSelectedNodeId ? traceability : null;
   const visibleTraceabilityError = traceabilityNodeId === activeSelectedNodeId ? traceabilityError : null;

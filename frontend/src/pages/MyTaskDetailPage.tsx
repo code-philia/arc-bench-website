@@ -331,7 +331,7 @@ export default function MyTaskDetailPage() {
                         }}
                       >
                         <span>ARC Agent</span>
-                        <small>Local ARC compiler source</small>
+                        <small>Agentic Requirement Compiler</small>
                       </button>
                       <button
                         type="button"
@@ -342,7 +342,7 @@ export default function MyTaskDetailPage() {
                         }}
                       >
                         <span>Octos Agent</span>
-                        <small>Octos CLI runner image</small>
+                        <small>Your Own AI Assistant</small>
                       </button>
                     </div>
                   ) : null}
@@ -402,7 +402,7 @@ export default function MyTaskDetailPage() {
                       className="text-input"
                       type="text"
                       maxLength={120}
-                      placeholder="MyAgent_v1"
+                      placeholder="NewSubmission"
                       value={displayName}
                       onChange={(event) => setDisplayName(event.target.value)}
                     />

@@ -388,7 +388,7 @@ export default function ApiDocPage() {
           <div className="inline-flex rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
             ArcBench Runtime API
           </div>
-          <h1 className="mt-4 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">Agent Runtime SDK</h1>
+          <h1 className="mt-4 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">Agent Runtime Visualization</h1>
           <p className="mt-3 max-w-[820px] text-sm leading-6 text-[var(--text-dim)]">
             Use the built-in Python SDK to update requirement states, maintain traceability data, perform git
             operations, and let ArcBench refresh the frontend through the runner event stream automatically.
