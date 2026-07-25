@@ -398,7 +398,7 @@ export default function HomePage() {
                   </div>
                   <div className="overflow-auto p-4 sm:p-5">
                     <img
-                      src="/assets/requirement-example.png"
+                      src="/paper-assets/requirement-example.png"
                       alt="Requirement document example showing requirement nodes, dependency edges, scenarios, and Gherkin steps"
                       className="w-full max-w-full rounded-md border border-[var(--border)] object-contain"
                     />
@@ -421,7 +421,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center justify-center overflow-hidden p-3 sm:p-4">
                     <video
-                      src="/assets/videos/video1.mp4"
+                      src="/paper-assets/videos/video1.mp4"
                       controls
                       muted
                       playsInline
@@ -447,7 +447,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center justify-center overflow-hidden p-3 sm:p-4">
                     <video
-                      src="/assets/videos/video2.mp4"
+                      src="/paper-assets/videos/video2.mp4"
                       controls
                       muted
                       playsInline
