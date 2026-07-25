@@ -27,3 +27,6 @@ __demo__
 rebuild-arc-agent-runner.ps1
 
 .codex
+
+assets/videos
+frontend/public/assets

@@ -57,7 +57,7 @@ export default function PlaygroundRequirementDetailPage() {
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState("readme");
   const [runtime, setRuntime] = useState("python");
-  const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent">("upload");
+  const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent" | "builtin_octos_agent">("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState("");
@@ -209,7 +209,7 @@ export default function PlaygroundRequirementDetailPage() {
       beginPolling(created.submission.id);
       setDisplayName("");
       setModelName("");
-      if (!active || agentSource === "builtin_arc_agent") {
+      if (!active || agentSource !== "upload") {
         setFile(null);
       }
       message.success("Submission created and queued.");
@@ -355,6 +355,17 @@ export default function PlaygroundRequirementDetailPage() {
                       <span className="agent-source-title">Built-in ARC Agent</span>
                       <span className="agent-source-copy">Package the local ARC agent source and submit it.</span>
                     </button>
+                    <button
+                      type="button"
+                      className={`agent-source-card${agentSource === "builtin_octos_agent" ? " active" : ""}`}
+                      onClick={() => {
+                        setAgentSource("builtin_octos_agent");
+                        setUploadError(null);
+                      }}
+                    >
+                      <span className="agent-source-title">Built-in Octos Agent</span>
+                      <span className="agent-source-copy">Run the local Octos CLI runner image against this task.</span>
+                    </button>
                   </div>
                   {agentSource === "upload" ? (
                     <a
@@ -400,9 +411,9 @@ export default function PlaygroundRequirementDetailPage() {
                     </label>
                   ) : (
                     <div className="builtin-agent-panel">
-                      <div className="file-icon">ARC</div>
+                      <div className="file-icon">{agentSource === "builtin_octos_agent" ? "OCT" : "ARC"}</div>
                       <div className="file-info">
-                        <div className="file-name">ARC Agent</div>
+                        <div className="file-name">{agentSource === "builtin_octos_agent" ? "Octos Agent" : "ARC Agent"}</div>
                       </div>
                     </div>
                   )}
