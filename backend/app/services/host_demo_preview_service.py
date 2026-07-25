@@ -13,7 +13,7 @@ from shutil import which
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from app.core.config import ROOT_DIR
+from app.core.config import ROOT_DIR, get_settings
 from app.services.debug_log_service import DebugLogService
 from app.services.submission_event_stream import SubmissionEventStream
 
@@ -22,8 +22,6 @@ class HostDemoPreviewService:
     PREVIEW_ROOT = ROOT_DIR / "runtime" / "host-preview" / "ticketbooking"
     FRONTEND_DIR = PREVIEW_ROOT / "frontend"
     BACKEND_DIR = PREVIEW_ROOT / "backend"
-    HEALTH_URL = "http://127.0.0.1:3000/api/health"
-    PREVIEW_URL = "http://1.95.169.80:3001"
     LOG_DIR = ROOT_DIR / "runtime" / "host-preview"
     BACKEND_LOG_PATH = LOG_DIR / "preview-backend.log"
     STATE_PATH = LOG_DIR / "preview-state.json"
@@ -66,6 +64,7 @@ class HostDemoPreviewService:
         return {
             "available": available,
             "stale": stale,
+            "preview_url": cls.preview_url(),
             "workspace_head_oid": workspace_head_oid,
             "preview_head_oid": cls._current_workspace_head_oid,
             "error": combined_error,
@@ -99,26 +98,13 @@ class HostDemoPreviewService:
                 current_state["backend_lock_hash"],
                 cls.BACKEND_DIR / "node_modules",
             )
-            frontend_build_required = (
-                frontend_install_required
-                or previous_state.get("frontend_source_hash") != current_state["frontend_source_hash"]
-                or not (cls.BACKEND_DIR / "dist" / "index.html").exists()
-            )
-            backend_restart_required = (
-                backend_install_required
-                or previous_state.get("backend_source_hash") != current_state["backend_source_hash"]
-                or not cls._is_backend_running()
-            )
-            if not backend_restart_required and not cls._check_health():
-                cls._append_debug("Backend process exists but health check failed; forcing restart")
-                backend_restart_required = True
 
             cls._append_debug(
                 "Refresh plan: "
                 f"frontend_install_required={frontend_install_required}, "
                 f"backend_install_required={backend_install_required}, "
-                f"frontend_build_required={frontend_build_required}, "
-                f"backend_restart_required={backend_restart_required}"
+                "frontend_build_required=True, "
+                "backend_restart_required=True"
             )
 
             if frontend_install_required:
@@ -131,15 +117,8 @@ class HostDemoPreviewService:
             else:
                 cls._append_debug("Skipping backend npm install; lockfile unchanged and node_modules exists")
 
-            if frontend_build_required:
-                cls._build_frontend()
-            else:
-                cls._append_debug("Skipping frontend build; source hash unchanged and dist/index.html already exists")
-
-            if backend_restart_required:
-                cls._restart_backend()
-            else:
-                cls._append_debug("Skipping backend restart; backend source unchanged and process is healthy")
+            cls._build_frontend()
+            cls._restart_backend()
 
             if not cls._wait_until_ready(120):
                 raise RuntimeError(cls.last_error() or "Preview backend did not become ready in time")
@@ -149,7 +128,7 @@ class HostDemoPreviewService:
                 cls._current_workspace_head_oid = workspace_head_oid
                 cls._bootstrap_error = None
             SubmissionEventStream.publish(submission_id, reason="preview_refreshed", preview=True)
-            cls._append_debug(f"Refresh completed successfully; preview url={cls.PREVIEW_URL}")
+            cls._append_debug(f"Refresh completed successfully; preview url={cls.preview_url()}")
         except Exception as exc:  # noqa: BLE001
             with cls._lock:
                 cls._bootstrap_error = str(exc)
@@ -158,6 +137,7 @@ class HostDemoPreviewService:
             return {
                 "available": False,
                 "stale": False,
+                "preview_url": cls.preview_url(),
                 "workspace_head_oid": workspace_head_oid,
                 "preview_head_oid": cls._current_workspace_head_oid,
                 "error": str(exc),
@@ -178,7 +158,20 @@ class HostDemoPreviewService:
 
     @classmethod
     def preview_url(cls) -> str:
-        return cls.PREVIEW_URL
+        settings = get_settings()
+        configured = (settings.host_preview_public_url or "").strip()
+        if configured:
+            return configured.rstrip("/")
+        host = settings.host_preview_host.strip() or "127.0.0.1"
+        public_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+        return f"http://{public_host}:{settings.host_preview_port}"
+
+    @classmethod
+    def _health_url(cls) -> str:
+        settings = get_settings()
+        host = settings.host_preview_host.strip() or "127.0.0.1"
+        health_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+        return f"http://{health_host}:{settings.host_preview_port}/api/health"
 
     @classmethod
     def last_error(cls) -> str | None:
@@ -226,8 +219,8 @@ class HostDemoPreviewService:
         npm = cls._npm_executable()
         env = {
             **os.environ,
-            "HOST": "127.0.0.1",
-            "PORT": "3000",
+            "HOST": get_settings().host_preview_host,
+            "PORT": str(get_settings().host_preview_port),
         }
         cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
         log_handle = cls.BACKEND_LOG_PATH.open("w", encoding="utf-8")
@@ -305,7 +298,8 @@ class HostDemoPreviewService:
     @classmethod
     def _wait_until_ready(cls, timeout_seconds: int) -> bool:
         deadline = time.time() + timeout_seconds
-        cls._append_debug(f"Waiting for preview health at {cls.HEALTH_URL} with timeout={timeout_seconds}s")
+        health_url = cls._health_url()
+        cls._append_debug(f"Waiting for preview health at {health_url} with timeout={timeout_seconds}s")
         while time.time() < deadline:
             if cls._check_health():
                 cls._append_debug("Preview health check succeeded")
@@ -338,7 +332,7 @@ class HostDemoPreviewService:
     @classmethod
     def _check_health(cls) -> bool:
         try:
-            with urlopen(cls.HEALTH_URL, timeout=2) as response:
+            with urlopen(cls._health_url(), timeout=2) as response:
                 return response.status == 200
         except (URLError, TimeoutError, OSError):
             return False
@@ -462,12 +456,17 @@ class HostDemoPreviewService:
         if not root.exists():
             return None
         digest = hashlib.sha256()
-        for path in sorted(root.rglob("*")):
-            relative_path = path.relative_to(root)
-            if any(part in cls.SYNC_IGNORE_NAMES for part in relative_path.parts):
-                continue
-            digest.update(str(relative_path).replace("\\", "/").encode("utf-8"))
-            if path.is_file():
+        for current_root, dirnames, filenames in os.walk(root):
+            current_path = Path(current_root)
+            dirnames[:] = sorted(dirname for dirname in dirnames if dirname not in cls.SYNC_IGNORE_NAMES)
+            for filename in sorted(filenames):
+                path = current_path / filename
+                relative_path = path.relative_to(root)
+                if any(part in cls.SYNC_IGNORE_NAMES for part in relative_path.parts):
+                    continue
+                if path.is_symlink() or not path.is_file():
+                    continue
+                digest.update(str(relative_path).replace("\\", "/").encode("utf-8"))
                 digest.update(b"\0")
                 digest.update(path.read_bytes())
         return digest.hexdigest()

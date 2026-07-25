@@ -1592,8 +1592,8 @@ export default function PlaygroundSubmissionDetailPage() {
   const activeSelectedNodeId = useQuickStartSubmission && quickStart.canvasDemo.selectedNodeId !== null
     ? quickStart.canvasDemo.selectedNodeId
     : selectedNodeId;
-  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
-  const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
+  const previewUrl = previewStatus?.preview_url ?? api.getSubmissionPreviewUrl(submissionId);
+  const previewFrameUrl = `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}refresh=${previewFrameVersion}`;
   const previewAvailable = previewStatus?.available ?? false;
   const previewPanelWidth = previewMinimized ? "80px" : `${previewWidth}px`;
   const selectedDiffCommit = useMemo(
@@ -1635,6 +1635,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
     available: false,
     stale: false,
+    preview_url: null,
     workspace_head_oid: null,
     preview_head_oid: null,
     error: error.message,

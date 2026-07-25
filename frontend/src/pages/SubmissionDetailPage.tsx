@@ -42,14 +42,15 @@ export default function SubmissionDetailPage() {
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const sseReconnectRef = useRef<number | null>(null);
-  const previewUrl = api.getSubmissionPreviewUrl(submissionId);
-  const previewFrameUrl = `${previewUrl}?refresh=${previewFrameVersion}`;
+  const previewUrl = previewStatus?.preview_url ?? api.getSubmissionPreviewUrl(submissionId);
+  const previewFrameUrl = `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}refresh=${previewFrameVersion}`;
   const previewAvailable = previewStatus?.available ?? false;
   const hasSubmission = submission !== null;
 
   const toPreviewErrorStatus = (error: Error): SubmissionPreviewStatus => ({
     available: false,
     stale: false,
+    preview_url: null,
     workspace_head_oid: null,
     preview_head_oid: null,
     error: error.message,

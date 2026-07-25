@@ -79,6 +79,7 @@ class SubmissionRewindPayload(BaseModel):
 class SubmissionPreviewStatus(BaseModel):
     available: bool
     stale: bool = False
+    preview_url: str | None = None
     workspace_head_oid: str | None = None
     preview_head_oid: str | None = None
     error: str | None = None

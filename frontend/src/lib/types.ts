@@ -222,6 +222,7 @@ export type SubmissionTaskAssets = {
 export type SubmissionPreviewStatus = {
   available: boolean;
   stale: boolean;
+  preview_url: string | null;
   workspace_head_oid: string | null;
   preview_head_oid: string | null;
   error: string | null;

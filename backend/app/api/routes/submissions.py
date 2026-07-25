@@ -459,6 +459,7 @@ def get_submission_preview_status(
             "HTTP status requested: "
             f"available={payload.get('available')} "
             f"stale={payload.get('stale')} "
+            f"preview_url={payload.get('preview_url')} "
             f"workspace_head_oid={payload.get('workspace_head_oid')} "
             f"preview_head_oid={payload.get('preview_head_oid')} "
             f"error={payload.get('error')}",
@@ -482,6 +483,7 @@ def refresh_submission_preview(
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
+            preview_url=HostDemoPreviewService.preview_url(),
             workspace_head_oid=None,
             preview_head_oid=None,
             error="Submission workspace is not available",
@@ -494,6 +496,7 @@ def refresh_submission_preview(
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
+            preview_url=HostDemoPreviewService.preview_url(),
             workspace_head_oid=None,
             preview_head_oid=None,
             error=f"Preview workspace is not available: {template_path}",
@@ -506,6 +509,7 @@ def refresh_submission_preview(
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
+            preview_url=HostDemoPreviewService.preview_url(),
             workspace_head_oid=None,
             preview_head_oid=None,
             error=error,
@@ -521,6 +525,7 @@ def refresh_submission_preview(
         "HTTP refresh finished: "
         f"available={response_payload.get('available')} "
         f"stale={response_payload.get('stale')} "
+        f"preview_url={response_payload.get('preview_url')} "
         f"workspace_head_oid={response_payload.get('workspace_head_oid')} "
         f"preview_head_oid={response_payload.get('preview_head_oid')} "
         f"error={response_payload.get('error')}",
@@ -542,7 +547,7 @@ def get_submission_preview_file(
 
     raise HTTPException(
         status_code=410,
-        detail="Submission-scoped preview proxy is disabled. Use the fixed host preview at http://1.95.169.80:3001/.",
+        detail=f"Submission-scoped preview proxy is disabled. Use the host preview at {HostDemoPreviewService.preview_url()}/.",
     )
 
 

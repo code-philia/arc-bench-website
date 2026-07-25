@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     frontend_dist: Path = ROOT_DIR / "frontend" / "dist"
     site_assets_root: Path = ROOT_DIR / "assets"
+    host_preview_host: str = "127.0.0.1"
+    host_preview_port: int = 3000
+    host_preview_public_url: str | None = None
     requirements_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "requirements"
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
     templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"

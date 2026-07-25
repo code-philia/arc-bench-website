@@ -306,7 +306,8 @@ export const api = {
     });
   },
   getSubmissionPreviewUrl(submissionId: string) {
-    return "http://1.95.169.80:3001/";
+    const host = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
+    return `http://${host}:3000/`;
   },
 
   getWorkspaceFiles(submissionId: string) {
