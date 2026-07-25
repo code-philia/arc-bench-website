@@ -15,16 +15,26 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_daemon_error(exc)) from exc
 
-    def ensure_image(self, log_callback=None) -> None:
+    def _runner_image(self, runner_kind: str = "python") -> str:
+        return self.settings.octos_runner_image if runner_kind == "octos" else self.settings.runner_image
+
+    def _runner_context_dir(self, runner_kind: str = "python") -> Path:
+        return self.settings.octos_runner_context_dir if runner_kind == "octos" else self.settings.runner_context_dir
+
+    def _runner_dockerfile(self, runner_kind: str = "python") -> str:
+        return self.settings.octos_runner_dockerfile if runner_kind == "octos" else "Dockerfile"
+
+    def ensure_image(self, log_callback=None, *, runner_kind: str = "python") -> None:
+        runner_image = self._runner_image(runner_kind)
         needs_build = False
         try:
-            image = self.client.images.get(self.settings.runner_image)
-            if self._is_image_stale(image):
+            image = self.client.images.get(runner_image)
+            if self._is_image_stale(image, runner_kind=runner_kind):
                 needs_build = True
                 if log_callback is not None:
-                    log_callback(f"Runner source newer than image, rebuilding: {self.settings.runner_image}")
+                    log_callback(f"Runner source newer than image, rebuilding: {runner_image}")
             elif log_callback is not None:
-                log_callback(f"Using existing runner image: {self.settings.runner_image}")
+                log_callback(f"Using existing runner image: {runner_image}")
         except ImageNotFound:
             needs_build = True
 
@@ -33,11 +43,11 @@ class DockerManager:
 
         try:
             if log_callback is not None:
-                log_callback(f"Building runner image: {self.settings.runner_image}")
+                log_callback(f"Building runner image: {runner_image}")
             _, build_logs = self.client.images.build(
-                path=str(self.settings.runner_context_dir),
-                dockerfile="Dockerfile",
-                tag=self.settings.runner_image,
+                path=str(self._runner_context_dir(runner_kind)),
+                dockerfile=self._runner_dockerfile(runner_kind),
+                tag=runner_image,
                 rm=True,
                 pull=False,
                 nocache=False,
@@ -58,11 +68,17 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
 
-    def _is_image_stale(self, image) -> bool:
-        source_paths = [
-            self.settings.runner_context_dir / "run_submission.py",
-            self.settings.runner_context_dir / "Dockerfile",
-        ]
+    def _is_image_stale(self, image, *, runner_kind: str = "python") -> bool:
+        if runner_kind == "octos":
+            source_paths = [
+                self.settings.octos_runner_context_dir / "backend" / "runner" / "octos-runner" / "run_octos_submission.py",
+                self.settings.octos_runner_context_dir / self.settings.octos_runner_dockerfile,
+            ]
+        else:
+            source_paths = [
+                self.settings.runner_context_dir / "run_submission.py",
+                self.settings.runner_context_dir / "Dockerfile",
+            ]
         if any(not path.exists() for path in source_paths):
             return False
         source_mtime = max(path.stat().st_mtime for path in source_paths)
@@ -87,9 +103,10 @@ class DockerManager:
         model_name: str | None = None,
         github_email: str | None = None,
         github_username: str | None = None,
+        runner_kind: str = "python",
         log_callback=None,
     ):
-        self.ensure_image(log_callback=log_callback)
+        self.ensure_image(log_callback=log_callback, runner_kind=runner_kind)
         builtin_openai_base_url = self.settings.builtin_openai_base_url or ""
         builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
         builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
@@ -140,7 +157,7 @@ class DockerManager:
         if extra_hosts:
             container_kwargs["extra_hosts"] = extra_hosts
         return self.client.containers.create(
-            self.settings.runner_image,
+            self._runner_image(runner_kind),
             **container_kwargs,
         )
 

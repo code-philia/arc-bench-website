@@ -6,7 +6,7 @@ from docker.errors import DockerException, NotFound
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.enums import SubmissionStatus
+from app.core.enums import AgentSourceType, SubmissionStatus
 from app.db.session import SessionLocal
 from app.models.requirement import Requirement
 from app.models.user import User
@@ -70,7 +70,8 @@ class ExecutionService:
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
-        start_agent_description = "Running uploaded agent"
+        runner_kind = "octos" if submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value else "python"
+        start_agent_description = "Running built-in Octos CLI agent" if runner_kind == "octos" else "Running uploaded agent"
         arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
         stdout_path = arc_dir / "stdout.log"
         playwright_report_path = arc_dir / "playwright-report.json"
@@ -255,6 +256,7 @@ class ExecutionService:
                 model_name=submission.model_name,
                 github_email=user.github_email,
                 github_username=user.github_username,
+                runner_kind=runner_kind,
                 log_callback=lambda line: debug_log.append("docker-build", line),
             )
             debug_log.append("backend", f"Container created: name={container.name}, id={container.id}")

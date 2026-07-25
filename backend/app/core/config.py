@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     frontend_dist: Path = ROOT_DIR / "frontend" / "dist"
+    site_assets_root: Path = ROOT_DIR / "assets"
     requirements_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "requirements"
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
     templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"
@@ -31,6 +32,9 @@ class Settings(BaseSettings):
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
     runner_image: str = "arcbench-agent-runner:latest"
+    octos_runner_context_dir: Path = ROOT_DIR
+    octos_runner_dockerfile: str = "backend/runner/octos-runner/Dockerfile"
+    octos_runner_image: str = "arcbench-octos-runner:latest"
     builtin_openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("OPENAI_API_KEY", "ARCBENCH_BUILTIN_OPENAI_API_KEY"),

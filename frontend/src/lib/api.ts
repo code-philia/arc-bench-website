@@ -272,7 +272,7 @@ export const api = {
     requirementId: string;
     runtime: string;
     file?: File | null;
-    agentSource?: "upload" | "builtin_arc_agent";
+    agentSource?: "upload" | "builtin_arc_agent" | "builtin_octos_agent";
     taskType?: "web" | "mobile" | "kernel" | "mixed" | "cli";
     displayName?: string;
     modelName?: string;

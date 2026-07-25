@@ -117,7 +117,6 @@ class SubmissionService:
             )
         if requirement.category not in {"web", "cli"}:
             raise ValueError("Only web and cli requirements are supported in v1")
-
         submission_id = uuid.uuid4().hex[:12]
         draft_submission = Submission(id=submission_id, user_id=user_id)
         submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
@@ -126,13 +125,17 @@ class SubmissionService:
         if agent_source == AgentSourceType.BUILTIN_ARC_AGENT:
             self._write_builtin_arc_agent_archive(archive_path)
             original_filename = "builtin-arc-agent.zip"
+            self._validate_python_agent_archive(archive_path)
+        elif agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
+            self._write_builtin_octos_agent_archive(archive_path)
+            original_filename = "builtin-octos-agent.zip"
         else:
             if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
                 raise ValueError("Only .zip uploads are supported")
             with archive_path.open("wb") as output:
                 shutil.copyfileobj(upload.file, output)
             original_filename = upload.filename
-        self._validate_python_agent_archive(archive_path)
+            self._validate_python_agent_archive(archive_path)
 
         normalized_display_name = self._normalize_display_name(display_name)
         normalized_model_name = self._normalize_model_name(model_name)
@@ -783,6 +786,15 @@ class SubmissionService:
                 if self._should_exclude_builtin_arc_agent_path(relative_path):
                     continue
                 archive.write(path, relative_path.as_posix())
+
+    @staticmethod
+    def _write_builtin_octos_agent_archive(archive_path: Path) -> None:
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "README.md",
+                "Built-in Octos agent submissions are executed by the Octos runner image.\n",
+            )
 
     @staticmethod
     def _should_exclude_builtin_arc_agent_path(relative_path: Path) -> bool:
