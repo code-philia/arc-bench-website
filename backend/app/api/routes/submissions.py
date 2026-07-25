@@ -563,6 +563,29 @@ def get_workspace_files(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/{submission_id}/workspace/template-bundle")
+def download_workspace_template_bundle(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> FileResponse:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+        bundle_path = service.create_template_bundle(submission)
+        return FileResponse(
+            bundle_path,
+            media_type="application/zip",
+            filename=f"{submission_id}-template.zip",
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post("/{submission_id}/manual-edit/commit-preview", response_model=SubmissionManualEditCommitPreview)
 def get_manual_edit_commit_preview(
     submission_id: str,

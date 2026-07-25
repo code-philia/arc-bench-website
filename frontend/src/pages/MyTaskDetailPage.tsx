@@ -310,27 +310,42 @@ export default function MyTaskDetailPage() {
                     </button>
                     <button
                       type="button"
-                      className={`agent-source-card${agentSource === "builtin_arc_agent" ? " active" : ""}`}
+                      className={`agent-source-card${agentSource !== "upload" ? " active" : ""}`}
                       onClick={() => {
                         setAgentSource("builtin_arc_agent");
                         setUploadError(null);
                       }}
                     >
-                      <span className="agent-source-title">Built-in ARC Agent</span>
-                      <span className="agent-source-copy">Package the local ARC agent source and submit it.</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`agent-source-card${agentSource === "builtin_octos_agent" ? " active" : ""}`}
-                      onClick={() => {
-                        setAgentSource("builtin_octos_agent");
-                        setUploadError(null);
-                      }}
-                    >
-                      <span className="agent-source-title">Built-in Octos Agent</span>
-                      <span className="agent-source-copy">Run the local Octos CLI runner image against this task.</span>
+                      <span className="agent-source-title">Built-in Agent</span>
+                      <span className="agent-source-copy">Use an integrated ARC or Octos runner.</span>
                     </button>
                   </div>
+                  {agentSource !== "upload" ? (
+                    <div className="builtin-agent-selector" role="group" aria-label="Built-in agent type">
+                      <button
+                        type="button"
+                        className={`builtin-agent-option${agentSource === "builtin_arc_agent" ? " active" : ""}`}
+                        onClick={() => {
+                          setAgentSource("builtin_arc_agent");
+                          setUploadError(null);
+                        }}
+                      >
+                        <span>ARC Agent</span>
+                        <small>Local ARC compiler source</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={`builtin-agent-option${agentSource === "builtin_octos_agent" ? " active" : ""}`}
+                        onClick={() => {
+                          setAgentSource("builtin_octos_agent");
+                          setUploadError(null);
+                        }}
+                      >
+                        <span>Octos Agent</span>
+                        <small>Octos CLI runner image</small>
+                      </button>
+                    </div>
+                  ) : null}
                   {agentSource === "upload" ? (
                     <a
                       className="btn-outline competition-download-btn submission-download-btn"

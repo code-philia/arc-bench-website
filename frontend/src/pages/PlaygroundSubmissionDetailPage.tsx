@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { DownOutlined, MinusOutlined, PlusOutlined, RadarChartOutlined, UpOutlined } from "@ant-design/icons";
+import { DownOutlined, DownloadOutlined, MinusOutlined, PlusOutlined, RadarChartOutlined, UpOutlined } from "@ant-design/icons";
 import type { FocusEvent as ReactFocusEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useParams } from "react-router-dom";
@@ -57,6 +57,15 @@ function resultSummary(submission: SubmissionDetail) {
   const total = submission.passed_count + submission.failed_count;
   if (total === 0) return "No test results yet";
   return `${submission.passed_count}/${total} passed`;
+}
+
+function downloadFile(file: File) {
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.name;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function normalizeTaskType(value: string) {
@@ -758,6 +767,8 @@ function SubmissionFilePanel({
   const [newTestId, setNewTestId] = useState("");
   const [newTestType, setNewTestType] = useState("Unit");
   const [selectedNodeIdForTest, setSelectedNodeIdForTest] = useState<string | null>(null);
+  const [templateBundleDownloading, setTemplateBundleDownloading] = useState(false);
+  const [templateBundleError, setTemplateBundleError] = useState<string | null>(null);
   const canManualEdit = submission?.status === "PAUSED" && submission?.can_manual_edit;
   const codeGrammar = resolveCodeGrammar(taskType);
   const isDiffPanel = panelMode === "diff";
@@ -913,6 +924,24 @@ function SubmissionFilePanel({
       await openWorkspaceFile(result.file_path);
     } catch (e) {
       console.error("Failed to create test", e);
+    }
+  };
+
+  const downloadTemplateBundle = async () => {
+    if (!submissionId || templateBundleDownloading) {
+      return;
+    }
+    try {
+      setTemplateBundleDownloading(true);
+      setTemplateBundleError(null);
+      const bundle = await api.downloadSubmissionTemplateBundle(submissionId);
+      downloadFile(bundle);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : "Failed to download template bundle.";
+      setTemplateBundleError(errorMessage);
+      console.error("Failed to download template bundle", e);
+    } finally {
+      setTemplateBundleDownloading(false);
     }
   };
 
@@ -1134,6 +1163,16 @@ function SubmissionFilePanel({
               <div className="ide-editor-tab active">{fileSource?.file_path ?? "workspace/template"}</div>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              type="button"
+              className="ide-template-download-btn"
+              onClick={() => void downloadTemplateBundle()}
+              disabled={templateBundleDownloading}
+              title={templateBundleError ?? "Download workspace/template as a zip file"}
+            >
+              <DownloadOutlined />
+              <span>{templateBundleDownloading ? "Packaging..." : "Template.zip"}</span>
+            </button>
             {canManualEdit && fileSource ? (
               <>
                 {!isEditing ? (

@@ -252,8 +252,8 @@ def build_octos_prompt(spec: dict) -> str:
         )
     else:
         verification = (
-            f"The benchmark runner will later run npm install, npm run build, start backend on port {WEB_APP_PORT}, "
-            f"and run Playwright tests from {TESTS_DIR}."
+            "You may run build and validation commands yourself, such as npm install, npm run build, "
+            f"starting the backend on port {WEB_APP_PORT}."
         )
     return f"""
 Goal:
@@ -267,17 +267,29 @@ Workspace contract:
 - {verification}
 - Do not start a long-running server as your final action.
 - Do not move the project root or replace it with a separate app outside this directory.
-- Prefer small, direct source edits that satisfy the requirement tree.
 - Keep generated implementation compatible with the existing {category} template.
 
 Evidence and progress:
 - Commit meaningful changes if your tools expose git.
 - If you can write machine-readable progress, use .arc/runner-events.jsonl and .arc/traceability/*.json, but implementation correctness is the priority.
+- Consider using the preinstalled `arcbench-checkpoint` skill to record milestone progress after meaningful implementation steps.
+- Consider using the preinstalled `arcbench-runtime-signals` skill when you run local builds, servers, previews, or tests and want to capture runtime status.
+- Consider using the preinstalled `arcbench-traceability` skill to map implemented changes and evidence back to requirement-tree items.
 """.strip()
 
 
 def build_octos_command(prompt: str) -> list[str]:
-    return ["octos", "chat", "--cwd", str(TEMPLATE_DIR), "--message", prompt, "--json"]
+    return [
+        "octos",
+        "chat",
+        "--sandbox",
+        "danger-full-access",
+        "--cwd",
+        str(TEMPLATE_DIR),
+        "--message",
+        prompt,
+        "--json",
+    ]
 
 
 def run_octos_agent(stdout_file, stderr_file, spec: dict) -> None:

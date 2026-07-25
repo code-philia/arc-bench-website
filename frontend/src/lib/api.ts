@@ -313,6 +313,21 @@ export const api = {
     return request<WorkspaceFileListPayload>(`/submissions/${submissionId}/workspace/files`);
   },
 
+  async downloadSubmissionTemplateBundle(submissionId: string) {
+    const response = await fetch(`${API_BASE}/submissions/${submissionId}/workspace/template-bundle`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
+      throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get("Content-Disposition")
+      ?.match(/filename=\"?([^"]+)\"?/)
+      ?.[1] ?? `${submissionId}-template.zip`;
+    return new File([blob], filename, { type: "application/zip" });
+  },
+
   updateWorkspaceFile(submissionId: string, payload: FileUpdatePayload) {
     return request<{ detail: string }>(`/submissions/${submissionId}/workspace/files`, {
       method: "POST",

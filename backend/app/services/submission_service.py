@@ -1785,6 +1785,94 @@ class SubmissionService:
         except Exception as e:
             raise RuntimeError(f"Failed to list workspace files: {e}")
 
+    def create_template_bundle(self, submission: Submission) -> Path:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if not workspace_path:
+            raise FileNotFoundError("Submission workspace is not available")
+        template_dir = workspace_path / "template"
+        if not template_dir.is_dir():
+            raise FileNotFoundError("Template directory is not available")
+
+        bundle_dir = workspace_path / ".arcbench-downloads"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        bundle_path = bundle_dir / f"{submission.id}-template.zip"
+        if bundle_path.exists():
+            bundle_path.unlink()
+
+        try:
+            with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+                for root, dirnames, filenames in os.walk(template_dir):
+                    root_path = Path(root)
+                    dirnames[:] = sorted(
+                        dirname
+                        for dirname in dirnames
+                        if not self._should_exclude_template_bundle_path(root_path / dirname, template_dir)
+                    )
+                    for filename in sorted(filenames):
+                        path = root_path / filename
+                        if self._should_exclude_template_bundle_path(path, template_dir):
+                            continue
+                        if not path.is_file():
+                            continue
+                        relative_path = path.relative_to(template_dir)
+                        archive_name = (PurePosixPath("template") / PurePosixPath(relative_path.as_posix())).as_posix()
+                        archive.write(path, archive_name)
+        except Exception as exc:
+            if bundle_path.exists():
+                bundle_path.unlink()
+            raise RuntimeError(f"Failed to package template directory: {exc}") from exc
+
+        return bundle_path
+
+    @staticmethod
+    def _should_exclude_template_bundle_path(path: Path, template_dir: Path) -> bool:
+        excluded_parts = {
+            ".arc",
+            ".cache",
+            ".gradle",
+            ".next",
+            ".nuxt",
+            ".parcel-cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".svelte-kit",
+            ".turbo",
+            ".vite",
+            "__pycache__",
+            "build",
+            "coverage",
+            "dist",
+            "node_modules",
+            "out",
+            "playwright-report",
+            "target",
+            "test-results",
+            "tmp",
+        }
+        excluded_files = {
+            ".DS_Store",
+            ".env",
+            ".env.development",
+            ".env.local",
+            ".env.production",
+            "npm-debug.log",
+            "pnpm-debug.log",
+            "yarn-debug.log",
+            "yarn-error.log",
+        }
+        try:
+            relative_path = path.relative_to(template_dir)
+        except ValueError:
+            return True
+        if relative_path.name in excluded_files or relative_path.suffix in {".pyc", ".pyo"}:
+            return True
+        if set(relative_path.parts) & excluded_parts:
+            return True
+        try:
+            return path.is_symlink()
+        except OSError:
+            return True
+
     def update_workspace_file(self, submission: Submission, file_path: str, content: str) -> None:
         if not self.can_manual_edit(submission):
             raise ValueError("Workspace edits are only allowed for paused replay submissions")
