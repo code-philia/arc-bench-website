@@ -336,7 +336,6 @@ def write_octos_config() -> None:
     base_url = (
         os.environ.get("OCTOS_BASE_URL", "").strip()
         or os.environ.get("OPENAI_BASE_URL", "").strip()
-        or os.environ.get("OPENAI_API_BASE_URL", "").strip()
         or "https://2api.aiwanwu.cc/v1"
     )
     config = {
