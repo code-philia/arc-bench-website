@@ -114,18 +114,13 @@ class DockerManager:
         builtin_model = (model_name or "").strip() or (self.settings.builtin_model or "").strip()
         builtin_visual_model = (self.settings.builtin_visual_model or "").strip() or builtin_model
         environment = {
-            "SUBMISSION_ID": submission_id,
-            "RUNNER_TIMEOUT_SECONDS": str(self.settings.runner_timeout_seconds),
-            "AGENT_HEALTH_TIMEOUT_SECONDS": str(self.settings.agent_health_timeout_seconds),
             "OPENAI_API_KEY": builtin_openai_api_key,
             "OPENAI_BASE_URL": builtin_openai_base_url,
-            "OPENAI_API_BASE_URL": builtin_openai_base_url,
             "MODEL": builtin_model,
             "VISUAL_API_KEY": builtin_visual_api_key,
             "VISUAL_BASE_URL": builtin_visual_base_url,
             "VISUAL_MODEL": builtin_visual_model,
             "ARC_DEBUG": str(self.settings.builtin_debug_mode),
-            "DEBUG_MODE": str(self.settings.builtin_debug_mode),
             "PIP_INDEX_URL": self.settings.pip_index_url,
             "PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
             "ARCBENCH_PIP_INDEX_URL": self.settings.pip_index_url,
