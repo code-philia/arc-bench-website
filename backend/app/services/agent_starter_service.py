@@ -12,6 +12,7 @@ class AgentStarterService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.package_root = self.settings.agent_runtime_package_root
+        self.skills_root = self.settings.agent_skills_package_root
 
     def build_bundle(self, *, task_type: str) -> tuple[bytes, str]:
         if not self.package_root.is_dir():
@@ -25,6 +26,7 @@ class AgentStarterService:
             self._write_requirements_txt(archive)
             self._write_readme(archive, task_type=task_type)
             self._add_package_sources(archive)
+            self._add_skill_sources(archive)
             self._add_task_template(archive, template_root)
         return memory_file.getvalue(), f"arcbench-agent-starter-{task_type}.zip"
 
@@ -200,6 +202,7 @@ class AgentStarterService:
 
             - `main.py`: fixed ARC-Bench entrypoint
             - `arcbench_agent_runtime/`: SDK source package
+            - `skills/`: bundled ARC-Bench skills for task progress, runtime signals, and traceability
             - `examples/python_usage.py`: usage examples
             - `requirements.txt`: starter dependencies
             - `template/`: reference project template matching the task type
@@ -211,6 +214,7 @@ class AgentStarterService:
             - runner events should be written to `.arc/runner-events.jsonl`
             - the runner launches `python3 main.py requirements --output-dir . --app-type {runner_app_type}` from the output project root
             - for web tasks, the runner also appends `--web-port 3000`
+            - bundled skills are advisory resources for compatible agents; they are packaged under `skills/`
             """
         ).strip() + "\n"
         archive.writestr("README.md", content)
@@ -224,6 +228,17 @@ class AgentStarterService:
                 continue
             relative_path = path.relative_to(src_root)
             archive.write(path, arcname=relative_path.as_posix())
+
+    def _add_skill_sources(self, archive: zipfile.ZipFile) -> None:
+        if not self.skills_root.is_dir():
+            raise FileNotFoundError(f"Agent skills root not found: {self.skills_root}")
+        for path in sorted(self.skills_root.rglob("*")):
+            if path.is_dir():
+                continue
+            if "__pycache__" in path.parts or path.suffix == ".pyc":
+                continue
+            relative_path = path.relative_to(self.skills_root)
+            archive.write(path, arcname=f"skills/{relative_path.as_posix()}")
 
     def _add_task_template(self, archive: zipfile.ZipFile, template_root: Path) -> None:
         if not template_root.is_dir():
