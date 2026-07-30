@@ -95,10 +95,15 @@ class RequirementCatalogService:
                 if not requirement_dir.is_dir():
                     continue
 
-                requirement_id = requirement_dir.name
+                source_requirement_id = requirement_dir.name
+                requirement_id = (
+                    f"{category}--{source_requirement_id}"
+                    if self.catalog_name == "competition"
+                    else source_requirement_id
+                )
                 requirements_path = requirement_dir / "requirements.md"
                 prerequisites_path = requirement_dir / "prerequisites.md"
-                tests_path = tests_root / requirement_id
+                tests_path = tests_root / source_requirement_id
                 assets_path = requirement_dir / "assets"
                 references_path = requirement_dir / "reference"
 
@@ -133,7 +138,23 @@ class RequirementCatalogService:
         return rows
 
     def _iter_catalog_sources(self) -> list[tuple[str, Path, Path, Path]]:
-        if self.catalog_name not in {"competition", "benchmark"}:
+        if self.catalog_name == "competition":
+            sources: list[tuple[str, Path, Path, Path]] = []
+            for competition_root in self._competition_roots():
+                tasks_root = competition_root / "tasks"
+                if not tasks_root.is_dir():
+                    tasks_root = competition_root / "requirements"
+                sources.append(
+                    (
+                        self._competition_id(competition_root.name),
+                        tasks_root,
+                        competition_root / "tests",
+                        competition_root / "template",
+                    )
+                )
+            return sources
+
+        if self.catalog_name != "benchmark":
             return [("web", self.requirements_root, self.tests_root, self.templates_root)]
 
         competition_root = self.requirements_root.parent.parent
@@ -155,6 +176,16 @@ class RequirementCatalogService:
                 )
             )
         return sources
+
+    def _competition_roots(self) -> list[Path]:
+        root = self.settings.competition_root
+        if not root.is_dir():
+            return []
+        return [path for path in sorted(root.iterdir()) if path.is_dir() and not path.name.startswith(".")]
+
+    @staticmethod
+    def _competition_id(name: str) -> str:
+        return "-".join(part for part in name.strip().lower().replace("_", " ").split() if part)
 
     @staticmethod
     def _normalize_competition_category(app_dir_name: str) -> str:
@@ -229,18 +260,9 @@ class RequirementCatalogService:
             grouped.setdefault(row.category, []).append(row)
 
         competitions: list[CompetitionSummary] = []
-        for category, items in sorted(grouped.items(), key=lambda item: self._competition_sort_key(item[0])):
-            competitions.append(
-                CompetitionSummary(
-                    id=category,
-                    title=self._competition_title(category),
-                    type=category,
-                    summary=self._competition_summary(category, len(items)),
-                    task_count=len(items),
-                    total_tests=sum(item.total_tests for item in items),
-                    is_public=False,
-                )
-            )
+        for root in self._competition_roots():
+            competition_id = self._competition_id(root.name)
+            competitions.append(self._competition_summary_model(competition_id, root.name, grouped.get(competition_id, [])))
 
         return competitions
 
@@ -325,23 +347,55 @@ class RequirementCatalogService:
         rows = self.scan_entries()
         display_ids = self._build_display_id_map(rows)
         competition_tasks = [row for row in rows if row.category == competition_id]
-        if not competition_tasks:
+        competition_root = next((root for root in self._competition_roots() if self._competition_id(root.name) == competition_id), None)
+        if competition_root is None:
             raise LookupError(f"Competition '{competition_id}' not found")
 
         tasks = [
             self._to_competition_task(row, base_url, is_public=False, display_id=display_ids.get(row.id, row.id))
             for row in competition_tasks
         ]
+        summary = self._competition_summary_model(competition_id, competition_root.name, competition_tasks)
         return CompetitionDetail(
-            id=competition_id,
-            title=self._competition_title(competition_id),
-            type=competition_id,
-            summary=self._competition_summary(competition_id, len(tasks)),
-            task_count=len(tasks),
-            total_tests=sum(task.total_tests for task in tasks),
-            is_public=False,
+            **summary.model_dump(),
             downloads=None,
             tasks=tasks,
+            flow=["Choose a task", "Create an agent submission", "Run in the isolated evaluator", "Review evidence and improve"],
+            rules=[
+                "Submit only code you are authorized to use.",
+                "Each run is isolated and evaluated with the task test suite.",
+                "Keep your model and submission name accurate for reproducibility.",
+            ],
+        )
+
+    def _competition_summary_model(
+        self,
+        competition_id: str,
+        directory_name: str,
+        tasks: list[CatalogRequirementEntry],
+    ) -> CompetitionSummary:
+        is_hackathon = "hackathon" in competition_id
+        title = "Hackathon" if is_hackathon else ("Demo Competition" if competition_id == "demo" else directory_name)
+        return CompetitionSummary(
+            id=competition_id,
+            title=title,
+            type="hackathon" if is_hackathon else "demo",
+            summary=(
+                "An empty practice competition for validating the ARC-Bench submission workflow."
+                if competition_id == "demo"
+                else "A collaborative build competition. Tasks will appear here when the event opens."
+                if is_hackathon
+                else self._competition_summary(competition_id, len(tasks))
+            ),
+            task_count=len(tasks),
+            total_tests=sum(task.total_tests for task in tasks),
+            is_public=True,
+            status="upcoming" if not tasks else "open",
+            notice=(
+                "No tasks have been published yet. Add task folders under competition/<competition>/tasks/."
+                if not tasks
+                else "Task packs are ready. Create a submission from this competition page."
+            ),
         )
 
     def list_benchmarks(self, base_url: str) -> list[BenchmarkSummary]:

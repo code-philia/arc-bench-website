@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 import AppShell from "../components/layout/AppShell";
 import ApiDocPage from "../pages/ApiDocPage";
 import CompetitionDetailPage from "../pages/CompetitionDetailPage";
+import CompetitionTaskPage from "../pages/CompetitionTaskPage";
 import CreateTaskPage from "../pages/CreateTaskPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
@@ -29,7 +30,9 @@ export const router = createBrowserRouter([
       { path: "profile", element: <ProfilePage /> },
       { path: "requirements", element: <RequirementsPage /> },
       { path: "api-doc", element: <ApiDocPage /> },
-      { path: "competitions/:taskType", element: <CompetitionDetailPage /> },
+      { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },
+      { path: "competitions/:competitionId/tasks/:requirementId", element: <CompetitionTaskPage /> },
+      { path: "runs/:submissionId", element: <SubmissionDetailPage /> },
       { path: "requirements/:requirementId", element: <PlaygroundRequirementDetailPage /> },
       { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },

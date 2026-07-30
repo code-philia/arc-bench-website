@@ -48,6 +48,26 @@ def get_competition_leaderboard(
     return service.list_competition_leaderboard(track)
 
 
+@competition_router.get("/{competition_id}/starter-agent")
+def download_competition_starter_agent(
+    competition_id: str,
+    language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
+    db: Session = Depends(get_db),
+) -> Response:
+    service = RequirementCatalogService.for_catalog(db, "competition")
+    if not any(competition.id == competition_id for competition in service.list_competitions()):
+        raise HTTPException(status_code=404, detail=f"Competition '{competition_id}' not found")
+    try:
+        content, filename = AgentStarterService().build_bundle(task_type="web", language=language)
+    except (FileNotFoundError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @competition_router.get("/{competition_id}", response_model=CompetitionDetail)
 def get_competition(competition_id: str, request: Request, db: Session = Depends(get_db)) -> CompetitionDetail:
     service = RequirementCatalogService.for_catalog(db, "competition")
@@ -170,7 +190,8 @@ def download_starter_agent(
     service = RequirementCatalogService.for_catalog(db, catalog)
     try:
         requirement = service.get_entry(requirement_id)
-        content, filename = AgentStarterService().build_bundle(task_type=requirement.category, language=language)
+        task_type = requirement.category if catalog != "competition" else "web"
+        content, filename = AgentStarterService().build_bundle(task_type=task_type, language=language)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (FileNotFoundError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:

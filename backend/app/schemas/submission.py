@@ -89,6 +89,10 @@ class SubmissionCreateResponse(BaseModel):
     submission: SubmissionSummary
 
 
+class SubmissionRerunResponse(BaseModel):
+    submission: SubmissionSummary
+
+
 class SubmissionManualEditCommitPreview(BaseModel):
     message: str
     node_id: str | None = None

@@ -269,7 +269,8 @@ export const api = {
     });
   },
   async createSubmission(payload: {
-    requirementId: string;
+    requirementId?: string;
+    competitionId?: string;
     runtime: string;
     file?: File | null;
     agentSource?: "upload" | "builtin_arc_agent" | "builtin_octos_agent";
@@ -279,7 +280,12 @@ export const api = {
     catalog?: "playground" | "competition" | "benchmark" | "my_tasks";
   }) {
     const form = new FormData();
-    form.append("requirement_id", payload.requirementId);
+    if (payload.requirementId) {
+      form.append("requirement_id", payload.requirementId);
+    }
+    if (payload.competitionId) {
+      form.append("competition_id", payload.competitionId);
+    }
     form.append("runtime", payload.runtime);
     form.append("catalog", payload.catalog ?? "playground");
     form.append("agent_source", payload.agentSource ?? "upload");
@@ -304,6 +310,27 @@ export const api = {
     return request<SubmissionDetail>(`/submissions/${submissionId}/start`, {
       method: "POST",
     });
+  },
+  rerunSubmission(submissionId: string, requirementId: string) {
+    const form = new FormData();
+    form.append("requirement_id", requirementId);
+    return request<{ submission: SubmissionSummary }>(`/submissions/${submissionId}/rerun`, {
+      method: "POST",
+      body: form,
+    });
+  },
+  deleteSubmission(submissionId: string) {
+    return request<void>(`/submissions/${submissionId}`, { method: "DELETE" });
+  },
+  async downloadSubmissionArchive(submissionId: string) {
+    const response = await fetch(`${API_BASE}/submissions/${submissionId}/archive`, { credentials: "include" });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiErrorPayload;
+      throw new ApiError(formatErrorMessage(payload, response.statusText || "Request failed"), response.status);
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get("Content-Disposition")?.match(/filename=\"?([^\"]+)\"?/)?.[1] ?? `${submissionId}.zip`;
+    return new File([blob], filename, { type: "application/zip" });
   },
   getSubmissionPreviewUrl(submissionId: string) {
     const host = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";

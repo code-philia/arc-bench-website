@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     requirements_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "requirements"
     tests_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "tests"
     templates_root: Path = ROOT_DIR / "arc-bench" / "webapp" / "template"
+    competition_root: Path = ROOT_DIR / "competition"
     playground_requirements_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "requirements"
     playground_tests_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "tests"
     playground_templates_root: Path = ROOT_DIR / "arc-bench-playground" / "webapp" / "template"

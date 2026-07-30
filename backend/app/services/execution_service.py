@@ -65,7 +65,9 @@ class ExecutionService:
         *,
         reuse_workspace: bool,
     ) -> None:
-        if requirement.category not in {"web", "cli"}:
+        requirement_path = Path(requirement.requirements_path).resolve()
+        is_competition_task = requirement_path.is_relative_to(self.settings.competition_root.resolve())
+        if requirement.category not in {"web", "cli"} and not is_competition_task:
             raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
 
         submission = submission_service.get_submission(submission_id)

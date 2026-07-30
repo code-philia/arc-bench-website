@@ -41,6 +41,10 @@ class WorkspaceAssembler:
             fallback_template_root = requirement_root / "template"
             if fallback_template_root.is_dir():
                 template_source_root = fallback_template_root
+        if not template_source_root.is_dir():
+            template_source_root = self.settings.templates_root
+        if not template_source_root.is_dir():
+            raise FileNotFoundError(f"Task template directory not found: {template_source_root}")
         shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
         self._copy_requirement_workspace(requirement, requirement_root, requirements_dir)
         self._copy_optional_tree(Path(requirement.tests_path), tests_dir)

@@ -37,6 +37,8 @@ export type CompetitionSummary = {
   task_count: number;
   total_tests: number;
   is_public: boolean;
+  status: "open" | "upcoming" | string;
+  notice: string;
 };
 
 export type CompetitionLeaderboardEntry = {
@@ -52,6 +54,8 @@ export type CompetitionLeaderboardEntry = {
 export type CompetitionDetail = CompetitionSummary & {
   downloads: CompetitionTaskDownloadLinks | null;
   tasks: CompetitionTaskSummary[];
+  flow: string[];
+  rules: string[];
 };
 
 export type BenchmarkDownloadLinks = {

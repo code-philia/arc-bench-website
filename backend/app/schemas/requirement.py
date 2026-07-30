@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RequirementSummary(BaseModel):
@@ -40,6 +40,8 @@ class CompetitionSummary(BaseModel):
     task_count: int
     total_tests: int
     is_public: bool
+    status: str = "upcoming"
+    notice: str = "Tasks will be published here."
 
 
 class CompetitionLeaderboardEntry(BaseModel):
@@ -55,6 +57,8 @@ class CompetitionLeaderboardEntry(BaseModel):
 class CompetitionDetail(CompetitionSummary):
     downloads: CompetitionTaskDownloadLinks | None = None
     tasks: list[CompetitionTaskSummary]
+    flow: list[str] = Field(default_factory=list)
+    rules: list[str] = Field(default_factory=list)
 
 
 class BenchmarkDownloadLinks(BaseModel):

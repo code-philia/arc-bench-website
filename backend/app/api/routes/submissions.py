@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import asyncio
+import shutil
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -22,6 +23,7 @@ from app.schemas.submission import (
     SubmissionSummary,
     SubmissionTraceabilityPayload,
     SubmissionManualEditCommitPreview,
+    SubmissionRerunResponse,
     WorkspaceFileListPayload,
     FileUpdatePayload,
     TestCreatePayload,
@@ -54,7 +56,8 @@ def list_submissions(
 
 @router.post("", response_model=SubmissionCreateResponse)
 def create_submission(
-    requirement_id: str = Form(...),
+    requirement_id: str | None = Form(None),
+    competition_id: str | None = Form(None),
     runtime: RuntimeType = Form(...),
     catalog: str = Form(default="playground"),
     display_name: str | None = Form(None),
@@ -76,6 +79,7 @@ def create_submission(
             model_name=model_name,
             task_type=task_type,
             agent_source=agent_source,
+            competition_id=competition_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -102,6 +106,63 @@ def start_submission(
     service.append_step_event(submission_id, step_key="deploy_agent", message="Submission accepted and queued", status="info")
     background_tasks.add_task(ExecutionService(db).run_submission, submission_id)
     return service.to_detail(submission)
+
+
+@router.post("/{submission_id}/rerun", response_model=SubmissionRerunResponse)
+def rerun_submission(
+    submission_id: str,
+    requirement_id: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionRerunResponse:
+    service = SubmissionService(db)
+    try:
+        submission = service.clone_submission_for_rerun(submission_id, current_user.id, requirement_id=requirement_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return SubmissionRerunResponse(submission=SubmissionSummary.model_validate(submission, from_attributes=True))
+
+
+@router.delete("/{submission_id}", status_code=204)
+def delete_submission(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> None:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if submission.status in {SubmissionStatus.RUNNING.value, SubmissionStatus.PAUSE_REQUESTED.value, SubmissionStatus.RESUME_REQUESTED.value}:
+        raise HTTPException(status_code=409, detail="Stop or finish this run before deleting it")
+    archive_path = Path(submission.archive_path).resolve()
+    root = service.settings.user_submissions_root.resolve()
+    if archive_path.is_relative_to(root):
+        shutil.rmtree(archive_path.parent, ignore_errors=True)
+    db.delete(submission)
+    db.commit()
+
+
+@router.get("/{submission_id}/archive")
+def download_submission_archive(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> FileResponse:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    archive_path = Path(submission.archive_path)
+    if not archive_path.is_file():
+        raise HTTPException(status_code=404, detail="The uploaded agent archive is no longer available")
+    return FileResponse(archive_path, media_type="application/zip", filename=submission.original_filename)
 
 
 @router.post("/{submission_id}/pause", response_model=SubmissionDetail)

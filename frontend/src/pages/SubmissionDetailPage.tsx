@@ -201,7 +201,7 @@ export default function SubmissionDetailPage() {
   if (loading) {
     return (
       <div className="page centered">
-        <div className="loading-state">Loading submission...</div>
+        <div className="loading-state">Loading run details...</div>
       </div>
     );
   }
@@ -212,8 +212,8 @@ export default function SubmissionDetailPage() {
       <div className="page centered">
         <div className="empty-state">
           {loginRequired
-            ? "Login is required to view this submission."
-            : loadError || "Submission not found."}
+            ? "Login is required to view this run."
+            : loadError || "Run not found."}
           <div style={{ marginTop: 8 }}>
             {loginRequired || !user ? (
               <Link className="inline-link" to="/login">
@@ -236,7 +236,7 @@ export default function SubmissionDetailPage() {
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
           <div className="flex flex-col gap-5 border-b border-[var(--border)] p-5 lg:flex-row lg:items-start lg:justify-between lg:p-6">
             <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Submission</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Run details</div>
               <h1 className="mt-2 truncate text-2xl font-semibold leading-tight tracking-normal text-[var(--text)]">
                 {submission.display_name || submission.id}
               </h1>
