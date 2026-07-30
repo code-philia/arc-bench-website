@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import auth, health, requirements, submissions, user_tasks
+from app.api.routes import auth, health, notifications, requirements, submissions, user_tasks
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine
@@ -29,6 +29,7 @@ app.include_router(requirements.router, prefix=settings.api_prefix)
 app.include_router(requirements.competition_router, prefix=settings.api_prefix)
 app.include_router(requirements.benchmark_router, prefix=settings.api_prefix)
 app.include_router(submissions.router, prefix=settings.api_prefix)
+app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(user_tasks.router, prefix=settings.api_prefix)
 if settings.site_assets_root.is_dir():
     app.mount("/paper-assets", StaticFiles(directory=settings.site_assets_root), name="paper-assets")

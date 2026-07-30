@@ -13,6 +13,7 @@ from app.models.user import User
 from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
 from app.services.host_demo_preview_service import HostDemoPreviewService
+from app.services.notification_service import NotificationService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
@@ -89,6 +90,8 @@ class ExecutionService:
         pause_requested_at: float | None = None
         pause_signal_sent_at: float | None = None
         paused = False
+        last_runner_signal_at = time.time()
+        stuck_notification_sent = False
 
         def emit_event(step_key: str, message: str, status: str = "info") -> None:
             submission_service.append_step_event(submission_id, step_key=step_key, message=message, status=status)
@@ -103,7 +106,7 @@ class ExecutionService:
             )
 
         def import_runner_events() -> list[dict]:
-            nonlocal processed_runner_event_count
+            nonlocal processed_runner_event_count, last_runner_signal_at
             runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
             if not runner_events_path.exists():
                 return []
@@ -119,6 +122,8 @@ class ExecutionService:
             lines = runner_events_path.read_text(encoding="utf-8").splitlines()
             new_lines = lines[processed_runner_event_count:]
             processed_runner_event_count = len(lines)
+            if new_lines:
+                last_runner_signal_at = time.time()
             for raw_line in new_lines:
                 line = raw_line.strip()
                 if not line:
@@ -243,6 +248,10 @@ class ExecutionService:
                 ),
             )
 
+            if submission_service.get_submission(submission_id).status == SubmissionStatus.CANCELLED.value:
+                debug_log.append("backend", "Run was cancelled before the runner container was created")
+                return
+
             emit_event("deploy_agent", "Connecting to Docker daemon")
             debug_log.append("backend", "Connecting to Docker daemon")
             if manager is None:
@@ -298,6 +307,18 @@ class ExecutionService:
                 if latest_events:
                     refresh_running_steps(latest_events)
                 current_status = submission_service.get_submission(submission_id).status
+                if not stuck_notification_sent and time.time() - last_runner_signal_at >= 300:
+                    NotificationService(db).create_once(
+                        user_id=user.id,
+                        submission_id=submission_id,
+                        kind="no_progress",
+                        title="Run may be stuck",
+                        body="No runner progress or heartbeat was recorded for five minutes. Open the run to refresh its logs or cancel it.",
+                    )
+                    stuck_notification_sent = True
+                if current_status == SubmissionStatus.CANCELLED.value:
+                    debug_log.append("backend", "Run was cancelled; stopping execution loop")
+                    return
                 if current_status == SubmissionStatus.PAUSE_REQUESTED.value:
                     if not pause_notified:
                         pause_notified = True
@@ -364,6 +385,9 @@ class ExecutionService:
                 time.sleep(1)
             if exit_result is None:
                 raise TimeoutError("Runner did not finish before timeout")
+            if submission_service.get_submission(submission_id).status == SubmissionStatus.CANCELLED.value:
+                debug_log.append("backend", "Run was cancelled after the runner exited")
+                return
             if paused or submission_service.get_submission(submission_id).status == SubmissionStatus.PAUSED.value:
                 debug_log.append("backend", "Skipping test execution because submission is paused")
                 return
@@ -399,14 +423,10 @@ class ExecutionService:
             if not stdout_path.exists():
                 stdout_path.write_text("", encoding="utf-8")
             with stdout_path.open("a", encoding="utf-8") as output:
-                if stdout:
-                    output.write(stdout)
-                    if not stdout.endswith("\n"):
-                        output.write("\n")
-                if stderr:
-                    output.write(stderr)
-                    if not stderr.endswith("\n"):
-                        output.write("\n")
+                for source, content in (("container.stdout", stdout), ("container.stderr", stderr)):
+                    for line in content.splitlines() or ([content] if content else []):
+                        output.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}] [{source}] {line}\n")
+                output.flush()
             debug_log.append("backend", f"Collected container logs: stdout_bytes={len(stdout.encode('utf-8'))}, stderr_bytes={len(stderr.encode('utf-8'))}")
             emit_event("run_tests", "Test artifacts collected", status="success")
 
@@ -451,6 +471,9 @@ class ExecutionService:
             debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
         except Exception as exc:  # noqa: BLE001
             submission = submission_service.get_submission(submission_id)
+            if submission.status == SubmissionStatus.CANCELLED.value:
+                debug_log.append("backend", "Skipping failure finalization for cancelled run")
+                return
             if str(exc) == "Execution paused by user request":
                 debug_log.append("backend", "Execution paused cleanly")
                 return

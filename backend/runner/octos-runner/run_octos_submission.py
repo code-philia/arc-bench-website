@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 from queue import Empty, Queue
 from urllib.error import URLError
@@ -28,6 +29,10 @@ TRACEABILITY_SEED_PATH = ARC_DIR / "traceability-seed.json"
 PLAYWRIGHT_REPORT_PATH = ARC_DIR / "playwright-report.json"
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
+CONSOLE_WRITE_LOCK = threading.Lock()
+HEARTBEAT_LOCK = threading.Lock()
+HEARTBEAT_STEP = "deploy_agent"
+HEARTBEAT_SUMMARY = "Preparing environment"
 
 TRACEABILITY_TABLES = (
     "requirements",
@@ -52,23 +57,101 @@ def append_debug_block(section: str, content: str) -> None:
         append_debug_log(f"{section} | {line}")
 
 
-def append_runner_event(step_key: str, message: str, status: str = "info") -> None:
+def stage_for_step(step_key: str) -> str:
+    return {
+        "deploy_agent": "Preparing environment",
+        "start_agent": "Running agent",
+        "run_tests": "Evaluating result",
+    }.get(step_key, "Running agent")
+
+
+def append_runner_event(
+    step_key: str,
+    message: str,
+    status: str = "info",
+    *,
+    heartbeat: bool = False,
+    artifact_reference: str | None = None,
+) -> None:
+    if not heartbeat:
+        global HEARTBEAT_STEP, HEARTBEAT_SUMMARY
+        with HEARTBEAT_LOCK:
+            HEARTBEAT_STEP = step_key
+            HEARTBEAT_SUMMARY = message
     payload = {
+        "event_id": uuid.uuid4().hex,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
         "step_key": step_key,
+        "stage": stage_for_step(step_key),
         "status": status,
         "message": message,
+        "summary": message,
+        "heartbeat": heartbeat,
+        "artifact_reference": artifact_reference,
     }
     RUNNER_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with RUNNER_EVENTS_PATH.open("a", encoding="utf-8") as output:
         output.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
 
+def start_heartbeat() -> tuple[threading.Event, threading.Thread]:
+    stop_event = threading.Event()
+
+    def emit_heartbeats() -> None:
+        while not stop_event.wait(30):
+            with HEARTBEAT_LOCK:
+                step_key = HEARTBEAT_STEP
+                summary = HEARTBEAT_SUMMARY
+            append_runner_event(step_key, f"Still working: {summary}", heartbeat=True)
+
+    thread = threading.Thread(target=emit_heartbeats, name="runner-heartbeat", daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
+def run_environment_preflight() -> None:
+    append_runner_event("deploy_agent", "Running environment preflight")
+    checks: dict[str, object] = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())}
+    try:
+        checks["free_disk_bytes"] = shutil.disk_usage(WORKSPACE_ROOT).free
+        checks["node_version"] = subprocess.check_output(["node", "--version"], text=True, stderr=subprocess.STDOUT).strip()
+        browser_check = subprocess.run(
+            [
+                "python3",
+                "-c",
+                "from playwright.sync_api import sync_playwright; "
+                "p=sync_playwright().start(); b=p.chromium.launch(); b.close(); p.stop(); print('chromium-ready')",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        checks["browser_check"] = (browser_check.stdout or browser_check.stderr).strip()
+        checks["passed"] = browser_check.returncode == 0
+        if browser_check.returncode != 0:
+            raise RuntimeError(checks["browser_check"] or "Chromium could not be launched")
+    except Exception as exc:
+        checks["passed"] = False
+        checks["error"] = str(exc)
+        write_json_atomic(ARC_DIR / "preflight.json", checks)
+        append_runner_event("deploy_agent", f"Environment preflight failed: {exc}", status="error", artifact_reference=".arc/preflight.json")
+        raise RuntimeError(f"Environment preflight failed: {exc}") from exc
+    write_json_atomic(ARC_DIR / "preflight.json", checks)
+    append_runner_event("deploy_agent", "Environment preflight passed", status="success", artifact_reference=".arc/preflight.json")
+
+
 def append_signal(reason: str, **refresh: bool) -> None:
     payload = {
+        "event_id": uuid.uuid4().hex,
         "type": "signal",
         "reason": reason,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+        "stage": "Running agent",
+        "status": "info",
+        "summary": reason,
+        "heartbeat": False,
+        "artifact_reference": None,
         "refresh": {
             "submission": bool(refresh.get("submission")),
             "logs": bool(refresh.get("logs")),
@@ -124,13 +207,21 @@ def initialize_traceability_store() -> None:
     )
 
 
-def stream_pipe(pipe, sink_file, section: str, line_queue: Queue | None = None) -> None:
+def write_console_line(sink_file, source: str, line: str) -> None:
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    with CONSOLE_WRITE_LOCK:
+        sink_file.write(f"[{timestamp}] [{source}] {line.rstrip(chr(10))}\n")
+        sink_file.flush()
+
+
+def stream_pipe(pipe, sink_file, section: str, line_queue: Queue | None = None, collected_lines: list[str] | None = None) -> None:
     try:
         for line in iter(pipe.readline, ""):
             if not line:
                 break
-            sink_file.write(line)
-            sink_file.flush()
+            write_console_line(sink_file, section, line)
+            if collected_lines is not None:
+                collected_lines.append(line)
             append_debug_log(f"{section} | {line.rstrip()}")
             if line_queue is not None:
                 line_queue.put((section, line.rstrip("\n")))
@@ -153,24 +244,26 @@ def run_command(
     env: dict | None = None,
 ) -> subprocess.CompletedProcess:
     append_debug_log(f"Executing {label}: {format_command(command)}")
-    completed = subprocess.run(
+    process = subprocess.Popen(
         command,
         cwd=str(cwd),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         errors="replace",
-        check=False,
+        bufsize=1,
         env=env,
     )
-    if completed.stdout:
-        stdout_file.write(completed.stdout)
-        stdout_file.flush()
-        append_debug_block(f"{label}.stdout", completed.stdout)
-    if completed.stderr:
-        stderr_file.write(completed.stderr)
-        stderr_file.flush()
-        append_debug_block(f"{label}.stderr", completed.stderr)
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    stdout_thread = threading.Thread(target=stream_pipe, args=(process.stdout, stdout_file, f"{label}.stdout", None, stdout_lines), daemon=True)
+    stderr_thread = threading.Thread(target=stream_pipe, args=(process.stderr, stderr_file, f"{label}.stderr", None, stderr_lines), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+    return_code = process.wait()
+    stdout_thread.join(timeout=2)
+    stderr_thread.join(timeout=2)
+    completed = subprocess.CompletedProcess(command, return_code, "".join(stdout_lines), "".join(stderr_lines))
     append_debug_log(f"{label} exit code: {completed.returncode}")
     if check and completed.returncode != 0:
         raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout, stderr=completed.stderr)
@@ -424,7 +517,16 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
         "devDependencies": {"@playwright/test": "1.54.0"},
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
-    install_node_dependencies(TESTS_DIR, stdout_file, stderr_file, "playwright tests")
+    bundled_modules = Path("/opt/arcbench/node_modules")
+    target_modules = TESTS_DIR / "node_modules"
+    if not bundled_modules.is_dir():
+        raise RuntimeError("Runner image is missing its preinstalled Playwright test package")
+    if target_modules.exists() or target_modules.is_symlink():
+        if target_modules.resolve() != bundled_modules.resolve():
+            raise RuntimeError("Test workspace contains unexpected node_modules; use the immutable runner package instead")
+    else:
+        target_modules.symlink_to(bundled_modules, target_is_directory=True)
+    append_runner_event("run_tests", "Using preinstalled Playwright package from runner image", status="success")
 
 
 def count_playwright_tests() -> int:
@@ -612,13 +714,15 @@ def main() -> int:
     ARC_DIR.mkdir(parents=True, exist_ok=True)
     RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
     spec = read_spec()
+    heartbeat_stop, heartbeat_thread = start_heartbeat()
     append_debug_log(f"Octos runner started with spec: {spec}")
     initialize_traceability_store()
     managed_processes = []
     managed_threads = []
-    with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file:
+    with STDOUT_PATH.open("a", encoding="utf-8") as stdout_file:
         stderr_file = stdout_file
         try:
+            run_environment_preflight()
             ensure_git_repo(stdout_file, stderr_file)
             run_octos_agent(stdout_file, stderr_file, spec)
             commit_octos_changes(stdout_file, stderr_file)
@@ -649,6 +753,8 @@ def main() -> int:
             append_runner_event("start_agent", str(exc), status="error")
             return 1
         finally:
+            heartbeat_stop.set()
+            heartbeat_thread.join(timeout=1)
             for process, label in reversed(managed_processes):
                 stop_process(process, label)
             for thread in managed_threads:

@@ -14,10 +14,13 @@ class SubmissionVisualEvent(BaseModel):
 
 
 class SubmissionRunnerEvent(BaseModel):
-    type: str
-    state: str
+    event_id: str
     timestamp: str
-    message: str | None = None
+    stage: str
+    status: str
+    summary: str
+    heartbeat: bool = False
+    artifact_reference: str | None = None
 
 
 class StepState(BaseModel):
@@ -63,6 +66,7 @@ class SubmissionDetail(SubmissionSummary):
     manual_edit_phase: str | None = None
     manual_edit_dirty: bool = False
     pause_available: bool = False
+    can_cancel: bool = False
 
 
 class SubmissionEditableTaskPayload(BaseModel):
@@ -105,6 +109,9 @@ class SubmissionLogs(BaseModel):
     events: str
     stdout: str
     stderr: str
+    console: str = ""
+    log_offset: int = 0
+    last_event_id: str | None = None
     visual_events: list[SubmissionVisualEvent] = Field(default_factory=list)
     runner_events: list[SubmissionRunnerEvent] = Field(default_factory=list)
     runner_event_lines: list[str] = Field(default_factory=list)

@@ -41,6 +41,7 @@ from app.services.demo_replay_loader import (
     resolve_demo_replay_paths,
 )
 from app.services.host_demo_preview_service import HostDemoPreviewService
+from app.services.notification_service import NotificationService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
@@ -53,19 +54,19 @@ from app.services.workspace_assembler import WorkspaceAssembler
 DEFAULT_STEPS = [
     StepState(
         key="deploy_agent",
-        title="Deploy Agent",
+        title="Preparing environment",
         status="pending",
         description="Pull runner container, prepare workspace, and initialize the selected agent runtime.",
     ),
     StepState(
         key="start_agent",
-        title="Run Agent",
+        title="Running agent",
         status="pending",
         description="Execute the selected agent until it finishes the task and exits cleanly.",
     ),
     StepState(
         key="run_tests",
-        title="Run Tests",
+        title="Evaluating result",
         status="pending",
         description="Execute the benchmark test suite against the finished task output.",
     ),
@@ -550,6 +551,23 @@ class SubmissionService:
         )
         self.update_status(submission, SubmissionStatus.PAUSE_REQUESTED)
 
+    def cancel_submission(self, submission: Submission) -> None:
+        if not self.can_cancel(submission):
+            raise ValueError("Submission is not running")
+        current_steps = [StepState.model_validate(step) for step in json.loads(submission.steps_json or "[]")]
+        active_step = next((step.key for step in current_steps if step.status == "running"), "start_agent")
+        completed = {step.key for step in current_steps if step.status == "completed"}
+        self.update_steps(submission, self.build_cancelled_step_states(active_step, completed))
+        submission.status = SubmissionStatus.CANCELLED.value
+        submission.finished_at = datetime.utcnow()
+        submission.failure_reason = "Run cancelled by user"
+        self.db.add(submission)
+        self.db.commit()
+        self.db.refresh(submission)
+        self.append_step_event(submission.id, step_key=active_step, message="Run cancelled by user", status="error")
+        self._create_run_notification(submission, "cancelled", "Run cancelled", "Your run was cancelled. Logs and generated artifacts are still available.")
+        SubmissionEventStream.publish(submission.id, reason="cancelled", submission=True, logs=True)
+
     def request_resume(self, submission: Submission) -> None:
         request_path = self.get_resume_request_path(submission)
         if request_path is None:
@@ -733,10 +751,15 @@ class SubmissionService:
     ) -> Path | None:
         submission = self.get_submission(submission_id)
         payload = {
+            "event_id": uuid.uuid4().hex,
             "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             "step_key": step_key,
+            "stage": self._stage_for_step_key(step_key),
             "status": status,
             "message": message,
+            "summary": message,
+            "heartbeat": False,
+            "artifact_reference": None,
         }
         log_path: Path | None = None
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -989,6 +1012,7 @@ class SubmissionService:
             manual_edit_phase=manual_edit_state["manual_edit_phase"],
             manual_edit_dirty=bool(manual_edit_state["manual_edit_dirty"]),
             pause_available=bool(self.get_pause_request_path(submission)),
+            can_cancel=self.can_cancel(submission),
         )
 
     def _read_submission_tests(self, submission: Submission) -> list[dict]:
@@ -1115,7 +1139,7 @@ class SubmissionService:
             return []
 
         runner_events: list[SubmissionRunnerEvent] = []
-        for raw_line in runner_events_path.read_text(encoding="utf-8").splitlines():
+        for index, raw_line in enumerate(runner_events_path.read_text(encoding="utf-8").splitlines()):
             line = raw_line.strip()
             if not line:
                 continue
@@ -1125,23 +1149,32 @@ class SubmissionService:
                 continue
             if not isinstance(parsed, dict):
                 continue
-            if str(parsed.get("type", "")).strip() != "runner_state":
-                continue
-
-            state = str(parsed.get("state", "")).strip()
             timestamp = str(parsed.get("timestamp", "")).strip()
-            message = str(parsed.get("message", "")).strip() or None
-            if state not in {"paused", "resumed"} or not timestamp:
+            summary = str(parsed.get("summary") or parsed.get("message") or "").strip()
+            if not timestamp or not summary:
                 continue
             runner_events.append(
                 SubmissionRunnerEvent(
-                    type="runner_state",
-                    state=state,
+                    event_id=str(parsed.get("event_id") or f"legacy-{index}"),
                     timestamp=timestamp,
-                    message=message,
+                    stage=str(parsed.get("stage") or self._stage_for_step_key(str(parsed.get("step_key", "")))),
+                    status=str(parsed.get("status") or parsed.get("state") or "info"),
+                    summary=summary,
+                    heartbeat=bool(parsed.get("heartbeat")),
+                    artifact_reference=(str(parsed.get("artifact_reference")).strip() or None)
+                    if parsed.get("artifact_reference") is not None
+                    else None,
                 )
             )
         return runner_events
+
+    @staticmethod
+    def _stage_for_step_key(step_key: str) -> str:
+        return {
+            "deploy_agent": "Preparing environment",
+            "start_agent": "Running agent",
+            "run_tests": "Evaluating result",
+        }.get(step_key, "Running agent")
 
     def read_runner_event_lines(self, submission: Submission) -> list[str]:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -1245,10 +1278,20 @@ class SubmissionService:
         submission.status = SubmissionStatus.RUNNING.value
         submission.started_at = datetime.utcnow()
         submission.workspace_path = str(workspace_path)
+        submission.stdout_path = str(self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "stdout.log")
+        submission.stderr_path = None
         submission.failure_reason = None
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
+        notification_kind = "completed" if status == SubmissionStatus.PASSED else "failed"
+        notification_title = "Run completed" if status == SubmissionStatus.PASSED else "Run failed"
+        notification_body = (
+            f"Your run completed with score {score:.1f}."
+            if status == SubmissionStatus.PASSED
+            else f"Your run failed: {failure_reason or 'See complete logs for details.'}"
+        )
+        self._create_run_notification(submission, notification_kind, notification_title, notification_body)
         SubmissionEventStream.publish(
             submission.id,
             reason="running",
@@ -1291,6 +1334,15 @@ class SubmissionService:
             preview=True,
         )
 
+    def _create_run_notification(self, submission: Submission, kind: str, title: str, body: str) -> None:
+        NotificationService(self.db).create_once(
+            user_id=submission.user_id,
+            submission_id=submission.id,
+            kind=kind,
+            title=title,
+            body=body,
+        )
+
     def update_status(self, submission: Submission, status: SubmissionStatus, failure_reason: str | None = None) -> None:
         submission.status = status.value
         submission.failure_reason = failure_reason
@@ -1302,6 +1354,14 @@ class SubmissionService:
     @staticmethod
     def can_pause(submission: Submission) -> bool:
         return submission.status == SubmissionStatus.RUNNING.value
+
+    @staticmethod
+    def can_cancel(submission: Submission) -> bool:
+        return submission.status in {
+            SubmissionStatus.RUNNING.value,
+            SubmissionStatus.PAUSE_REQUESTED.value,
+            SubmissionStatus.RESUME_REQUESTED.value,
+        }
 
     @staticmethod
     def can_resume(submission: Submission) -> bool:
@@ -1849,6 +1909,23 @@ class SubmissionService:
                 status = "pending"
                 step_description = "Not reached"
             steps.append(StepState(key=step.key, title=step.title, status=status, description=step_description, logs=[]))
+        return steps
+
+    @staticmethod
+    def build_cancelled_step_states(active_key: str, completed: set[str] | None = None) -> list[StepState]:
+        completed = completed or set()
+        steps: list[StepState] = []
+        for step in DEFAULT_STEPS:
+            if step.key in completed:
+                status = "completed"
+                description = "Done"
+            elif step.key == active_key:
+                status = "cancelled"
+                description = "Cancelled by user"
+            else:
+                status = "pending"
+                description = "Not reached"
+            steps.append(StepState(key=step.key, title=step.title, status=status, description=description, logs=[]))
         return steps
 
     @staticmethod

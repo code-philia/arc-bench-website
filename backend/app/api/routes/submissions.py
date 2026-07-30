@@ -3,7 +3,7 @@ from pathlib import Path
 import asyncio
 import shutil
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from app.schemas.submission import (
 )
 from app.services.execution_service import ExecutionService
 from app.services.debug_log_service import DebugLogService
+from app.services.docker_manager import DockerManager
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.requirement_catalog import RequirementCatalogService
@@ -185,6 +186,28 @@ def pause_submission(
     return service.to_detail(submission)
 
 
+@router.post("/{submission_id}/cancel", response_model=SubmissionDetail)
+def cancel_submission(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        service.cancel_submission(submission)
+        DockerManager().remove_submission_container(submission_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError:
+        # The run is already terminal in the database; Docker cleanup can be retried by the runner.
+        pass
+    return service.to_detail(service.get_submission(submission_id, current_user.id))
+
+
 @router.post("/{submission_id}/resume", response_model=SubmissionDetail)
 def resume_submission(
     submission_id: str,
@@ -265,6 +288,8 @@ def get_submission(
 @router.get("/{submission_id}/logs", response_model=SubmissionLogs)
 def get_submission_logs(
     submission_id: str,
+    log_offset: int | None = Query(default=None, ge=0),
+    after_event_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionLogs:
@@ -274,23 +299,35 @@ def get_submission_logs(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     events = "\n".join(service.read_event_lines(submission))
-    stdout = ""
+    console = ""
+    next_log_offset = 0
     stderr = ""
     stdout_path = runtime_paths.resolve_existing_path(submission.stdout_path)
     stderr_path = runtime_paths.resolve_existing_path(submission.stderr_path)
     if stdout_path:
-        with stdout_path.open("r", encoding="utf-8") as stdout_file:
-            stdout = stdout_file.read()
+        with stdout_path.open("rb") as stdout_file:
+            stdout_file.seek(log_offset or 0)
+            console = stdout_file.read().decode("utf-8", errors="replace")
+            next_log_offset = stdout_file.tell()
+    elif log_offset is not None:
+        next_log_offset = log_offset
     if stderr_path:
         with stderr_path.open("r", encoding="utf-8") as stderr_file:
             stderr = stderr_file.read()
     visual_events = service.read_visual_events(submission)
     runner_events = service.read_runner_events(submission)
-    runner_event_lines = service.read_runner_event_lines(submission)
+    if after_event_id:
+        matching_index = next((index for index, event in enumerate(runner_events) if event.event_id == after_event_id), None)
+        if matching_index is not None:
+            runner_events = runner_events[matching_index + 1:]
+    runner_event_lines = [event.summary for event in runner_events]
     return SubmissionLogs(
         events=events,
-        stdout=stdout,
+        stdout=console,
         stderr=stderr,
+        console=console,
+        log_offset=next_log_offset,
+        last_event_id=runner_events[-1].event_id if runner_events else after_event_id,
         visual_events=visual_events,
         runner_events=runner_events,
         runner_event_lines=runner_event_lines,
