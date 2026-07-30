@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import docker
@@ -15,21 +16,21 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_daemon_error(exc)) from exc
 
-    def _runner_image(self, runner_kind: str = "python") -> str:
-        return self.settings.octos_runner_image if runner_kind == "octos" else self.settings.runner_image
+    def _runner_image(self) -> str:
+        return self.settings.runner_image
 
-    def _runner_context_dir(self, runner_kind: str = "python") -> Path:
-        return self.settings.octos_runner_context_dir if runner_kind == "octos" else self.settings.runner_context_dir
+    def _runner_context_dir(self) -> Path:
+        return self.settings.runner_context_dir
 
-    def _runner_dockerfile(self, runner_kind: str = "python") -> str:
-        return self.settings.octos_runner_dockerfile if runner_kind == "octos" else "Dockerfile"
+    def _runner_dockerfile(self) -> str:
+        return self.settings.runner_dockerfile
 
-    def ensure_image(self, log_callback=None, *, runner_kind: str = "python") -> None:
-        runner_image = self._runner_image(runner_kind)
+    def ensure_image(self, log_callback=None) -> None:
+        runner_image = self._runner_image()
         needs_build = False
         try:
             image = self.client.images.get(runner_image)
-            if self._is_image_stale(image, runner_kind=runner_kind):
+            if self._is_image_stale(image):
                 needs_build = True
                 if log_callback is not None:
                     log_callback(f"Runner source newer than image, rebuilding: {runner_image}")
@@ -41,12 +42,19 @@ class DockerManager:
         if not needs_build:
             return
 
+        if not self.settings.runner_build_on_demand:
+            raise RuntimeError(
+                f"Runner image '{runner_image}' is unavailable or stale. "
+                "Publish a tested immutable runner image before accepting evaluation runs. "
+                "Set ARCBENCH_RUNNER_BUILD_ON_DEMAND=true only for local development."
+            )
+
         try:
             if log_callback is not None:
                 log_callback(f"Building runner image: {runner_image}")
             _, build_logs = self.client.images.build(
-                path=str(self._runner_context_dir(runner_kind)),
-                dockerfile=self._runner_dockerfile(runner_kind),
+                path=str(self._runner_context_dir()),
+                dockerfile=self._runner_dockerfile(),
                 tag=runner_image,
                 rm=True,
                 pull=False,
@@ -68,17 +76,15 @@ class DockerManager:
         except DockerException as exc:
             raise RuntimeError(self._format_docker_api_error("Failed to build runner image", exc)) from exc
 
-    def _is_image_stale(self, image, *, runner_kind: str = "python") -> bool:
-        if runner_kind == "octos":
-            source_paths = [
-                self.settings.octos_runner_context_dir / "backend" / "runner" / "octos-runner" / "run_octos_submission.py",
-                self.settings.octos_runner_context_dir / self.settings.octos_runner_dockerfile,
-            ]
-        else:
-            source_paths = [
-                self.settings.runner_context_dir / "run_submission.py",
-                self.settings.runner_context_dir / "Dockerfile",
-            ]
+    def _is_image_stale(self, image) -> bool:
+        source_paths = [
+            self.settings.runner_context_dir / self.settings.runner_dockerfile,
+            self.settings.runner_context_dir / "backend" / "runner" / "agent-runner" / "run_submission.py",
+            self.settings.runner_context_dir / "backend" / "runner" / "agent-runner" / "smoke_test.py",
+            self.settings.runner_context_dir / "backend" / "runner" / "octos-runner" / "run_octos_submission.py",
+            self.settings.runner_context_dir / "octos" / "Cargo.toml",
+            self.settings.runner_context_dir / "octos" / "Cargo.lock",
+        ]
         if any(not path.exists() for path in source_paths):
             return False
         source_mtime = max(path.stat().st_mtime for path in source_paths)
@@ -106,7 +112,24 @@ class DockerManager:
         runner_kind: str = "python",
         log_callback=None,
     ):
-        self.ensure_image(log_callback=log_callback, runner_kind=runner_kind)
+        self.ensure_image(log_callback=log_callback)
+        image = self.client.images.get(self._runner_image())
+        arc_dir = Path(workspace_path).resolve() / "template" / ".arc"
+        arc_dir.mkdir(parents=True, exist_ok=True)
+        (arc_dir / "runner-image.json").write_text(
+            json.dumps(
+                {
+                    "reference": self._runner_image(),
+                    "runner_kind": runner_kind,
+                    "id": str(image.id),
+                    "digest": next(iter(image.attrs.get("RepoDigests", []) or []), None),
+                    "created": image.attrs.get("Created"),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         builtin_openai_base_url = self.settings.builtin_openai_base_url or ""
         builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
         builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
@@ -141,6 +164,10 @@ class DockerManager:
             "mem_limit": self.settings.runner_memory_limit,
             "nano_cpus": self.settings.runner_cpu_limit * 1_000_000_000,
             "working_dir": "/workspace",
+            "command": [
+                "python3",
+                "/opt/arcbench/run_octos_submission.py" if runner_kind == "octos" else "/opt/arcbench/run_submission.py",
+            ],
         }
         network_mode = (self.settings.runner_network_mode or "").strip()
         if network_mode:
@@ -152,7 +179,7 @@ class DockerManager:
         if extra_hosts:
             container_kwargs["extra_hosts"] = extra_hosts
         return self.client.containers.create(
-            self._runner_image(runner_kind),
+            self._runner_image(),
             **container_kwargs,
         )
 

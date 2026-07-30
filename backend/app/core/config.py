@@ -36,11 +36,10 @@ class Settings(BaseSettings):
     agent_skills_package_root: Path = ROOT_DIR / "packages" / "shared" / "skills"
     user_submissions_root: Path = ROOT_DIR / "runtime" / "user-submissions"
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
-    runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
-    runner_image: str = "arcbench-agent-runner:latest"
-    octos_runner_context_dir: Path = ROOT_DIR
-    octos_runner_dockerfile: str = "backend/runner/octos-runner/Dockerfile"
-    octos_runner_image: str = "arcbench-octos-runner:latest"
+    runner_context_dir: Path = ROOT_DIR
+    runner_dockerfile: str = "backend/runner/Dockerfile"
+    runner_image: str = "arcbench-runner:latest"
+    runner_build_on_demand: bool = False
     builtin_openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("OPENAI_API_KEY", "ARCBENCH_BUILTIN_OPENAI_API_KEY"),

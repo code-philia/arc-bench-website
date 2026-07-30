@@ -48,14 +48,16 @@ git add runtime/demo-agent/template.git.bundle
 git commit -m "Update demo-agent template bundle"
 ```
 
-## 1. Build the Agent Runner Image
+## 1. Build the Unified Runner Image
 
-Build the local Docker image used to execute submitted agents:
+Build the single local Docker image used by both ARC and Octos submissions. It includes Python, Node.js, Git, Playwright/Chromium, and the Octos CLI:
 
 ```bash
-docker rmi arcbench-agent-runner:latest
-docker build -t arcbench-agent-runner:latest ./backend/runner/agent-runner
+docker build -f backend/runner/Dockerfile -t arcbench-runner:local .
+docker run --rm --entrypoint python3 arcbench-runner:local /opt/arcbench/smoke_test.py
 ```
+
+Set `ARCBENCH_RUNNER_IMAGE=arcbench-runner:local` for local execution. Production should use a validated immutable image tag or digest.
 
 ## 2. Compile the Frontend
 
