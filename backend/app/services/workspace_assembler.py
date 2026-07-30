@@ -54,6 +54,7 @@ class WorkspaceAssembler:
             json.dumps(
                 {
                     "agent_source": submission.agent_source,
+                    "runtime": submission.runtime,
                     "submission_dir": "/workspace/submission",
                     "template_dir": "/workspace/template",
                     "tests_dir": "/workspace/tests",

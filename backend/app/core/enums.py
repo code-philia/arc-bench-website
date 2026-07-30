@@ -3,6 +3,8 @@ from enum import Enum
 
 class RuntimeType(str, Enum):
     PYTHON = "python"
+    JAVASCRIPT = "javascript"
+    TYPESCRIPT = "typescript"
     NODEJS = "nodejs"
 
 

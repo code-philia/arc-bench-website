@@ -164,15 +164,16 @@ def download_benchmark_task(requirement_id: str, db: Session = Depends(get_db)) 
 def download_starter_agent(
     requirement_id: str,
     catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
+    language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
     db: Session = Depends(get_db),
 ) -> Response:
     service = RequirementCatalogService.for_catalog(db, catalog)
     try:
         requirement = service.get_entry(requirement_id)
-        content, filename = AgentStarterService().build_bundle(task_type=requirement.category)
+        content, filename = AgentStarterService().build_bundle(task_type=requirement.category, language=language)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
+    except (FileNotFoundError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(
         content=content,

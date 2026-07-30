@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     demo_agent_zip: Path = ROOT_DIR / "runtime" / "demo-agent.zip"
     builtin_arc_agent_source_dir: Path = ROOT_DIR / "agentic-requirement-compiler" / "src"
     agent_starter_template_root: Path = ROOT_DIR / "packages"
-    agent_runtime_package_root: Path = ROOT_DIR / "packages" / "arcbench-agent-runtime"
-    agent_skills_package_root: Path = ROOT_DIR / "packages" / "skills"
+    agent_runtime_package_root: Path = ROOT_DIR / "packages" / "shared" / "arcbench-agent-runtime"
+    agent_skills_package_root: Path = ROOT_DIR / "packages" / "shared" / "skills"
     user_submissions_root: Path = ROOT_DIR / "runtime" / "user-submissions"
     user_tasks_root: Path = ROOT_DIR / "runtime" / "user-tasks"
     runner_context_dir: Path = ROOT_DIR / "backend" / "runner" / "agent-runner"
@@ -48,9 +48,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices(
             "OPENAI_BASE_URL",
-            "OPENAI_API_BASE_URL",
             "ARCBENCH_BUILTIN_OPENAI_BASE_URL",
-            "ARCBENCH_BUILTIN_OPENAI_API_BASE_URL",
         ),
     )
     builtin_visual_api_key: str | None = Field(

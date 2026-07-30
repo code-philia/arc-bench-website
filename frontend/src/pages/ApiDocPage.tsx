@@ -131,10 +131,10 @@ function OverviewPage() {
       <section className={sectionBlockClassName}>
         <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Upload Entry Contract</h2>
         <p className={proseClassName}>
-          Every uploaded Python agent is started with the same fixed CLI shape. ArcBench expects
-          <code> main.py </code> and <code> requirements.txt </code> at the zip root, installs dependencies from
-          <code> requirements.txt </code>, then invokes <code>main.py</code> with the requirement directory and output
-          workspace arguments already filled in by the runner.
+          Every uploaded agent is started with the same fixed CLI shape. Python submissions use
+          <code> main.py </code> and <code> requirements.txt </code>. JavaScript submissions use <code>index.js</code>
+          and <code>package.json</code>. TypeScript submissions use <code>index.ts</code> and <code>package.json</code>.
+          When <code>package.json</code> exists, the runner installs Node dependencies before invoking the agent.
         </p>
       </section>
 

@@ -40,6 +40,24 @@ function taskTypeLabel(value: string) {
   return "Mixed Tasks";
 }
 
+function agentRuntimeOptions() {
+  return [
+    { label: "Python", value: "python" },
+    { label: "JavaScript", value: "javascript" },
+    { label: "TypeScript", value: "typescript" },
+  ];
+}
+
+function uploadHint(runtime: string) {
+  if (runtime === "javascript") {
+    return "Root index.js + package.json | SDK events should be written during execution";
+  }
+  if (runtime === "typescript") {
+    return "Root index.ts + package.json | SDK events should be written during execution";
+  }
+  return "Root main.py + requirements.txt | optional package.json for Node dependencies";
+}
+
 export default function PlaygroundRequirementDetailPage() {
   const { taskType: rawTaskType = "web", requirementId = "12306" } = useParams();
   const taskType = normalizeTaskType(rawTaskType);
@@ -385,22 +403,17 @@ export default function PlaygroundRequirementDetailPage() {
                   {agentSource === "upload" ? (
                     <a
                       className="btn-outline competition-download-btn submission-download-btn"
-                      href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}`}
+                      href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}&language=${runtime}`}
                     >
                       <DownloadOutlined /> Download Agent Template
                     </a>
                   ) : null}
                   <div className="env-selector">
-                    {[
-                      { label: "Python", value: "python" },
-                      { label: "Node.js", value: "nodejs", disabled: true },
-                      { label: "Go", value: "go", disabled: true }
-                    ].map((option) => (
+                    {agentRuntimeOptions().map((option) => (
                       <button
                         key={option.value}
                         className={`env-option${runtime === option.value ? " active" : ""}`}
                         type="button"
-                        disabled={option.disabled}
                         onClick={() => setRuntime(option.value)}
                       >
                         {option.label}
@@ -422,7 +435,7 @@ export default function PlaygroundRequirementDetailPage() {
                         <UploadOutlined />
                       </div>
                       <div className="upload-text">Drop your agent code here</div>
-                      <div className="upload-hint">Python only | root main.py + requirements.txt | SDK events should be written during execution</div>
+                      <div className="upload-hint">{uploadHint(runtime)}</div>
                     </label>
                   ) : (
                     <div className="builtin-agent-panel">

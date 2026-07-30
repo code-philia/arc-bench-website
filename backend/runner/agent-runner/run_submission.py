@@ -266,11 +266,34 @@ def read_spec() -> dict:
     return json.loads(SPEC_PATH.read_text(encoding="utf-8"))
 
 
-def resolve_python_agent_entrypoint() -> Path:
-    entrypoint = SUBMISSION_DIR / "main.py"
-    if entrypoint.exists():
-        return entrypoint
-    raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
+def normalize_agent_runtime(spec: dict) -> str:
+    runtime = str(spec.get("runtime") or "python").strip().lower()
+    if runtime in {"node", "nodejs", "js"}:
+        return "javascript"
+    if runtime in {"ts"}:
+        return "typescript"
+    if runtime in {"py", ""}:
+        return "python"
+    return runtime
+
+
+def resolve_agent_entrypoint(runtime: str) -> Path:
+    if runtime == "python":
+        entrypoint = SUBMISSION_DIR / "main.py"
+        if entrypoint.exists():
+            return entrypoint
+        raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
+    if runtime == "javascript":
+        entrypoint = SUBMISSION_DIR / "index.js"
+        if entrypoint.exists():
+            return entrypoint
+        raise RuntimeError("unsupported javascript agent entrypoint: expected index.js at the archive root")
+    if runtime == "typescript":
+        entrypoint = SUBMISSION_DIR / "index.ts"
+        if entrypoint.exists():
+            return entrypoint
+        raise RuntimeError("unsupported typescript agent entrypoint: expected index.ts at the archive root")
+    raise RuntimeError(f"unsupported agent runtime: {runtime}")
 
 def map_task_category_to_app_type(category: str) -> str:
     normalized = str(category or "").strip().lower()
@@ -296,9 +319,17 @@ def prepare_agent_requirement_source() -> Path:
     return REQUIREMENT_SOURCE_DIR
 
 
-def build_generation_agent_command(entrypoint: Path) -> list[str]:
-    command = ["python3", str(entrypoint)]
+def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
     spec = read_spec()
+    if runtime == "python":
+        command = ["python3", str(entrypoint)]
+    elif runtime == "javascript":
+        command = ["node", str(entrypoint)]
+    elif runtime == "typescript":
+        tsx_path = SUBMISSION_DIR / "node_modules" / ".bin" / "tsx"
+        command = [str(tsx_path), str(entrypoint)]
+    else:
+        raise RuntimeError(f"unsupported agent runtime: {runtime}")
     task_payload = spec.get("task") if isinstance(spec, dict) else {}
     category = ""
     if isinstance(task_payload, dict):
@@ -462,8 +493,10 @@ def log_agent_environment_summary(env: dict[str, str]) -> None:
 
 
 def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
-    entrypoint = resolve_python_agent_entrypoint()
-    command = build_generation_agent_command(entrypoint)
+    spec = read_spec()
+    runtime = normalize_agent_runtime(spec)
+    entrypoint = resolve_agent_entrypoint(runtime)
+    command = build_generation_agent_command(entrypoint, runtime)
     agent_env = build_agent_environment()
     log_agent_environment_summary(agent_env)
     append_runner_event("start_agent", "Launching generation agent")
@@ -545,6 +578,20 @@ def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label
         env=npm_env,
     )
     append_runner_event(step_key, f"Dependencies installed for {label}", status="success")
+
+
+def install_agent_node_dependencies(stdout_file, stderr_file) -> None:
+    package_json = SUBMISSION_DIR / "package.json"
+    if not package_json.exists():
+        append_debug_log("No submission package.json found, skipping agent npm install")
+        return
+    install_node_dependencies(
+        SUBMISSION_DIR,
+        stdout_file,
+        stderr_file,
+        "uploaded agent",
+        "start_agent",
+    )
 
 
 def start_background_process(command: list[str], cwd: Path, stdout_file, stderr_file, label: str, env: dict | None = None) -> tuple[subprocess.Popen, threading.Thread, threading.Thread]:
@@ -947,6 +994,7 @@ def main() -> int:
         stderr_file = stdout_file
         try:
             install_agent_dependencies(stdout_file, stderr_file)
+            install_agent_node_dependencies(stdout_file, stderr_file)
             run_generation_agent_with_resume(stdout_file, stderr_file)
             append_runner_event(
                 "start_agent",

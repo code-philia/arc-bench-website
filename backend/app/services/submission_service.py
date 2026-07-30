@@ -99,9 +99,6 @@ class SubmissionService:
         task_type: str | None = None,
         agent_source: AgentSourceType = AgentSourceType.UPLOAD,
     ) -> Submission:
-        if runtime != RuntimeType.PYTHON:
-            raise ValueError("Only Python submissions are supported in v1")
-
         user = self._get_submission_user(user_id)
         normalized_task_type = self._normalize_task_type_hint(task_type)
         if catalog == "my_tasks":
@@ -123,10 +120,14 @@ class SubmissionService:
         submission_dir.mkdir(parents=True, exist_ok=True)
         archive_path = submission_dir / "agent.zip"
         if agent_source == AgentSourceType.BUILTIN_ARC_AGENT:
+            if runtime != RuntimeType.PYTHON:
+                raise ValueError("Built-in ARC agent only supports Python runtime")
             self._write_builtin_arc_agent_archive(archive_path)
             original_filename = "builtin-arc-agent.zip"
-            self._validate_python_agent_archive(archive_path)
+            self._validate_agent_archive(archive_path, RuntimeType.PYTHON)
         elif agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
+            if runtime != RuntimeType.PYTHON:
+                raise ValueError("Built-in Octos agent only supports Python runtime")
             self._write_builtin_octos_agent_archive(archive_path)
             original_filename = "builtin-octos-agent.zip"
         else:
@@ -135,7 +136,7 @@ class SubmissionService:
             with archive_path.open("wb") as output:
                 shutil.copyfileobj(upload.file, output)
             original_filename = upload.filename
-            self._validate_python_agent_archive(archive_path)
+            self._validate_agent_archive(archive_path, runtime)
 
         normalized_display_name = self._normalize_display_name(display_name)
         normalized_model_name = self._normalize_model_name(model_name)
@@ -743,7 +744,7 @@ class SubmissionService:
         return log_path
 
     @staticmethod
-    def _validate_python_agent_archive(archive_path: Path) -> None:
+    def _validate_agent_archive(archive_path: Path, runtime: RuntimeType) -> None:
         try:
             with zipfile.ZipFile(archive_path, "r") as archive:
                 members = [Path(info.filename) for info in archive.infolist() if not info.is_dir()]
@@ -763,9 +764,20 @@ class SubmissionService:
             candidate_paths = normalized_members
 
         root_files = {path.as_posix() for path in candidate_paths if len(path.parts) == 1}
-        missing = [name for name in ("main.py", "requirements.txt") if name not in root_files]
+        required_files = SubmissionService._required_agent_root_files(runtime)
+        missing = [name for name in required_files if name not in root_files]
         if missing:
             raise ValueError(f"Uploaded zip must include {', '.join(missing)} at the archive root")
+
+    @staticmethod
+    def _required_agent_root_files(runtime: RuntimeType) -> tuple[str, ...]:
+        if runtime == RuntimeType.PYTHON:
+            return ("main.py", "requirements.txt")
+        if runtime in {RuntimeType.JAVASCRIPT, RuntimeType.NODEJS}:
+            return ("index.js", "package.json")
+        if runtime == RuntimeType.TYPESCRIPT:
+            return ("index.ts", "package.json")
+        raise ValueError(f"Unsupported runtime: {runtime}")
 
     def _write_builtin_arc_agent_archive(self, archive_path: Path) -> None:
         source_dir = Path(self.settings.builtin_arc_agent_source_dir).resolve()
@@ -1046,49 +1058,54 @@ class SubmissionService:
             if not isinstance(parsed, dict):
                 lines.append(line)
                 continue
-            lines.append(self._format_runner_event_log_line(parsed))
+            lines.append(self.format_runner_event_log_line(parsed))
         return lines
 
     def read_event_lines(self, submission: Submission) -> list[str]:
         return [
-            f"[{event['timestamp']}] [{event['step_key']}] [{event['status']}] {event['message']}"
+            self.format_runner_event_log_line(event)
             for event in self.read_events(submission)
         ]
 
     @staticmethod
-    def _format_runner_event_log_line(payload: dict) -> str:
-        timestamp = str(payload.get("timestamp", "")).strip() or "-"
-        event_type = str(payload.get("type", "")).strip() or "event"
+    def format_runner_event_log_line(payload: dict) -> str:
+        event_type = str(payload.get("type", "")).strip()
         message = str(payload.get("message", "")).strip()
+        if not event_type:
+            return message
         if event_type == "requirement_state":
             node_id = str(payload.get("node_id", "")).strip() or "node"
             phase = str(payload.get("phase", "")).strip() or "phase"
             status = str(payload.get("status", "")).strip() or "status"
-            summary = f"{node_id} {phase} {status}"
+            summary = f"node_id={node_id} phase={phase} status={status}"
             if message:
-                summary = f"{summary} | {message}"
-            return f"[{timestamp}] [{event_type}] {summary}"
+                summary = f"{summary} message={message}"
+            return summary
         if event_type == "runner_state":
             state = str(payload.get("state", "")).strip() or "state"
-            summary = state
+            summary = f"state={state}"
             if message:
-                summary = f"{summary} | {message}"
-            return f"[{timestamp}] [{event_type}] {summary}"
+                summary = f"{summary} message={message}"
+            return summary
         if event_type == "signal":
             reason = str(payload.get("reason", "")).strip() or "refresh"
-            return f"[{timestamp}] [{event_type}] {reason}"
+            return f"reason={reason}"
         if event_type == "interface_upsert":
             interface_id = str(payload.get("interface_id", "")).strip() or "interface"
-            return f"[{timestamp}] [{event_type}] {interface_id}"
+            req_ids = payload.get("req_ids")
+            req_summary = ""
+            if isinstance(req_ids, list) and req_ids:
+                req_summary = f" req_ids={','.join(str(item) for item in req_ids)}"
+            return f"interface_id={interface_id}{req_summary}"
         if event_type == "interface_status":
             interface_id = str(payload.get("interface_id", "")).strip() or "interface"
             implemented = "implemented" if bool(payload.get("implemented")) else "planned"
-            return f"[{timestamp}] [{event_type}] {interface_id} {implemented}"
+            return f"interface_id={interface_id} status={implemented}"
         if event_type == "test_upsert":
             test_id = str(payload.get("test_id", "")).strip() or "test"
             req_id = str(payload.get("req_id", "")).strip()
-            suffix = f" -> {req_id}" if req_id else ""
-            return f"[{timestamp}] [{event_type}] {test_id}{suffix}"
+            suffix = f" req_id={req_id}" if req_id else ""
+            return f"test_id={test_id}{suffix}"
         if event_type in {
             "manual_edit_started",
             "workspace_file_updated",
@@ -1103,12 +1120,12 @@ class SubmissionService:
             ]
             context = " ".join(bit for bit in context_bits if bit)
             if context and message:
-                return f"[{timestamp}] [{event_type}] {context} | {message}"
+                return f"{context} message={message}"
             if context:
-                return f"[{timestamp}] [{event_type}] {context}"
+                return context
         if message:
-            return f"[{timestamp}] [{event_type}] {message}"
-        return f"[{timestamp}] [{event_type}]"
+            return f"message={message}"
+        return event_type
 
     def update_steps(self, submission: Submission, steps: list[StepState]) -> None:
         submission.steps_json = json.dumps([step.model_dump() for step in steps])
@@ -1731,11 +1748,13 @@ class SubmissionService:
     def attach_step_logs(steps: list[StepState], events: list[dict]) -> list[StepState]:
         enriched: list[StepState] = []
         for step in steps:
-            step_logs = [
-                f"[{event['timestamp']}] [{event['status']}] {event['message']}"
+            existing_logs = list(step.logs or [])
+            new_logs = [
+                SubmissionService.format_runner_event_log_line(event)
                 for event in events
                 if event.get("step_key") == step.key
             ]
+            step_logs = existing_logs + [log for log in new_logs if log not in existing_logs]
             step_data = step.model_dump()
             step_data["logs"] = step_logs[-5:]
             enriched.append(StepState(**step_data))

@@ -195,8 +195,8 @@ class DockerManager:
 
     @staticmethod
     def kill_agent_process(container, *, signal_name: str = "TERM") -> tuple[int, str]:
-        # Target the uploaded main.py process without touching run_submission.py itself.
-        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py"])
+        # Target the uploaded agent entrypoint without touching run_submission.py itself.
+        return DockerManager.exec(container, ["pkill", f"-{signal_name}", "-f", "main.py|index.js|index.ts"])
 
     @staticmethod
     def _format_daemon_error(exc: DockerException) -> str:

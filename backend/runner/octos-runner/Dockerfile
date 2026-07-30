@@ -24,7 +24,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY octos /opt/octos-src
-COPY packages/skills /opt/arcbench/skills
+COPY packages/shared/skills /opt/arcbench/skills
 
 RUN cargo install --path /opt/octos-src/crates/octos-cli
 

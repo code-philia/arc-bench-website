@@ -291,7 +291,6 @@ export default function SubmissionDetailPage() {
             steps={submission.steps}
             submissionStatus={submission.status}
             failureReason={submission.failure_reason}
-            runnerEventLines={logs?.runner_event_lines}
           />
         </section>
 

@@ -142,7 +142,7 @@ class ExecutionService:
                             if bool(refresh_payload.get(key)):
                                 refresh_flags[key] = True
                 step_key = str(event.get("step_key", "")).strip()
-                message = str(event.get("message", "")).strip()
+                message = submission_service.format_runner_event_log_line(event)
                 status = str(event.get("status", "info")).strip() or "info"
                 if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
@@ -191,13 +191,18 @@ class ExecutionService:
                 completed_steps = set()
                 active_step_key = "deploy_agent"
                 description = "Preparing workspace"
+            current_steps = submission_service.build_step_states(
+                active_key=active_step_key,
+                completed=completed_steps,
+                description=description,
+            )
+            current_steps = submission_service.attach_step_logs(
+                current_steps,
+                submission_service.read_events(submission_service.get_submission(submission_id)),
+            )
             submission_service.update_steps(
                 submission_service.get_submission(submission_id),
-                submission_service.build_step_states(
-                    active_key=active_step_key,
-                    completed=completed_steps,
-                    description=description,
-                ),
+                current_steps,
             )
 
         try:
@@ -310,7 +315,7 @@ class ExecutionService:
                     if not pause_signal_sent and pause_requested_at is not None and time.time() - pause_requested_at >= PAUSE_GRACE_SECONDS:
                         try:
                             exit_code, _ = manager.kill_agent_process(container)
-                            debug_log.append("backend", f"Sent SIGTERM to agent main.py (pkill exit={exit_code})")
+                            debug_log.append("backend", f"Sent SIGTERM to uploaded agent entrypoint (pkill exit={exit_code})")
                             pause_signal_sent = True
                             pause_signal_sent_at = time.time()
                         except Exception as exc:  # noqa: BLE001

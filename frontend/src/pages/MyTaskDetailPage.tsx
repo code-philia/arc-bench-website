@@ -33,6 +33,24 @@ function downloadFile(file: File) {
   URL.revokeObjectURL(url);
 }
 
+function agentRuntimeOptions() {
+  return [
+    { label: "Python", value: "python" },
+    { label: "JavaScript", value: "javascript" },
+    { label: "TypeScript", value: "typescript" },
+  ];
+}
+
+function uploadHint(runtime: string) {
+  if (runtime === "javascript") {
+    return "Root index.js + package.json | SDK events should be written during execution";
+  }
+  if (runtime === "typescript") {
+    return "Root index.ts + package.json | SDK events should be written during execution";
+  }
+  return "Root main.py + requirements.txt | optional package.json for Node dependencies";
+}
+
 export default function MyTaskDetailPage() {
   const { taskId = "" } = useParams();
   const navigate = useNavigate();
@@ -349,21 +367,22 @@ export default function MyTaskDetailPage() {
                   {agentSource === "upload" ? (
                     <a
                       className="btn-outline competition-download-btn submission-download-btn"
-                      href={`/api/my-tasks/${task.id}/starter-agent`}
+                      href={`/api/my-tasks/${task.id}/starter-agent?language=${runtime}`}
                     >
                       <DownloadOutlined /> Download Agent Template
                     </a>
                   ) : null}
                   <div className="env-selector">
-                    <button className={`env-option${runtime === "python" ? " active" : ""}`} type="button" onClick={() => setRuntime("python")}>
-                      Python
-                    </button>
-                    <button className="env-option" type="button" disabled>
-                      Node.js
-                    </button>
-                    <button className="env-option" type="button" disabled>
-                      Go
-                    </button>
+                    {agentRuntimeOptions().map((option) => (
+                      <button
+                        key={option.value}
+                        className={`env-option${runtime === option.value ? " active" : ""}`}
+                        type="button"
+                        onClick={() => setRuntime(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                   {agentSource === "upload" ? (
                     <label className="upload-zone">
@@ -380,7 +399,7 @@ export default function MyTaskDetailPage() {
                         <UploadOutlined />
                       </div>
                       <div className="upload-text">Drop your agent code here</div>
-                      <div className="upload-hint">Python only | root main.py + requirements.txt | SDK events should be written during execution</div>
+                      <div className="upload-hint">{uploadHint(runtime)}</div>
                     </label>
                   ) : (
                     <div className="builtin-agent-panel">

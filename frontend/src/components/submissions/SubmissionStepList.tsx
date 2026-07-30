@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { SubmissionStep } from "../../lib/types";
 
@@ -6,13 +6,11 @@ type SubmissionStepListProps = {
   steps: SubmissionStep[];
   submissionStatus?: string;
   failureReason?: string | null;
-  runnerEventLines?: string[];
 };
 
 type StepLogRendererProps = {
   step: SubmissionStep;
   logClassName: (logLine: string) => string;
-  runnerEventLines?: string[];
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
@@ -102,39 +100,8 @@ function normalizeSteps(
   });
 }
 
-function StepLogRenderer({ step, logClassName, runnerEventLines }: StepLogRendererProps) {
+function StepLogRenderer({ step, logClassName }: StepLogRendererProps) {
   const recentLogs = useMemo(() => step.logs.slice(-5), [step.logs]);
-  const streamLines = useMemo(() => (runnerEventLines ?? []).slice(-5), [runnerEventLines]);
-  const streamSignature = useMemo(() => streamLines.join("\n"), [streamLines]);
-  const [streamVersion, setStreamVersion] = useState(0);
-
-  useEffect(() => {
-    if (!streamSignature) {
-      return;
-    }
-    setStreamVersion((current) => current + 1);
-  }, [streamSignature]);
-
-  if (step.key === "start_agent" && streamLines.length > 0) {
-    return (
-      <div className="step-log-stream-shell">
-        <div key={`runner-stream-${streamVersion}`} className="step-log-stream">
-          {streamLines.map((logLine, index) => (
-            <div
-              key={`runner-line-${streamVersion}-${index}-${logLine}`}
-              className={`${logClassName(logLine)} step-log-stream-item${index === streamLines.length - 1 ? " latest" : ""}`}
-            >
-              {logLine}
-            </div>
-          ))}
-        </div>
-        <div className="step-log-stream-meta">
-          <span className="step-log-stream-badge">runner-events.jsonl</span>
-          <span className="step-log-stream-status">{streamLines.length}/5 visible</span>
-        </div>
-      </div>
-    );
-  }
 
   if (recentLogs.length === 0) {
     return null;
@@ -155,7 +122,6 @@ export default function SubmissionStepList({
   steps,
   submissionStatus,
   failureReason,
-  runnerEventLines,
 }: SubmissionStepListProps) {
   const resolvedSteps = normalizeSteps(steps, submissionStatus, failureReason);
 
@@ -177,7 +143,7 @@ export default function SubmissionStepList({
             <div className="step-stage-label">Stage {index + 1}</div>
             <div className="step-title">{step.title}</div>
             <div className="step-desc">{step.description}</div>
-            <StepLogRenderer step={step} logClassName={logClassName} runnerEventLines={runnerEventLines} />
+            <StepLogRenderer step={step} logClassName={logClassName} />
           </div>
         </div>
       ))}
