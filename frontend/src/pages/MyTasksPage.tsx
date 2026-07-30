@@ -69,11 +69,6 @@ export default function MyTasksPage() {
       <div className="competition-shell">
         <section className="competition-detail-hero">
           <div className="competition-detail-copy">
-            <div className="breadcrumb">
-              <span>Playground</span>
-              <span className="sep">/</span>
-              <span className="current">My Tasks</span>
-            </div>
             <div className="competition-type-chip large">Personal Bank</div>
             <h1>My Tasks</h1>
             <p>Task requirements that you created from the Playground authoring flow.</p>

@@ -240,15 +240,6 @@ export default function MyTaskDetailPage() {
     <div className="page detail-page detail-page-locked">
       <div className="detail-layout detail-layout-locked">
         <section className="readme-panel">
-          <div className="readme-header">
-            <div className="breadcrumb">
-              <span>Playground</span>
-              <span className="sep">/</span>
-              <Link to="/playground/my-tasks">My Tasks</Link>
-              <span className="sep">/</span>
-              <span className="current">{task.title}</span>
-            </div>
-          </div>
           <MarkdownTocDocument
             markdown={task.markdown_content}
             assetsBaseUrl=""

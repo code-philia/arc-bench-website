@@ -128,61 +128,49 @@ export default function CompetitionDetailPage() {
           <Link to="/requirements">Competition</Link><RightOutlined /><span>{competition.title}</span>
         </div>
 
-        <section className="competition-detail-hero">
-          <div className="competition-detail-copy">
-            <div className="competition-meta-row">
-              <span className="competition-status"><TrophyOutlined /> {competition.status === "open" ? "Open for submissions" : "Upcoming"}</span>
-              <span>{competition.id.toUpperCase()}</span>
-            </div>
-            <h1>{competition.title}</h1>
-            <p>{competition.summary}</p>
-            <div className="competition-stat-row">
-              <span><strong>{competition.task_count}</strong> tasks</span>
-              <span><strong>{competition.total_tests}</strong> public tests</span>
-            </div>
+        <section className="competition-detail-heading">
+          <div className="competition-meta-row">
+            <span className="competition-status"><TrophyOutlined /> {competition.status === "open" ? "Open for submissions" : "Upcoming"}</span>
+            <span>{competition.id.toUpperCase()}</span>
           </div>
-          <div className="competition-notice">
-            <div>Competition notice</div>
-            <p>{competition.notice}</p>
-          </div>
+          <h1>{competition.title}</h1>
+          <div className="competition-stat-row"><span><strong>{competition.task_count}</strong> tasks</span><span><strong>{competition.total_tests}</strong> public tests</span></div>
         </section>
 
-        <div className="competition-detail-grid">
-          <div className="competition-main-column">
-            <section className="competition-panel competition-guide">
-              <div className="competition-eyebrow">Participation guide</div>
-              <h2>How to compete</h2>
-              <ol>{flow.map((item, index) => (
-                <li key={item}><span>{index + 1}</span><p>{item}</p></li>
-              ))}</ol>
-              <div className="competition-notes">
-                <h3>Competition notes</h3>
-                <ul>{competition.rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
-              </div>
+        <div className="competition-reading-layout">
+          <main className="competition-description">
+            <p className="competition-introduction">{competition.summary}</p>
+            <section>
+              <h2>About this competition</h2>
+              <p>{competition.notice}</p>
             </section>
-
-            <section className="competition-panel competition-task-board">
-              <header>
-                <div><h2>Competition tasks</h2></div>
-                <div className="competition-task-columns"><span>Best score</span></div>
-              </header>
+            <section>
+              <h2>How to compete</h2>
+              <ol>{flow.map((item, index) => <li key={item}><span>{index + 1}</span><p>{item}</p></li>)}</ol>
+            </section>
+            <section>
+              <h2>Competition notes</h2>
+              <ul>{competition.rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+            </section>
+            <section className="competition-side-tasks">
+              <header><h2>Tasks</h2><span>{competition.task_count}</span></header>
               {competition.tasks.length === 0 ? (
-                <div className="competition-empty">Tasks have not been published yet. Add task folders under <code>competition/{competitionId}/tasks</code>.</div>
+                <div className="competition-empty">Tasks have not been published yet.</div>
               ) : (
-                <div className="competition-task-list">
+                <div className="competition-side-task-list">
                   {competition.tasks.map((task) => (
-                    <Link key={task.id} to={`/competitions/${competition.id}/tasks/${task.id}`} className="competition-task-row">
-                      <div className="competition-task-title"><code>{task.display_id}</code><h3>{task.title}</h3></div>
+                    <Link key={task.id} to={`/competitions/${competition.id}/tasks/${task.id}`} className="competition-side-task-row">
+                      <div><code>{task.display_id}</code><h3>{task.title}</h3></div>
                       <strong>{taskScores.has(task.id) ? taskScores.get(task.id)?.toFixed(1) : "--"}</strong>
-                      <RightOutlined />
                     </Link>
                   ))}
                 </div>
               )}
             </section>
-          </div>
+          </main>
 
-          <aside className="competition-panel competition-submission-panel">
+          <aside className="competition-sidebar">
+            <section className="competition-panel competition-submission-panel">
             <div className="competition-panel-tabs">
               <button type="button" className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>New submission</button>
               <button type="button" className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>History ({submissions.length})</button>
@@ -217,6 +205,7 @@ export default function CompetitionDetailPage() {
                     </div>)}
               </div>
             )}
+            </section>
           </aside>
         </div>
       </div>

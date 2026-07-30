@@ -528,15 +528,6 @@ export default function CreateTaskPage() {
       {modalContextHolder}
       <div className="create-task-shell create-task-shell-locked gap-4 overflow-hidden p-4 [background:var(--bg-deep)]">
         <div className="create-task-topbar rounded-xl border border-[var(--border)] px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)] [background:var(--bg)]">
-          <div className="create-task-topbar-copy min-w-0">
-            <div className="breadcrumb text-sm text-[var(--text-muted)]">
-              <span>Playground</span>
-              <span className="sep text-[var(--border-light)]">/</span>
-              <span>{isEditingTask ? "Edit Task" : "Create Task"}</span>
-              <span className="sep text-[var(--border-light)]">/</span>
-              <span className="current font-medium text-[var(--text)]">{createForm.title || tree.name}</span>
-            </div>
-          </div>
           <div className="create-task-topbar-actions">
             <span className="task-node-chip border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1 text-xs text-[var(--text-dim)]">
               {autosaveLabel}

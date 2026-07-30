@@ -214,12 +214,6 @@ export default function ResearchPage() {
   return (
     <div className="page bg-[var(--bg-deep)] text-[var(--text)]">
       <div className="mx-auto w-full max-w-[1180px] px-5 py-6 lg:px-8">
-        <div className="mb-5 flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <span>Research</span>
-          <span className="text-[var(--border-light)]">/</span>
-          <span className="font-medium text-[var(--text)]">Overview</span>
-        </div>
-
         <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" aria-label="Research overview">
           <div className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
             <ReadOutlined /> Research index

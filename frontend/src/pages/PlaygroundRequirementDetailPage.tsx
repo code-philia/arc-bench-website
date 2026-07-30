@@ -260,37 +260,6 @@ export default function PlaygroundRequirementDetailPage() {
     <div className="page detail-page detail-page-locked">
       <div className="detail-layout detail-layout-locked">
         <section className="readme-panel">
-          <div className="readme-header">
-            <div className="breadcrumb">
-              {catalog === "competition" ? (
-                <>
-                  <span>Competition</span>
-                  <span className="sep">/</span>
-                  <Link to="/requirements">Task Bank</Link>
-                  <span className="sep">/</span>
-                  <span className="current">{requirement.display_id} - {requirement.title}</span>
-                </>
-              ) : catalog === "benchmark" ? (
-                <>
-                  <span>Playground</span>
-                  <span className="sep">/</span>
-                  <Link to={`/playground/arc-bench/${taskType}`}>ARC-Bench / {taskTypeLabel(taskType)}</Link>
-                  <span className="sep">/</span>
-                  <span className="current">{requirement.display_id} - {requirement.title}</span>
-                </>
-              ) : (
-                <>
-                  <span>Playground</span>
-                  <span className="sep">/</span>
-                  <span>Task Bank</span>
-                  <span className="sep">/</span>
-                  <Link to={`/playground/task-bank/${taskType}`}>{taskTypeLabel(taskType)}</Link>
-                  <span className="sep">/</span>
-                  <span className="current">{requirement.display_id} - {requirement.title}</span>
-                </>
-              )}
-            </div>
-          </div>
           <div className="doc-tabs">
             <button
               type="button"
