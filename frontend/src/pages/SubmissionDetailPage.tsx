@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
+import RunActivityPanel from "../components/submissions/RunActivityPanel";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
-import type { SubmissionDetail, SubmissionLogs, SubmissionPreviewStatus, SubmissionSseEvent } from "../lib/types";
+import type { SubmissionDetail, SubmissionLogs, SubmissionPreviewStatus } from "../lib/types";
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -28,6 +29,23 @@ function resultSummary(submission: SubmissionDetail) {
   return `${submission.passed_count}/${total} passed`;
 }
 
+function activityHealth(submission: SubmissionDetail, logs: SubmissionLogs | null) {
+  const runnerEvents = logs?.runner_events ?? [];
+  const latest = runnerEvents.length > 0 ? runnerEvents[runnerEvents.length - 1] : undefined;
+  const activeStep = submission.steps.find((step) => step.status === "running");
+  if (!activeStep || !latest) {
+    return { text: activeStep ? "Waiting for the first update" : "No active phase", lastUpdate: latest?.timestamp ?? "-" };
+  }
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(latest.timestamp).getTime()) / 1000));
+  if (elapsedSeconds >= 300) {
+    return { text: "May be stuck", lastUpdate: latest.timestamp };
+  }
+  if (elapsedSeconds >= 90) {
+    return { text: "Still working", lastUpdate: latest.timestamp };
+  }
+  return { text: "In progress", lastUpdate: latest.timestamp };
+}
+
 export default function SubmissionDetailPage() {
   const { submissionId = "" } = useParams();
   const { user } = useAuth();
@@ -36,12 +54,11 @@ export default function SubmissionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"results" | "events" | "stdout" | "stderr">("results");
   const [previewStatus, setPreviewStatus] = useState<SubmissionPreviewStatus | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const sseReconnectRef = useRef<number | null>(null);
+  const [refreshingLogs, setRefreshingLogs] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const previewUrl = previewStatus?.preview_url ?? api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}refresh=${previewFrameVersion}`;
   const previewAvailable = previewStatus?.available ?? false;
@@ -93,14 +110,6 @@ export default function SubmissionDetailPage() {
     setPreviewStatus(null);
     setPreviewLoading(true);
     setPreviewFrameVersion(0);
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    if (sseReconnectRef.current) {
-      window.clearTimeout(sseReconnectRef.current);
-      sseReconnectRef.current = null;
-    }
   }, [submissionId]);
 
   useEffect(() => {
@@ -110,6 +119,7 @@ export default function SubmissionDetailPage() {
       .then(([detail, latestLogs]) => {
         setSubmission(detail);
         setLogs(latestLogs);
+        setLastRefreshedAt(new Date().toLocaleString());
       })
       .catch((error: Error) => {
         setSubmission(null);
@@ -119,75 +129,42 @@ export default function SubmissionDetailPage() {
       })
       .finally(() => setLoading(false));
 
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (sseReconnectRef.current) {
-        window.clearTimeout(sseReconnectRef.current);
-        sseReconnectRef.current = null;
-      }
-    };
   }, [submissionId]);
 
-  useEffect(() => {
-    if (!submissionId || !user) {
-      return;
-    }
-
-    const refreshSubmissionDetail = async () => {
-      const latest = await api.getSubmission(submissionId);
-      setSubmission(latest);
-      return latest;
-    };
-
-    const refreshSubmissionLogs = async () => {
-      const latestLogs = await api.getSubmissionLogs(submissionId);
-      setLogs(latestLogs);
-      return latestLogs;
-    };
-
-    const handleSseEvent = (event: SubmissionSseEvent) => {
-      if (event.refresh.submission) {
-        void refreshSubmissionDetail().catch(() => undefined);
-      }
-      if (event.refresh.logs) {
-        void refreshSubmissionLogs().catch(() => undefined);
-      }
-      if (event.refresh.preview) {
-        void loadPreviewStatus(true);
-      }
-    };
-
-    const connect = () => {
-      eventSourceRef.current?.close();
-      eventSourceRef.current = api.connectSubmissionEvents(submissionId, {
-        onEvent: handleSseEvent,
-        onError: () => {
-          eventSourceRef.current?.close();
-          eventSourceRef.current = null;
-          if (sseReconnectRef.current) {
-            window.clearTimeout(sseReconnectRef.current);
+  const refreshLogs = async () => {
+    if (refreshingLogs) return;
+    setRefreshingLogs(true);
+    try {
+      const [latestSubmission, incrementalLogs] = await Promise.all([
+        api.getSubmission(submissionId),
+        api.getSubmissionLogs(submissionId, {
+          logOffset: logs?.log_offset ?? 0,
+          afterEventId: logs?.last_event_id,
+        }),
+      ]);
+      setSubmission(latestSubmission);
+      setLogs((current) => current
+        ? {
+            ...incrementalLogs,
+            console: `${current.console}${incrementalLogs.console}`,
+            stdout: `${current.stdout}${incrementalLogs.stdout}`,
+            runner_events: [...(current.runner_events ?? []), ...(incrementalLogs.runner_events ?? [])],
+            runner_event_lines: [...(current.runner_event_lines ?? []), ...(incrementalLogs.runner_event_lines ?? [])],
           }
-          sseReconnectRef.current = window.setTimeout(() => {
-            connect();
-          }, 2000);
-        },
-      });
-    };
+        : incrementalLogs);
+      setLastRefreshedAt(new Date().toLocaleString());
+    } finally {
+      setRefreshingLogs(false);
+    }
+  };
 
-    connect();
-
-    return () => {
-      eventSourceRef.current?.close();
-      eventSourceRef.current = null;
-      if (sseReconnectRef.current) {
-        window.clearTimeout(sseReconnectRef.current);
-        sseReconnectRef.current = null;
-      }
-    };
-  }, [submissionId, user]);
+  const cancelRun = async () => {
+    if (!submission || !submission.can_cancel) return;
+    if (!window.confirm("Cancel this run? It cannot be resumed, but its logs and generated artifacts will remain available.")) return;
+    const cancelled = await api.cancelSubmission(submissionId);
+    setSubmission(cancelled);
+    await refreshLogs();
+  };
 
   useEffect(() => {
     if (!submission) {
@@ -230,6 +207,8 @@ export default function SubmissionDetailPage() {
     );
   }
 
+  const runActivityHealth = activityHealth(submission, logs);
+
   return (
     <div className="page submission-page bg-[var(--bg-deep)] px-6 py-7 text-[var(--text)] lg:px-8">
       <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
@@ -250,6 +229,11 @@ export default function SubmissionDetailPage() {
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-3 lg:flex-col lg:items-end">
+              {submission.can_cancel ? (
+                <button type="button" className="btn-outline" onClick={() => void cancelRun()}>
+                  Cancel run
+                </button>
+              ) : null}
               <div className="text-3xl font-semibold leading-none text-[var(--accent)]">{submission.score?.toFixed(1) ?? "--"}</div>
               <div className={`test-badge ${submission.status === "PASSED" ? "pass" : submission.status === "FAILED" ? "fail" : "pending"}`}>
                 {submission.status}
@@ -287,6 +271,9 @@ export default function SubmissionDetailPage() {
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         <section className="action-section rounded-lg border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
           <div className="action-section-title">Run Status</div>
+          <div className="mb-4 mt-1 text-xs text-[var(--text-muted)]">
+            {runActivityHealth.text} · Last update {runActivityHealth.lastUpdate} · Elapsed {formatDuration(submission.started_at, submission.finished_at)}
+          </div>
           <SubmissionStepList
             steps={submission.steps}
             submissionStatus={submission.status}
@@ -295,37 +282,14 @@ export default function SubmissionDetailPage() {
         </section>
 
         <section className="action-section rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-          <div className="px-5 pt-5">
-          <div className="action-section-title">Execution Detail</div>
-          <div className="doc-tabs detail-tabs rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
-            {[
-              { key: "results", label: "Results" },
-              { key: "events", label: "Events" },
-              { key: "stdout", label: "Stdout" },
-              { key: "stderr", label: "Stderr" },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                className={`doc-tab${activeTab === tab.key ? " active" : ""}`}
-                type="button"
-                onClick={() => setActiveTab(tab.key as "results" | "events" | "stdout" | "stderr")}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          </div>
-          <div className="detail-tab-panel">
-            {activeTab === "results" ? (
-              <SubmissionResultCard submission={submission} />
-            ) : activeTab === "events" ? (
-              <pre className="log-panel">{logs?.events || "No backend events yet."}</pre>
-            ) : activeTab === "stdout" ? (
-              <pre className="log-panel">{logs?.stdout || "No stdout yet."}</pre>
-            ) : (
-              <pre className="log-panel">{logs?.stderr || "No stderr yet."}</pre>
-            )}
-          </div>
+          <div className="px-5 pt-5"><div className="action-section-title">Execution detail</div></div>
+          <div className="detail-tab-panel"><SubmissionResultCard submission={submission} /></div>
+          <RunActivityPanel
+            logs={logs}
+            refreshing={refreshingLogs}
+            lastRefreshedAt={lastRefreshedAt}
+            onRefresh={() => { void refreshLogs(); }}
+          />
         </section>
 
         <section className="action-section rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0 shadow-[0_10px_28px_rgba(15,23,42,0.05)] xl:col-start-2">

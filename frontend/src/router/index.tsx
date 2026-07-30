@@ -9,6 +9,7 @@ import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import MyTaskDetailPage from "../pages/MyTaskDetailPage";
 import MyTasksPage from "../pages/MyTasksPage";
+import NotificationsPage from "../pages/NotificationsPage";
 import PlaygroundPage from "../pages/PlaygroundPage";
 import PlaygroundRequirementDetailPage from "../pages/PlaygroundRequirementDetailPage";
 import PlaygroundSubmissionDetailPage from "../pages/PlaygroundSubmissionDetailPage";
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "profile", element: <ProfilePage /> },
+      { path: "notifications", element: <NotificationsPage /> },
       { path: "requirements", element: <RequirementsPage /> },
       { path: "api-doc", element: <ApiDocPage /> },
       { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },

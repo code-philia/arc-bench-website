@@ -1,11 +1,12 @@
 import { message } from "antd";
-import { ApiOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
+import { ApiOutlined, BellOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../auth/AuthContext";
 import { QuickStartProvider } from "../../quickstart/QuickStartContext";
 import QuickStartOverlay from "../../quickstart/QuickStartOverlay";
+import { api } from "../../lib/api";
 
 type NavItem = {
   to: string;
@@ -57,11 +58,20 @@ export default function AppShell() {
     const saved = window.localStorage.getItem("theme");
     return saved === "light" ? "light" : "dark";
   });
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadNotifications(0);
+      return;
+    }
+    void api.listNotifications().then((payload) => setUnreadNotifications(payload.unread_count)).catch(() => setUnreadNotifications(0));
+  }, [user]);
 
   const initials = useMemo(() => {
     if (!user) {
@@ -112,6 +122,9 @@ export default function AppShell() {
             </button>
             {isLoading ? null : user ? (
               <div className="nav-auth-group">
+                <button className="theme-toggle" type="button" title="Message center" onClick={() => navigate("/notifications")}>
+                  <BellOutlined />{unreadNotifications > 0 ? <span className="ml-1 text-xs">{unreadNotifications}</span> : null}
+                </button>
                 <button className="nav-avatar" type="button" title={user.username} onClick={() => navigate("/profile")}>
                   {initials || <UserOutlined />}
                 </button>

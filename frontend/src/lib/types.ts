@@ -125,12 +125,16 @@ export type SubmissionDetail = SubmissionSummary & {
   manual_edit_phase: "design" | "implement" | null;
   manual_edit_dirty: boolean;
   pause_available: boolean;
+  can_cancel: boolean;
 };
 
 export type SubmissionLogs = {
   events: string;
   stdout: string;
   stderr: string;
+  console: string;
+  log_offset: number;
+  last_event_id: string | null;
   visual_events: SubmissionVisualEvent[];
   runner_events?: SubmissionRunnerEvent[];
   runner_event_lines?: string[];
@@ -203,10 +207,28 @@ export type SubmissionVisualEvent = {
 };
 
 export type SubmissionRunnerEvent = {
-  type: "runner_state";
-  state: "paused" | "resumed";
+  event_id: string;
   timestamp: string;
-  message: string | null;
+  stage: "Preparing environment" | "Running agent" | "Evaluating result" | string;
+  status: string;
+  summary: string;
+  heartbeat: boolean;
+  artifact_reference: string | null;
+};
+
+export type NotificationItem = {
+  id: string;
+  submission_id: string | null;
+  kind: string;
+  title: string;
+  body: string;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type NotificationList = {
+  items: NotificationItem[];
+  unread_count: number;
 };
 
 export type RequirementVisualState = "default" | "design" | "implement" | "test-passed" | "test-failed";

@@ -8,6 +8,7 @@ import { useAuth } from "../auth/AuthContext";
 import SubmissionFactoryCanvas, { type SubmissionFactoryCanvasHandle } from "../components/graph/SubmissionFactoryCanvas";
 import RequirementNodeDetailContent from "../components/requirements/RequirementNodeDetailContent";
 import SubmissionResultCard from "../components/submissions/SubmissionResultCard";
+import RunActivityPanel from "../components/submissions/RunActivityPanel";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { ApiError, api } from "../lib/api";
 import {
@@ -1521,7 +1522,8 @@ export default function PlaygroundSubmissionDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadErrorStatus, setLoadErrorStatus] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"canvas" | "file" | "diff" | "results" | "stdio">("canvas");
-  const [stdioTab, setStdioTab] = useState<"stdout" | "stderr">("stdout");
+  const [refreshingLogs, setRefreshingLogs] = useState(false);
+  const [lastLogsRefresh, setLastLogsRefresh] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"status" | "traceability">("status");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("ROOT");
   const [factorySelectionActive, setFactorySelectionActive] = useState(false);
@@ -1665,10 +1667,31 @@ export default function PlaygroundSubmissionDetailPage() {
     return latest;
   };
 
-  const refreshSubmissionLogs = async () => {
-    const latestLogs = await api.getSubmissionLogs(submissionId);
-    setLogs(latestLogs);
+  const refreshSubmissionLogs = async (incremental = false) => {
+    const latestLogs = await api.getSubmissionLogs(
+      submissionId,
+      incremental ? { logOffset: logs?.log_offset ?? 0, afterEventId: logs?.last_event_id } : undefined,
+    );
+    setLogs((current) => incremental && current
+      ? {
+          ...latestLogs,
+          console: `${current.console}${latestLogs.console}`,
+          stdout: `${current.stdout}${latestLogs.stdout}`,
+          runner_events: [...(current.runner_events ?? []), ...(latestLogs.runner_events ?? [])],
+          runner_event_lines: [...(current.runner_event_lines ?? []), ...(latestLogs.runner_event_lines ?? [])],
+        }
+      : latestLogs);
+    setLastLogsRefresh(new Date().toLocaleString());
     return latestLogs;
+  };
+
+  const handleRefreshLogs = async () => {
+    setRefreshingLogs(true);
+    try {
+      await Promise.all([refreshSubmissionDetail(), refreshSubmissionLogs(true)]);
+    } finally {
+      setRefreshingLogs(false);
+    }
   };
 
   const refreshCommitHistory = async (silent = false) => {
@@ -1886,9 +1909,8 @@ export default function PlaygroundSubmissionDetailPage() {
       if (event.refresh.submission) {
         void refreshSubmissionDetail().catch(() => undefined);
       }
-      if (event.refresh.logs) {
-        void refreshSubmissionLogs().catch(() => undefined);
-      }
+      // Console output is deliberately refreshed only by the user. This keeps long
+      // runs readable without opening a per-user log polling loop.
       if (event.refresh.commit_history) {
         setWorkspaceRefreshToken((current) => current + 1);
         void refreshCommitHistory(true).catch(() => undefined);
@@ -2193,6 +2215,19 @@ export default function PlaygroundSubmissionDetailPage() {
     }
     editableTreeDirtyRef.current = false;
     setSubmission(await api.pauseSubmission(submissionId));
+  };
+
+  const handleCancelRun = async () => {
+    if (!submissionId || !submission?.can_cancel) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Cancel this run? It cannot be resumed, but its logs and generated artifacts will remain available.",
+    );
+    if (!confirmed) {
+      return;
+    }
+    setSubmission(await api.cancelSubmission(submissionId));
   };
 
   const persistEditableTask = async () => {
@@ -2514,6 +2549,11 @@ export default function PlaygroundSubmissionDetailPage() {
                 {executionPausePending ? (
                   <button type="button" className="btn-outline" disabled>
                     Pausing...
+                  </button>
+                ) : null}
+                {submission.can_cancel ? (
+                  <button type="button" className="btn-outline" onClick={() => void handleCancelRun()}>
+                    Cancel run
                   </button>
                 ) : null}
                 {submission.status === "PAUSED" ? (
@@ -2874,27 +2914,13 @@ export default function PlaygroundSubmissionDetailPage() {
                 <SubmissionResultCard submission={submission} />
               </div>
             ) : activeTab === "stdio" ? (
-              <div className="stdio-view">
-                <div className="doc-tabs bg-[var(--bg)]" style={{ padding: "0 24px", borderBottom: "1px solid var(--border)" }}>
-                  <button
-                    className={`doc-tab rounded-t-md${stdioTab === "stdout" ? " active" : ""}`}
-                    type="button"
-                    onClick={() => setStdioTab("stdout")}
-                  >
-                    Stdout
-                  </button>
-                  <button
-                    className={`doc-tab rounded-t-md${stdioTab === "stderr" ? " active" : ""}`}
-                    type="button"
-                    onClick={() => setStdioTab("stderr")}
-                  >
-                    Stderror
-                  </button>
-                </div>
-                <pre className="stdio-code-view">
-                  {stdioTab === "stdout" ? (logs?.stdout || "No stdout yet.") : (logs?.stderr || "No stderr yet.")}
-                </pre>
-              </div>
+              <RunActivityPanel
+                logs={logs}
+                refreshing={refreshingLogs}
+                lastRefreshedAt={lastLogsRefresh}
+                onRefresh={() => { void handleRefreshLogs(); }}
+                compact
+              />
             ) : null}
           </div>
         </main>

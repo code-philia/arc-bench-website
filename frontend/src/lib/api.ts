@@ -23,6 +23,8 @@ import type {
   UserTaskSummary,
   WorkspaceFileListPayload,
   FileUpdatePayload,
+  NotificationItem,
+  NotificationList,
   TestCreatePayload,
 } from "./types";
 
@@ -195,8 +197,23 @@ export const api = {
       references_base_url: `${API_BASE}/submissions/${submissionId}/requirements-assets/references/`,
     };
   },
-  getSubmissionLogs(submissionId: string) {
-    return request<SubmissionLogs>(`/submissions/${submissionId}/logs`);
+  getSubmissionLogs(submissionId: string, cursor?: { logOffset?: number; afterEventId?: string | null }) {
+    const params = new URLSearchParams();
+    if (cursor?.logOffset !== undefined) params.set("log_offset", String(cursor.logOffset));
+    if (cursor?.afterEventId) params.set("after_event_id", cursor.afterEventId);
+    const query = params.toString();
+    return request<SubmissionLogs>(`/submissions/${submissionId}/logs${query ? `?${query}` : ""}`);
+  },
+  listNotifications() {
+    return request<NotificationList>("/notifications");
+  },
+  markNotificationRead(notificationId: string) {
+    return request<NotificationItem>(`/notifications/${notificationId}/read`, { method: "POST" });
+  },
+  cancelSubmission(submissionId: string) {
+    return request<SubmissionDetail>(`/submissions/${submissionId}/cancel`, {
+      method: "POST",
+    });
   },
   getSubmissionTraceability(submissionId: string, nodeId: string) {
     return request<SubmissionTraceabilityPayload>(
