@@ -424,11 +424,6 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
         command = [str(tsx_path), str(entrypoint)]
     else:
         raise RuntimeError(f"unsupported agent runtime: {runtime}")
-    task_payload = spec.get("task") if isinstance(spec, dict) else {}
-    category = ""
-    if isinstance(task_payload, dict):
-        category = str(task_payload.get("category") or "").strip()
-    app_type = map_task_category_to_app_type(category)
     requirement_source = str(prepare_agent_requirement_source())
     output_dir = str(spec.get("output_dir") or ".")
     is_builtin_arc_agent = str(spec.get("agent_source") or "").strip().lower() == "builtin_arc_agent"
@@ -438,6 +433,11 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
         # implementation of the `arc` console script, so invoking it directly
         # keeps the runner self-contained while preserving the official CLI
         # contract.  Do not apply this protocol to uploaded agents.
+        task_payload = spec.get("task") if isinstance(spec, dict) else {}
+        category = ""
+        if isinstance(task_payload, dict):
+            category = str(task_payload.get("category") or "").strip()
+        app_type = map_task_category_to_app_type(category)
         command.extend(
             [
                 "compile",
@@ -458,13 +458,9 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
             requirement_source,
             "--output-dir",
             output_dir,
-            "--app-type",
-            app_type,
         ]
     )
-    if app_type == "web":
-        command.extend(["--web-port", str(WEB_APP_PORT)])
-    append_debug_log(f"Launching uploaded generation agent with standardized args: {' '.join(command)}")
+    append_debug_log(f"Launching uploaded generation agent with requirement and output args: {' '.join(command)}")
     return command
 
 

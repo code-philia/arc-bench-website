@@ -82,7 +82,10 @@ class Settings(BaseSettings):
     runner_extra_hosts: str | None = None
     pip_index_url: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
     pip_trusted_host: str = "pypi.tuna.tsinghua.edu.cn"
-    pip_extra_index_url: str | None = None
+    # pip treats index URLs as a combined candidate pool. Keep the regional mirror
+    # as the primary source and include PyPI for packages not mirrored there.
+    # Multiple extra indexes may be supplied as a comma- or whitespace-separated list.
+    pip_extra_index_url: str | None = "https://pypi.org/simple"
 
     model_config = SettingsConfigDict(env_prefix="ARCBENCH_", case_sensitive=False, extra="ignore")
 
@@ -104,6 +107,10 @@ class Settings(BaseSettings):
             if separator and normalized_host and normalized_target:
                 entries[normalized_host] = normalized_target
         return entries
+
+    def get_pip_extra_index_urls(self) -> list[str]:
+        value = (self.pip_extra_index_url or "").replace(",", " ")
+        return [item.strip() for item in value.split() if item.strip()]
 
 
 @lru_cache

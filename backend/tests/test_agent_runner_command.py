@@ -76,7 +76,7 @@ class AgentRunnerCommandTests(unittest.TestCase):
         )
         self.assertTrue((self.runner.REQUIREMENT_SOURCE_DIR / "requirements.yaml").is_file())
 
-    def test_uploaded_python_agent_retains_existing_standardized_contract(self) -> None:
+    def test_uploaded_python_agent_uses_requirement_and_output_only(self) -> None:
         self._write_spec("upload")
 
         command = self.runner.build_generation_agent_command(
@@ -92,10 +92,6 @@ class AgentRunnerCommandTests(unittest.TestCase):
                 str(self.runner.REQUIREMENT_SOURCE_DIR),
                 "--output-dir",
                 ".",
-                "--app-type",
-                "web",
-                "--web-port",
-                "3000",
             ],
         )
 

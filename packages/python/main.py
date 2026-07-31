@@ -20,18 +20,6 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("ARCBENCH_OUTPUT_DIR", "."),
         help="Output workspace directory.",
     )
-    parser.add_argument(
-        "--app-type",
-        default=os.environ.get("ARCBENCH_APP_TYPE", "web"),
-        choices=("web", "cli", "android"),
-        help="Task application type.",
-    )
-    parser.add_argument(
-        "--web-port",
-        type=int,
-        default=int(os.environ.get("PORT", "3000")),
-        help="Port used later by the benchmark runner for web apps.",
-    )
     return parser.parse_args()
 
 
@@ -66,7 +54,7 @@ def copy_template_contents_to_output(template_dir: Path, output_dir: Path) -> No
             shutil.copy2(source, destination)
 
 
-def run_agent(runtime: AgentRuntime, requirements_dir: Path, output_dir: Path, args: argparse.Namespace) -> None:
+def run_agent(runtime: AgentRuntime, requirements_dir: Path, output_dir: Path) -> None:
     """
     Fill your agent logic here.
 
@@ -96,9 +84,6 @@ def run_agent(runtime: AgentRuntime, requirements_dir: Path, output_dir: Path, a
     # Step 3: Start your agent logic here. For example, you can use the runtime to log events, manage traceability, and interact with git.
     # For model calls, see examples/model_calling.py.
     # For agent runtime functionality (traceability, checkpoint, git, and skill) guidance, see examples/sdk_and_skill_usage.py.
-    # args.app_type tells you whether the target is web, cli, or android.
-    # args.web_port is the expected backend port for generated web applications.
-    
     return
 
 
@@ -107,7 +92,7 @@ def main() -> int:
     runtime = AgentRuntime.from_env()
     requirements_dir = resolve_requirements_dir(args.requirement_path)
     output_dir = resolve_output_dir(args.output_dir)
-    run_agent(runtime, requirements_dir, output_dir, args)
+    run_agent(runtime, requirements_dir, output_dir)
     return 0
 
 

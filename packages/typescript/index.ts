@@ -7,26 +7,18 @@ import { AgentRuntime } from "arcbench-agent-runtime-js";
 type AgentArgs = {
   requirementPath: string;
   outputDir: string;
-  appType: "web" | "cli" | "android" | string;
-  webPort: number;
 };
 
 function parseArgs(argv: string[]): AgentArgs {
   const args: AgentArgs = {
     requirementPath: process.env.ARCBENCH_TASK_DIR || "requirements",
     outputDir: process.env.ARCBENCH_OUTPUT_DIR || ".",
-    appType: process.env.ARCBENCH_APP_TYPE || "web",
-    webPort: Number(process.env.PORT || "3000"),
   };
   const positional: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--output-dir") {
       args.outputDir = argv[++index] || args.outputDir;
-    } else if (value === "--app-type") {
-      args.appType = argv[++index] || args.appType;
-    } else if (value === "--web-port") {
-      args.webPort = Number(argv[++index] || args.webPort);
     } else {
       positional.push(value);
     }
@@ -54,7 +46,7 @@ function copyTemplateContentsToOutput(templateDir: string, outputDir: string): v
   }
 }
 
-async function runAgent(runtime: AgentRuntime, requirementsDir: string, outputDir: string, args: AgentArgs): Promise<void> {
+async function runAgent(runtime: AgentRuntime, requirementsDir: string, outputDir: string): Promise<void> {
   /*
    * Fill your agent logic here.
    *
@@ -73,8 +65,6 @@ async function runAgent(runtime: AgentRuntime, requirementsDir: string, outputDi
    * - examples/model_calling.ts: OpenAI-compatible model usage.
    * - examples/sdk_and_skill_usage.ts: SDK event/traceability/git usage and skill guidance.
    *
-   * args.appType tells you whether the target is web, cli, or android.
-   * args.webPort is the expected backend port for generated web applications.
    */
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   copyTemplateContentsToOutput(path.join(currentDir, "template"), outputDir);
@@ -85,7 +75,7 @@ async function main(): Promise<void> {
   const runtime = AgentRuntime.fromEnv();
   const requirementsDir = path.resolve(args.requirementPath);
   const outputDir = path.resolve(args.outputDir);
-  await runAgent(runtime, requirementsDir, outputDir, args);
+  await runAgent(runtime, requirementsDir, outputDir);
 }
 
 main().catch((error: unknown) => {

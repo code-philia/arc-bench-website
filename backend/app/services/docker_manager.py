@@ -149,9 +149,11 @@ class DockerManager:
             "ARCBENCH_PIP_INDEX_URL": self.settings.pip_index_url,
             "ARCBENCH_PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
         }
-        if self.settings.pip_extra_index_url:
-            environment["PIP_EXTRA_INDEX_URL"] = self.settings.pip_extra_index_url
-            environment["ARCBENCH_PIP_EXTRA_INDEX_URL"] = self.settings.pip_extra_index_url
+        pip_extra_index_urls = self.settings.get_pip_extra_index_urls()
+        if pip_extra_index_urls:
+            extra_indexes = " ".join(pip_extra_index_urls)
+            environment["PIP_EXTRA_INDEX_URL"] = extra_indexes
+            environment["ARCBENCH_PIP_EXTRA_INDEX_URL"] = extra_indexes
         if github_email and github_email.strip():
             environment["ARC_GIT_USER_EMAIL"] = github_email.strip()
         if github_username and github_username.strip():
