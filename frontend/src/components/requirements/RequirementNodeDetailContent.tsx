@@ -1,6 +1,6 @@
 import { DeleteOutlined, PaperClipOutlined, PlusOutlined } from "@ant-design/icons";
 import { message } from "antd";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import DescriptionAttachmentPreview from "./DescriptionAttachmentPreview";
 import { collectDescriptionAttachments, inferAttachmentKind } from "../../lib/descriptionMedia";
@@ -58,7 +58,9 @@ export default function RequirementNodeDetailContent({
   const descriptionAttachments = collectDescriptionAttachments(node.description || "", taskAssets);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const descriptionAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const dependencyPickerRef = useRef<HTMLDivElement | null>(null);
   const [deletingAttachmentPath, setDeletingAttachmentPath] = useState<string | null>(null);
+  const [dependencyPickerOpen, setDependencyPickerOpen] = useState(false);
   const availableDependencyOptions = dependencyOptions.filter((option) => option.id !== node.id);
 
   const updateNode = (updater: (node: RequirementNode) => RequirementNode) => {
@@ -66,6 +68,31 @@ export default function RequirementNodeDetailContent({
       return;
     }
     onNodeChange(updater);
+  };
+
+  useEffect(() => {
+    setDependencyPickerOpen(false);
+  }, [node.id]);
+
+  useEffect(() => {
+    const closeDependencyPicker = (event: MouseEvent) => {
+      if (!dependencyPickerRef.current?.contains(event.target as Node)) {
+        setDependencyPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeDependencyPicker);
+    return () => document.removeEventListener("mousedown", closeDependencyPicker);
+  }, []);
+
+  const addDependency = (dependencyId: string) => {
+    if (!dependencyId || node.dependencies.includes(dependencyId)) {
+      return;
+    }
+    updateNode((currentNode) => ({
+      ...currentNode,
+      dependencies: [...currentNode.dependencies, dependencyId],
+    }));
+    setDependencyPickerOpen(false);
   };
 
   const insertDescriptionAttachment = async (file: File) => {
@@ -261,31 +288,51 @@ export default function RequirementNodeDetailContent({
 
         <label className="field-stack" style={{ gridColumn: "1 / -1" }}>
           <span>Dependencies</span>
-          <select
-            className="text-input"
-            defaultValue=""
-            onChange={(event) => {
-              const nextDependencyId = event.target.value.trim();
-              event.currentTarget.value = "";
-              if (!nextDependencyId || node.dependencies.includes(nextDependencyId)) {
-                return;
-              }
-              updateNode((currentNode) => ({
-                ...currentNode,
-                dependencies: [...currentNode.dependencies, nextDependencyId],
-              }));
-            }}
-          >
-            <option value="">Select dependency to add...</option>
-            {availableDependencyOptions.map((option) => {
-              const alreadySelected = node.dependencies.includes(option.id);
-              return (
-                <option key={option.id} value={option.id} disabled={alreadySelected}>
-                  {alreadySelected ? `[Selected] ${option.id} - ${option.name}` : `${option.id} - ${option.name}`}
-                </option>
-              );
-            })}
-          </select>
+          <div ref={dependencyPickerRef} className={`dependency-picker${dependencyPickerOpen ? " open" : ""}`}>
+            <button
+              type="button"
+              className="dependency-picker-trigger"
+              aria-haspopup="listbox"
+              aria-expanded={dependencyPickerOpen}
+              onClick={() => setDependencyPickerOpen((current) => !current)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setDependencyPickerOpen(false);
+                }
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setDependencyPickerOpen((current) => !current);
+                }
+              }}
+            >
+              <span>Select dependency to add...</span>
+              <span className="dependency-picker-chevron" aria-hidden="true" />
+            </button>
+            {dependencyPickerOpen ? (
+              <div className="dependency-picker-menu" role="listbox" aria-label="Available dependencies">
+                {availableDependencyOptions.length > 0 ? availableDependencyOptions.map((option) => {
+                  const alreadySelected = node.dependencies.includes(option.id);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="dependency-picker-option"
+                      role="option"
+                      aria-selected={alreadySelected}
+                      disabled={alreadySelected}
+                      onClick={() => addDependency(option.id)}
+                    >
+                      <strong>{option.id}</strong>
+                      <span>{option.name}</span>
+                      {alreadySelected ? <em>Added</em> : null}
+                    </button>
+                  );
+                }) : (
+                  <div className="dependency-picker-empty">No available dependencies</div>
+                )}
+              </div>
+            ) : null}
+          </div>
           <div className="dependency-chip-list">
             {node.dependencies.length > 0 ? node.dependencies.map((dependencyId) => (
               <span key={`${node.id}-${dependencyId}`} className="dependency-chip">
