@@ -1,7 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 import asyncio
-import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -136,17 +135,13 @@ def delete_submission(
 ) -> None:
     service = SubmissionService(db)
     try:
-        submission = service.get_submission(submission_id, current_user.id)
+        service.delete_submission(submission_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    if submission.status in {SubmissionStatus.RUNNING.value, SubmissionStatus.PAUSE_REQUESTED.value, SubmissionStatus.RESUME_REQUESTED.value}:
-        raise HTTPException(status_code=409, detail="Stop or finish this run before deleting it")
-    archive_path = Path(submission.archive_path).resolve()
-    root = service.settings.user_submissions_root.resolve()
-    if archive_path.is_relative_to(root):
-        shutil.rmtree(archive_path.parent, ignore_errors=True)
-    db.delete(submission)
-    db.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/{submission_id}/archive")

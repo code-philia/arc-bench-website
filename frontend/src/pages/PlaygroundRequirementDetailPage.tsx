@@ -1,5 +1,5 @@
-import { message } from "antd";
 import { DeleteOutlined, DownloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { message } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -104,6 +104,14 @@ export default function PlaygroundRequirementDetailPage() {
     }
   }, [activeDoc, requirement?.requirements_yaml]);
 
+  const refreshSubmissions = async () => {
+    if (!user) {
+      setSubmissions([]);
+      return;
+    }
+    setSubmissions(await api.listSubmissions(requirementId));
+  };
+
   useEffect(() => {
     quickStart.syncStepForRoute();
   }, [quickStart, requirementId, taskType]);
@@ -118,7 +126,7 @@ export default function PlaygroundRequirementDetailPage() {
           setSubmissions([]);
           return;
         }
-        return api.listSubmissions(requirementId).then(setSubmissions).catch(() => setSubmissions([]));
+        return refreshSubmissions().catch(() => setSubmissions([]));
       })
       .catch((error: Error) => {
         message.error(error.message);
@@ -237,6 +245,22 @@ export default function PlaygroundRequirementDetailPage() {
       message.error(errorMessage);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const deleteSubmission = async (record: SubmissionSummary) => {
+    if (!window.confirm("Delete this submission? Its run record and runtime directory will be permanently removed.")) {
+      return;
+    }
+    try {
+      await api.deleteSubmission(record.id);
+      if (activeSubmission?.id === record.id) {
+        setActiveSubmission(null);
+      }
+      await refreshSubmissions();
+      message.success("Submission deleted.");
+    } catch (error) {
+      message.error((error as Error).message);
     }
   };
 
@@ -531,6 +555,7 @@ export default function PlaygroundRequirementDetailPage() {
                     <th>Submission</th>
                     <th style={{ width: "140px" }}>Model</th>
                     <th style={{ width: "100px" }}>Status</th>
+                    <th style={{ width: "56px" }} aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody>
@@ -563,6 +588,20 @@ export default function PlaygroundRequirementDetailPage() {
                         <span className={`test-badge ${submissionBadgeClass(record.status)}`}>
                           {record.status}
                         </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="history-delete-button"
+                          aria-label={`Delete ${record.display_name || record.id}`}
+                          title="Delete submission"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void deleteSubmission(record);
+                          }}
+                        >
+                          <DeleteOutlined />
+                        </button>
                       </td>
                     </tr>
                   ))}

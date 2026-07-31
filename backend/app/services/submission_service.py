@@ -1,5 +1,7 @@
 import json
 import os
+import errno
+import stat
 import subprocess
 import shutil
 import time
@@ -877,6 +879,60 @@ class SubmissionService:
         if not submission or (user_id is not None and submission.user_id != user_id):
             raise LookupError(f"Submission '{submission_id}' not found")
         return submission
+
+    def delete_submission(self, submission_id: str, user_id: str) -> None:
+        """Delete one owned submission and only its canonical runtime directory.
+
+        Competition submission snapshots and task runs are separate submission rows.
+        This operation deliberately deletes no related rows, so removing a snapshot
+        leaves every previously created task run available.
+        """
+        submission = self.get_submission(submission_id, user_id)
+        if submission.status in {
+            SubmissionStatus.RUNNING.value,
+            SubmissionStatus.PAUSE_REQUESTED.value,
+            SubmissionStatus.RESUME_REQUESTED.value,
+        }:
+            raise ValueError("Stop or finish this run before deleting it")
+
+        user = self._get_submission_user(user_id)
+        runtime_root = self.settings.user_submissions_root.resolve()
+        submission_root = self.runtime_paths.get_submission_root_by_identity(user.username, user.id, submission.id).resolve()
+        try:
+            relative_submission_root = submission_root.relative_to(runtime_root)
+        except ValueError as exc:
+            raise RuntimeError("Resolved submission directory is outside runtime/user-submissions") from exc
+        if relative_submission_root.name != submission.id:
+            raise RuntimeError("Resolved submission directory does not match the requested submission")
+
+        # Docker Desktop keeps Windows bind-mount file handles open until the
+        # container is removed. Release it before deleting .git/workspace files.
+        self._stop_runner_container(submission.id)
+        self._stop_preview_container(submission.id)
+        if submission_root.exists():
+            self._remove_submission_runtime_directory(submission_root)
+        self.db.delete(submission)
+        self.db.commit()
+
+    @staticmethod
+    def _remove_submission_runtime_directory(submission_root: Path) -> None:
+        for attempt in range(3):
+            try:
+                shutil.rmtree(submission_root, onexc=SubmissionService._clear_readonly_for_removal)
+                return
+            except FileNotFoundError:
+                return
+            except PermissionError:
+                if attempt == 2:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
+
+    @staticmethod
+    def _clear_readonly_for_removal(remove_func, path: str, error: OSError) -> None:
+        if not isinstance(error, OSError) or error.errno not in {errno.EACCES, errno.EPERM}:
+            raise error
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+        remove_func(path)
 
     def create_competition_submission(
         self,
