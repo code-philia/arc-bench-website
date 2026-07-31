@@ -3,5 +3,6 @@ from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user_task import UserTask
 from app.models.user import User
+from app.models.notification import Notification
 
-__all__ = ["Base", "Requirement", "Submission", "User", "UserTask"]
+__all__ = ["Base", "Requirement", "Submission", "User", "UserTask", "Notification"]

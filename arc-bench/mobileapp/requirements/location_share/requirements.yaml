@@ -1,0 +1,103 @@
+id: ROOT
+name: Location Share
+type: FOLDER
+description: An app for sharing the current location, opening location details, and configuring the link provider used for generated location links.
+dependencies: []
+children:
+- id: REQ-1
+  name: Share Or Copy Location
+  type: FOLDER
+  description: The app shall allow users to share the current location through the Android share sheet and copy a shareable location link to the clipboard.
+  dependencies: []
+  children:
+  - id: REQ-1.1
+    name: Share Current Location
+    type: ATOMIC
+    description: The app shall allow users to open the Android system share interface for the current location or generated location link.
+    dependencies: []
+    scenarios:
+    - name: Open The System Share Sheet
+      steps:
+      - keyword: GIVEN
+        content: The Location Share app is open and the main sharing controls are visible.
+      - keyword: WHEN
+        content: The user taps the share control identified by resource-id "ca.cmetcalfe.locationshare:id/shareButton".
+      - keyword: THEN
+        content: The Android system share interface opens for the current location or generated location link.
+    - name: Return From The Share Sheet
+      steps:
+      - keyword: GIVEN
+        content: The Android system share interface is open from the Location Share app.
+      - keyword: WHEN
+        content: The user performs the Android back action.
+      - keyword: THEN
+        content: The app returns to the prior screen where the sharing controls are visible again.
+  - id: REQ-1.2
+    name: Copy Shareable Location Link
+    type: ATOMIC
+    description: The app shall allow users to copy the current location or generated location link to the clipboard.
+    dependencies: []
+    scenarios:
+    - name: Copy The Current Location Link
+      steps:
+      - keyword: GIVEN
+        content: The Location Share app is open and the main sharing controls are visible.
+      - keyword: WHEN
+        content: The user taps the copy control identified by resource-id "ca.cmetcalfe.locationshare:id/copyButton".
+      - keyword: THEN
+        content: The current location or generated location link is copied to the clipboard.
+- id: REQ-2
+  name: View Location Details
+  type: FOLDER
+  description: The app shall allow users to open a dedicated viewing interface for the current location and inspect the corresponding location content.
+  dependencies: []
+  children:
+  - id: REQ-2.1
+    name: Open Location Details View
+    type: ATOMIC
+    description: The app shall allow users to open the dedicated location viewing interface from the main screen.
+    dependencies: []
+    scenarios:
+    - name: Open The Location Viewing Interface
+      steps:
+      - keyword: GIVEN
+        content: The app is open.
+      - keyword: WHEN
+        content: The user taps the button identified by resource-id "ca.cmetcalfe.locationshare:id/viewButton" in the package "ca.cmetcalfe.locationshare".
+      - keyword: THEN
+        content: The app transitions to the location viewing interface and presents the corresponding location content.
+- id: REQ-3
+  name: Configure Link Provider
+  type: FOLDER
+  description: The app shall allow users to open settings and choose which link provider is used when location links are generated or shared.
+  dependencies: []
+  children:
+  - id: REQ-3.1
+    name: Open Link Settings
+    type: ATOMIC
+    description: The app shall allow users to open the settings screen from the app bar overflow menu.
+    dependencies: []
+    scenarios:
+    - name: Open Settings From More Options
+      steps:
+      - keyword: GIVEN
+        content: The app is open.
+      - keyword: WHEN
+        content: The user taps the app bar overflow with content-desc "More options" and selects the first menu entry represented by an "android.widget.RelativeLayout" at index 0.
+      - keyword: THEN
+        content: The settings screen is opened.
+  - id: REQ-3.2
+    name: Select Link Type
+    type: ATOMIC
+    description: The app shall allow users to open the "Link type" setting and apply an available link provider option for subsequent shares.
+    dependencies:
+    - REQ-3.1
+    scenarios:
+    - name: Set Google Maps As The Active Link Provider
+      steps:
+      - keyword: GIVEN
+        content: The settings screen is open.
+      - keyword: WHEN
+        content: The user taps the "Link type" item identified by resource-id "android:id/title" and text "Link type", then selects the option identified by resource-id "android:id/text1" and text "Google Maps".
+      - keyword: THEN
+        content: Google Maps is applied as the active link provider for subsequent shares.

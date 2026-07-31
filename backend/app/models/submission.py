@@ -15,6 +15,7 @@ class Submission(Base):
     model_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     requirement_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     runtime: Mapped[str] = mapped_column(String(32), nullable=False)
+    agent_source: Mapped[str] = mapped_column(String(64), nullable=False, default="upload", index=True)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     archive_path: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)

@@ -6,16 +6,24 @@ from docker.errors import DockerException, NotFound
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.enums import SubmissionStatus
+from app.core.enums import AgentSourceType, SubmissionStatus
 from app.db.session import SessionLocal
 from app.models.requirement import Requirement
 from app.models.user import User
 from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
+from app.services.host_demo_preview_service import HostDemoPreviewService
+from app.services.notification_service import NotificationService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
+from app.services.submission_artifact_service import SubmissionArtifactService
+from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import SubmissionService
 from app.services.workspace_assembler import WorkspaceAssembler
+
+
+PAUSE_GRACE_SECONDS = 3.0
+PAUSE_SIGTERM_GRACE_SECONDS = 1.5
 
 
 class ExecutionService:
@@ -25,8 +33,15 @@ class ExecutionService:
         self.assembler = WorkspaceAssembler()
         self.result_parser = ResultParser()
         self.runtime_paths = RuntimePathService()
+        self.artifact_service = SubmissionArtifactService()
 
     def run_submission(self, submission_id: str) -> None:
+        self._run_submission_internal(submission_id, reuse_workspace=False)
+
+    def rerun_submission(self, submission_id: str) -> None:
+        self._run_submission_internal(submission_id, reuse_workspace=True)
+
+    def _run_submission_internal(self, submission_id: str, *, reuse_workspace: bool) -> None:
         db = SessionLocal()
         try:
             submission_service = SubmissionService(db)
@@ -37,19 +52,32 @@ class ExecutionService:
             requirement = db.get(Requirement, submission.requirement_id)
             if not requirement:
                 raise RuntimeError(f"Requirement '{submission.requirement_id}' not found")
-            self._run(db, submission_service, submission_id, requirement, user)
+            self._run(db, submission_service, submission_id, requirement, user, reuse_workspace=reuse_workspace)
         finally:
             db.close()
 
-    def _run(self, db: Session, submission_service: SubmissionService, submission_id: str, requirement: Requirement, user: User) -> None:
-        if requirement.category != "web":
+    def _run(
+        self,
+        db: Session,
+        submission_service: SubmissionService,
+        submission_id: str,
+        requirement: Requirement,
+        user: User,
+        *,
+        reuse_workspace: bool,
+    ) -> None:
+        requirement_path = Path(requirement.requirements_path).resolve()
+        is_competition_task = requirement_path.is_relative_to(self.settings.competition_root.resolve())
+        if requirement.category not in {"web", "cli"} and not is_competition_task:
             raise RuntimeError(f"Unsupported requirement category: {requirement.category}")
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
-        stdout_path = workspace_path / "artifacts" / "stdout.log"
-        stderr_path = workspace_path / "artifacts" / "stderr.log"
-        result_path = workspace_path / "artifacts" / "result.json"
+        runner_kind = "octos" if submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value else "python"
+        start_agent_description = "Running built-in Octos CLI agent" if runner_kind == "octos" else "Running uploaded agent"
+        arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
+        stdout_path = arc_dir / "stdout.log"
+        playwright_report_path = arc_dir / "playwright-report.json"
         debug_log = DebugLogService(workspace_path)
 
         container = None
@@ -57,19 +85,45 @@ class ExecutionService:
         active_step_key = "deploy_agent"
         completed_steps: set[str] = set()
         processed_runner_event_count = 0
+        pause_notified = False
+        pause_signal_sent = False
+        pause_requested_at: float | None = None
+        pause_signal_sent_at: float | None = None
+        paused = False
+        last_runner_signal_at = time.time()
+        stuck_notification_sent = False
 
         def emit_event(step_key: str, message: str, status: str = "info") -> None:
             submission_service.append_step_event(submission_id, step_key=step_key, message=message, status=status)
 
+        def mark_paused(reason: str) -> None:
+            nonlocal paused
+            paused = True
+            submission_service.update_status(
+                submission_service.get_submission(submission_id),
+                SubmissionStatus.PAUSED,
+                failure_reason=reason,
+            )
+
         def import_runner_events() -> list[dict]:
-            nonlocal processed_runner_event_count
-            runner_events_path = workspace_path / "artifacts" / "runner-events.jsonl"
+            nonlocal processed_runner_event_count, last_runner_signal_at
+            runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
             if not runner_events_path.exists():
                 return []
             imported_events: list[dict] = []
+            refresh_flags = {
+                "submission": False,
+                "logs": False,
+                "commit_history": False,
+                "traceability_selected": False,
+                "traceability_all": False,
+                "preview": False,
+            }
             lines = runner_events_path.read_text(encoding="utf-8").splitlines()
             new_lines = lines[processed_runner_event_count:]
             processed_runner_event_count = len(lines)
+            if new_lines:
+                last_runner_signal_at = time.time()
             for raw_line in new_lines:
                 line = raw_line.strip()
                 if not line:
@@ -79,12 +133,50 @@ class ExecutionService:
                 except Exception:
                     debug_log.append("backend", f"Failed to parse runner event line: {line}")
                     continue
+                refresh_flags["logs"] = True
+                event_type = str(event.get("type", "")).strip()
+                if event_type == "requirement_state":
+                    refresh_flags["submission"] = True
+                elif event_type == "runner_state":
+                    refresh_flags["submission"] = True
+                elif event_type in {"interface_upsert", "interface_status", "test_upsert"}:
+                    refresh_flags["traceability_selected"] = True
+                    refresh_flags["traceability_all"] = True
+                elif event_type == "signal":
+                    refresh_payload = event.get("refresh")
+                    if isinstance(refresh_payload, dict):
+                        for key in refresh_flags:
+                            if bool(refresh_payload.get(key)):
+                                refresh_flags[key] = True
                 step_key = str(event.get("step_key", "")).strip()
-                message = str(event.get("message", "")).strip()
+                message = submission_service.format_runner_event_log_line(event)
                 status = str(event.get("status", "info")).strip() or "info"
                 if step_key in {"deploy_agent", "start_agent", "run_tests"} and message:
-                    emit_event(step_key, message, status=status)
                     imported_events.append({"step_key": step_key, "message": message, "status": status})
+
+            if refresh_flags["preview"]:
+                HostDemoPreviewService.mark_stale(submission_id)
+            if refresh_flags["traceability_selected"] or refresh_flags["traceability_all"]:
+                snapshot_updated = self.artifact_service.refresh_traceability_snapshot_for_workspace(
+                    workspace_path,
+                    force=True,
+                )
+                if not snapshot_updated:
+                    debug_log.append(
+                        "backend",
+                        "Traceability refresh was requested, but .arc/traceability is not available yet",
+                    )
+            if any(refresh_flags.values()):
+                SubmissionEventStream.publish(
+                    submission_id,
+                    reason="runner_events",
+                    submission=refresh_flags["submission"],
+                    logs=refresh_flags["logs"],
+                    commit_history=refresh_flags["commit_history"],
+                    traceability_selected=refresh_flags["traceability_selected"],
+                    traceability_all=refresh_flags["traceability_all"],
+                    preview=refresh_flags["preview"],
+                )
             return imported_events
 
         def refresh_running_steps(latest_events: list[dict]) -> None:
@@ -101,40 +193,69 @@ class ExecutionService:
             elif "start_agent" in event_step_keys:
                 completed_steps = {"deploy_agent"}
                 active_step_key = "start_agent"
-                description = "Running uploaded agent"
+                description = start_agent_description
             else:
                 completed_steps = set()
                 active_step_key = "deploy_agent"
                 description = "Preparing workspace"
+            current_steps = submission_service.build_step_states(
+                active_key=active_step_key,
+                completed=completed_steps,
+                description=description,
+            )
+            current_steps = submission_service.attach_step_logs(
+                current_steps,
+                submission_service.read_events(submission_service.get_submission(submission_id)),
+            )
             submission_service.update_steps(
                 submission_service.get_submission(submission_id),
-                submission_service.build_step_states(
-                    active_key=active_step_key,
-                    completed=completed_steps,
-                    description=description,
-                ),
+                current_steps,
             )
 
         try:
             debug_log.append("backend", f"Execution started for submission {submission_id}")
             debug_log.append("backend", f"Requirement category: {requirement.category}")
-            emit_event("deploy_agent", "Preparing workspace")
-            workspace_path = self.assembler.assemble(submission, requirement, user)
-            debug_log = DebugLogService(workspace_path)
-            debug_log.append("backend", f"Workspace assembled at {workspace_path}")
-            emit_event("deploy_agent", "Workspace assembled", status="success")
-            stdout_path = workspace_path / "artifacts" / "stdout.log"
-            stderr_path = workspace_path / "artifacts" / "stderr.log"
-            result_path = workspace_path / "artifacts" / "result.json"
+            if reuse_workspace:
+                existing_workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+                if existing_workspace_path is None:
+                    raise RuntimeError("Submission workspace is not available for rewind resume")
+                workspace_path = existing_workspace_path
+                debug_log = DebugLogService(workspace_path)
+                manager = DockerManager()
+                manager.remove_submission_container(submission_id)
+                runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
+                if runner_events_path.exists():
+                    processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
+                emit_event("deploy_agent", "Reusing rewound workspace")
+                debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")
+                emit_event("deploy_agent", "Existing workspace is ready", status="success")
+            else:
+                emit_event("deploy_agent", "Preparing workspace")
+                workspace_path = self.assembler.assemble(submission, requirement, user)
+                debug_log = DebugLogService(workspace_path)
+                debug_log.append("backend", f"Workspace assembled at {workspace_path}")
+                emit_event("deploy_agent", "Workspace assembled", status="success")
+            arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
+            stdout_path = arc_dir / "stdout.log"
+            playwright_report_path = arc_dir / "playwright-report.json"
             submission_service.mark_running(submission, workspace_path)
+            HostDemoPreviewService.mark_stale(submission.id)
             submission_service.update_steps(
                 submission,
-                submission_service.build_step_states(active_key="deploy_agent", description="Preparing workspace"),
+                submission_service.build_step_states(
+                    active_key="deploy_agent",
+                    description="Reusing rewound workspace" if reuse_workspace else "Preparing workspace",
+                ),
             )
+
+            if submission_service.get_submission(submission_id).status == SubmissionStatus.CANCELLED.value:
+                debug_log.append("backend", "Run was cancelled before the runner container was created")
+                return
 
             emit_event("deploy_agent", "Connecting to Docker daemon")
             debug_log.append("backend", "Connecting to Docker daemon")
-            manager = DockerManager()
+            if manager is None:
+                manager = DockerManager()
             debug_log.append("backend", "Docker daemon ping succeeded")
             emit_event("deploy_agent", "Docker daemon is reachable", status="success")
             submission = submission_service.get_submission(submission_id)
@@ -144,9 +265,14 @@ class ExecutionService:
             )
             emit_event("deploy_agent", "Preparing runner image")
             debug_log.append("backend", f"Ensuring runner image is available: {self.settings.runner_image}")
+            manager.remove_submission_container(submission_id)
             container = manager.create_container(
                 submission.id,
                 workspace_path,
+                model_name=submission.model_name,
+                github_email=user.github_email,
+                github_username=user.github_username,
+                runner_kind=runner_kind,
                 log_callback=lambda line: debug_log.append("docker-build", line),
             )
             debug_log.append("backend", f"Container created: name={container.name}, id={container.id}")
@@ -154,6 +280,8 @@ class ExecutionService:
             manager.start_container(container)
             debug_log.append("backend", "Container start requested")
             emit_event("deploy_agent", "Runner container started", status="success")
+            if reuse_workspace:
+                submission_service.clear_checkpoint_restart_flag(submission_service.get_submission(submission_id))
             completed_steps = {"deploy_agent"}
             active_step_key = "start_agent"
 
@@ -163,20 +291,93 @@ class ExecutionService:
                 submission_service.build_step_states(
                     active_key="start_agent",
                     completed={"deploy_agent"},
-                    description="Running uploaded agent",
+                    description=start_agent_description,
                 ),
             )
-            emit_event("start_agent", "Running uploaded agent")
-            debug_log.append("backend", f"Waiting for container to exit with timeout={self.settings.runner_timeout_seconds + 30}s")
-            wait_deadline = time.time() + self.settings.runner_timeout_seconds + 30
+            emit_event("start_agent", start_agent_description)
+            runner_timeout_seconds = int(self.settings.runner_timeout_seconds)
+            wait_deadline = None if runner_timeout_seconds <= 0 else time.time() + runner_timeout_seconds + 30
+            if wait_deadline is None:
+                debug_log.append("backend", "Waiting for container to exit without timeout")
+            else:
+                debug_log.append("backend", f"Waiting for container to exit with timeout={runner_timeout_seconds + 30}s")
             exit_result = None
-            while time.time() < wait_deadline:
+            while wait_deadline is None or time.time() < wait_deadline:
                 latest_events = import_runner_events()
                 if latest_events:
                     refresh_running_steps(latest_events)
+                current_status = submission_service.get_submission(submission_id).status
+                if not stuck_notification_sent and time.time() - last_runner_signal_at >= 300:
+                    NotificationService(db).create_once(
+                        user_id=user.id,
+                        submission_id=submission_id,
+                        kind="no_progress",
+                        title="Run may be stuck",
+                        body="No runner progress or heartbeat was recorded for five minutes. Open the run to refresh its logs or cancel it.",
+                    )
+                    stuck_notification_sent = True
+                if current_status == SubmissionStatus.CANCELLED.value:
+                    debug_log.append("backend", "Run was cancelled; stopping execution loop")
+                    return
+                if current_status == SubmissionStatus.PAUSE_REQUESTED.value:
+                    if not pause_notified:
+                        pause_notified = True
+                        pause_requested_at = time.time()
+                        emit_event("start_agent", "Pause requested; waiting for checkpoint", status="info")
+                        submission_service.update_steps(
+                            submission_service.get_submission(submission_id),
+                            submission_service.build_step_states(
+                                active_key="start_agent",
+                                completed={"deploy_agent"},
+                                description="Pausing current run",
+                            ),
+                        )
+                        debug_log.append("backend", "Pause requested; waiting briefly for checkpoint flush")
+                    checkpoint = submission_service.read_checkpoint(submission_service.get_submission(submission_id))
+                    checkpoint_marked_paused = bool(checkpoint.get("paused"))
+                    if not pause_signal_sent and pause_requested_at is not None and time.time() - pause_requested_at >= PAUSE_GRACE_SECONDS:
+                        try:
+                            exit_code, _ = manager.kill_agent_process(container)
+                            debug_log.append("backend", f"Sent SIGTERM to uploaded agent entrypoint (pkill exit={exit_code})")
+                            pause_signal_sent = True
+                            pause_signal_sent_at = time.time()
+                        except Exception as exc:  # noqa: BLE001
+                            debug_log.append("backend", f"Failed to signal agent process: {exc}")
+                    if checkpoint_marked_paused:
+                        debug_log.append("backend", "Pause checkpoint detected in workspace")
+                    if checkpoint_marked_paused or (
+                        pause_signal_sent_at is not None and time.time() - pause_signal_sent_at >= PAUSE_SIGTERM_GRACE_SECONDS
+                    ):
+                        paused_submission = submission_service.get_submission(submission_id)
+                        submission_service.set_checkpoint_restart_flag(paused_submission)
+                        mark_paused("Execution paused by user request")
+                        try:
+                            restored_submission = submission_service.get_submission(submission_id)
+                            submission_service.mark_paused_for_manual_edit(
+                                restored_submission,
+                                reason="Execution paused; workspace is ready for manual edits",
+                            )
+                            SubmissionEventStream.publish(
+                                submission_id,
+                                reason="pause_ready_for_manual_edit",
+                                submission=True,
+                                logs=True,
+                                traceability_selected=True,
+                                traceability_all=True,
+                                preview=True,
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            debug_log.append("backend", f"Failed to restore paused checkpoint state: {exc}")
+                        debug_log.append("backend", "Execution paused cleanly; terminating runner session")
+                        return
+                    time.sleep(1)
+                    continue
                 try:
                     container.reload()
                 except NotFound as exc:
+                    if submission_service.checkpoint_requires_restart(submission_service.get_submission(submission_id)):
+                        debug_log.append("backend", "Runner container removed for rewind restart")
+                        return
                     raise RuntimeError("Runner container disappeared before completion") from exc
                 if container.status == "exited":
                     exit_result = container.wait(timeout=5)
@@ -184,16 +385,48 @@ class ExecutionService:
                 time.sleep(1)
             if exit_result is None:
                 raise TimeoutError("Runner did not finish before timeout")
+            if submission_service.get_submission(submission_id).status == SubmissionStatus.CANCELLED.value:
+                debug_log.append("backend", "Run was cancelled after the runner exited")
+                return
+            if paused or submission_service.get_submission(submission_id).status == SubmissionStatus.PAUSED.value:
+                debug_log.append("backend", "Skipping test execution because submission is paused")
+                return
             debug_log.append("backend", f"Container exited with result={exit_result}")
             latest_events = import_runner_events()
             if latest_events:
                 refresh_running_steps(latest_events)
+            checkpoint = submission_service.read_checkpoint(submission_service.get_submission(submission_id))
+            if bool(checkpoint.get("resume_patch_conflict")):
+                conflict_message = "Replay patch merge conflict detected. Resolve the workspace manually, then resume again."
+                paused_submission = submission_service.get_submission(submission_id)
+                submission_service.update_status(
+                    paused_submission,
+                    SubmissionStatus.PAUSED,
+                    failure_reason=conflict_message,
+                )
+                submission_service.mark_resume_patch_conflict(paused_submission, message=conflict_message)
+                SubmissionEventStream.publish(
+                    submission_id,
+                    reason="resume_patch_conflict",
+                    submission=True,
+                    logs=True,
+                    commit_history=True,
+                    traceability_selected=True,
+                    traceability_all=True,
+                    preview=True,
+                )
+                debug_log.append("backend", conflict_message)
+                return
             emit_event("run_tests", "Collecting test artifacts")
             stdout, stderr = manager.collect_logs(container)
-            if stdout and not stdout_path.exists():
-                stdout_path.write_text(stdout, encoding="utf-8")
-            if stderr and not stderr_path.exists():
-                stderr_path.write_text(stderr, encoding="utf-8")
+            stdout_path.parent.mkdir(parents=True, exist_ok=True)
+            if not stdout_path.exists():
+                stdout_path.write_text("", encoding="utf-8")
+            with stdout_path.open("a", encoding="utf-8") as output:
+                for source, content in (("container.stdout", stdout), ("container.stderr", stderr)):
+                    for line in content.splitlines() or ([content] if content else []):
+                        output.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}] [{source}] {line}\n")
+                output.flush()
             debug_log.append("backend", f"Collected container logs: stdout_bytes={len(stdout.encode('utf-8'))}, stderr_bytes={len(stderr.encode('utf-8'))}")
             emit_event("run_tests", "Test artifacts collected", status="success")
 
@@ -207,8 +440,8 @@ class ExecutionService:
                 ),
             )
 
-            parsed = self.result_parser.parse(result_path)
-            debug_log.append("backend", f"Parsed result file at {result_path}: {parsed}")
+            parsed = self.result_parser.parse_playwright_report(playwright_report_path)
+            debug_log.append("backend", f"Parsed Playwright report at {playwright_report_path}: {parsed}")
             emit_event(
                 "run_tests",
                 f"Test results parsed: passed={parsed['passed']}, failed={parsed['failed']}, score={parsed['score']}",
@@ -231,20 +464,27 @@ class ExecutionService:
                 failed_count=parsed["failed"],
                 score=parsed["score"],
                 stdout_path=stdout_path,
-                stderr_path=stderr_path,
-                result_path=result_path if result_path.exists() else None,
+                stderr_path=None,
+                result_path=None,
                 failure_reason=failure_reason,
             )
             debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
         except Exception as exc:  # noqa: BLE001
             submission = submission_service.get_submission(submission_id)
+            if submission.status == SubmissionStatus.CANCELLED.value:
+                debug_log.append("backend", "Skipping failure finalization for cancelled run")
+                return
+            if str(exc) == "Execution paused by user request":
+                debug_log.append("backend", "Execution paused cleanly")
+                return
             emit_event(active_step_key, str(exc), status="error")
             debug_log.append("backend", f"Execution failed during {active_step_key}: {exc}")
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
             if stdout_path.exists() is False:
-                stdout_path.write_text("", encoding="utf-8")
-            if stderr_path.exists() is False:
-                stderr_path.write_text(str(exc), encoding="utf-8")
+                stdout_path.write_text(str(exc), encoding="utf-8")
+            else:
+                with stdout_path.open("a", encoding="utf-8") as output:
+                    output.write(f"\n{exc}\n")
             submission_service.update_steps(
                 submission,
                 submission_service.build_failed_step_states(
@@ -260,8 +500,8 @@ class ExecutionService:
                 failed_count=0,
                 score=0.0,
                 stdout_path=stdout_path,
-                stderr_path=stderr_path,
-                result_path=result_path if result_path.exists() else None,
+                stderr_path=None,
+                result_path=None,
                 failure_reason=str(exc),
             )
             debug_log.append("backend", "Failure state persisted to database")

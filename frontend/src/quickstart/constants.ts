@@ -1,30 +1,27 @@
 import type { QuickStartStep } from "./types";
 
-export const QUICK_START_REQUIREMENT_ID = "12306";
+export const QUICK_START_REQUIREMENT_ID = "ticketbooking";
 export const QUICK_START_TASK_TYPE = "web";
 export const QUICK_START_DISPLAY_NAME = "Quick Start Demo Agent";
 export const QUICK_START_MODEL_NAME = "ArcBench Demo Runtime";
 
-export const QUICK_START_PYTHON_SNIPPET = `from arcbench_visual import (
-    mark_design_done,
-    mark_implementation_done,
-    mark_test_passed,
-)
+export const QUICK_START_PYTHON_SNIPPET = `from arcbench_agent_runtime import AgentRuntime
 
-mark_design_done("REQ-1", "Flow design is finalized")
-mark_implementation_done("REQ-1", "Main page and form logic are implemented")
-mark_test_passed("REQ-1", "Local validation passed")
+runtime = AgentRuntime.from_env()
+
+runtime.events.mark_design_done("REQ-1", "Flow design is finalized")
+runtime.events.mark_implementation_done("REQ-1", "Main page and form logic are implemented")
+runtime.events.mark_test_passed("REQ-1", "Local validation passed")
 `;
 
 export const QUICK_START_STEPS: QuickStartStep[] = [
   {
     id: "home-task-type",
     route: "/playground",
-    targetId: "playground-task-bank-anchor",
+    targetId: "quickstart-task-type-web",
     title: "Step 1/8",
     message: "Choose task type (web application).",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "left",
   },
   {
@@ -32,9 +29,8 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     route: `/playground/task-bank/${QUICK_START_TASK_TYPE}`,
     targetId: "quickstart-task-item",
     title: "Step 2/8",
-    message: "Choose one task (railway ticket booking system).",
+    message: "Choose one task (meeting room reservation system).",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "up",
   },
   {
@@ -44,7 +40,6 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     title: "Step 3/8",
     message: "Requirements are presented in a tree structure, allowing you to select and view a specific requirement node.",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "right",
   },
   {
@@ -63,7 +58,6 @@ export const QUICK_START_STEPS: QuickStartStep[] = [
     title: "Step 5/8",
     message: "Upload your agent code, fill in the required information, and click Submit (we have pre-filled it here).",
     buttonLabel: "Next",
-    allowTargetClick: true,
     preferredPlacement: "left",
   },
   {

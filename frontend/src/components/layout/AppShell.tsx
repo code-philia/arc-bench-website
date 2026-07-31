@@ -1,11 +1,13 @@
 import { message } from "antd";
-import { ApiOutlined, HomeOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined } from "@ant-design/icons";
+import { ApiOutlined, BellOutlined, MoonOutlined, PlayCircleOutlined, ReadOutlined, SunOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../auth/AuthContext";
 import { QuickStartProvider } from "../../quickstart/QuickStartContext";
 import QuickStartOverlay from "../../quickstart/QuickStartOverlay";
+import { api } from "../../lib/api";
+import { NOTIFICATIONS_UPDATED_EVENT } from "../../lib/notificationEvents";
 
 type NavItem = {
   to: string;
@@ -22,12 +24,17 @@ const navItems: NavItem[] = [
     icon: <PlayCircleOutlined />,
     matches: [
       "/playground",
+      "/playground/arc-bench/:taskType",
+      "/playground/arc-bench/:taskType/:requirementId",
+      "/playground/arc-bench/:taskType/:requirementId/submissions/:submissionId",
       "/playground/task-bank/:taskType",
       "/playground/task-bank/:taskType/:requirementId",
       "/playground/task-bank/:taskType/:requirementId/submissions/:submissionId",
       "/playground/create-task",
       "/playground/my-tasks",
       "/playground/my-tasks/:taskId",
+      "/playground/my-tasks/:taskId/edit",
+      "/playground/my-tasks/:taskId/submissions/:submissionId",
     ],
   },
   {
@@ -50,13 +57,31 @@ export default function AppShell() {
   const { user, logout, isLoading } = useAuth();
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = window.localStorage.getItem("theme");
-    return saved === "light" ? "light" : "dark";
+    return saved === "dark" ? "dark" : "light";
   });
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadNotifications(0);
+      return;
+    }
+    void api.listNotifications().then((payload) => setUnreadNotifications(payload.unread_count)).catch(() => setUnreadNotifications(0));
+  }, [user]);
+
+  useEffect(() => {
+    const updateUnreadCount = (event: Event) => {
+      const unreadCount = (event as CustomEvent<number>).detail;
+      setUnreadNotifications(typeof unreadCount === "number" ? unreadCount : 0);
+    };
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, updateUnreadCount);
+    return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, updateUnreadCount);
+  }, []);
 
   const initials = useMemo(() => {
     if (!user) {
@@ -107,9 +132,13 @@ export default function AppShell() {
             </button>
             {isLoading ? null : user ? (
               <div className="nav-auth-group">
-                <div className="nav-avatar" title={user.username}>
-                  {initials}
-                </div>
+                <button className="theme-toggle notification-bell" type="button" title="Message center" aria-label={unreadNotifications > 0 ? "Message center: unread messages" : "Message center"} onClick={() => navigate("/notifications")}>
+                  <BellOutlined />
+                  {unreadNotifications > 0 ? <span className="notification-unread-dot" aria-hidden="true" /> : null}
+                </button>
+                <button className="nav-avatar" type="button" title={user.username} onClick={() => navigate("/profile")}>
+                  {initials || <UserOutlined />}
+                </button>
                 <button className="nav-auth-link" type="button" onClick={handleLogout}>
                   Logout
                 </button>

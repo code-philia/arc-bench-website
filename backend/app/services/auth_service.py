@@ -51,6 +51,14 @@ class AuthService:
             raise ValueError("Invalid email or password")
         return user
 
+    def update_profile(self, user: User, *, github_email: str | None, github_username: str | None) -> User:
+        user.github_email = self._normalize_optional_email(github_email)
+        user.github_username = self._normalize_optional_github_username(github_username)
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
     def build_session_token(self, user: User) -> str:
         expires_at = int((datetime.utcnow() + timedelta(days=self.SESSION_TTL_DAYS)).timestamp())
         nonce = secrets.token_hex(16)
@@ -92,6 +100,24 @@ class AuthService:
     def _validate_password(password: str) -> None:
         if len(password) < 8:
             raise ValueError("Password must be at least 8 characters")
+
+    @staticmethod
+    def _normalize_optional_email(email: str | None) -> str | None:
+        if email is None:
+            return None
+        normalized = email.strip().lower()
+        return normalized or None
+
+    @staticmethod
+    def _normalize_optional_github_username(username: str | None) -> str | None:
+        if username is None:
+            return None
+        normalized = username.strip()
+        if not normalized:
+            return None
+        if len(normalized) > 255:
+            raise ValueError("GitHub username must be 255 characters or fewer")
+        return normalized
 
     @staticmethod
     def _hash_password(password: str) -> str:

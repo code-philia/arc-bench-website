@@ -8,58 +8,66 @@ from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
 from app.services.runtime_path_service import RuntimePathService
+from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
 
 class WorkspaceAssembler:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.runtime_paths = RuntimePathService()
+        self.traceability_seed_builder = TraceabilitySeedBuilder()
 
     def assemble(self, submission: Submission, requirement: Requirement, user: User) -> Path:
         workspace_root = self.runtime_paths.get_workspace_root(submission, username=user.username)
         if workspace_root.exists():
             shutil.rmtree(workspace_root)
         submission_dir = workspace_root / "submission"
-        sdk_dir = workspace_root / "sdk"
         template_dir = workspace_root / "template"
-        task_dir = workspace_root / "task"
         tests_dir = workspace_root / "tests"
-        artifacts_dir = workspace_root / "artifacts"
-        prompt_dir = workspace_root / "prompt"
+        requirements_dir = template_dir / "requirements"
+        arc_dir = template_dir / ".arc"
 
         submission_dir.mkdir(parents=True, exist_ok=True)
-        sdk_dir.mkdir(parents=True, exist_ok=True)
         template_dir.mkdir(parents=True, exist_ok=True)
-        task_dir.mkdir(parents=True, exist_ok=True)
         tests_dir.mkdir(parents=True, exist_ok=True)
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        prompt_dir.mkdir(parents=True, exist_ok=True)
+        arc_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(submission.archive_path, "r") as archive:
             archive.extractall(submission_dir)
-
         self._flatten_single_root(submission_dir)
-        shutil.copytree(self.settings.templates_root, template_dir, dirs_exist_ok=True)
-        shutil.copytree(Path(requirement.assets_path), task_dir / "assets", dirs_exist_ok=True)
-        shutil.copytree(Path(requirement.references_path), task_dir / "reference", dirs_exist_ok=True)
-        shutil.copy2(Path(requirement.requirements_path), task_dir / "requirements.md")
-        shutil.copy2(Path(requirement.prerequisites_path), task_dir / "prerequisites.md")
-        shutil.copytree(Path(requirement.tests_path), tests_dir, dirs_exist_ok=True)
-        self._write_visual_sdk_files(sdk_dir)
+        requirement_root = Path(requirement.requirements_path).resolve().parent
+        template_source_root = Path(requirement.requirements_path).resolve().parents[2] / "template"
+        if not template_source_root.is_dir():
+            fallback_template_root = requirement_root / "template"
+            if fallback_template_root.is_dir():
+                template_source_root = fallback_template_root
+        if not template_source_root.is_dir():
+            template_source_root = self.settings.templates_root
+        if not template_source_root.is_dir():
+            raise FileNotFoundError(f"Task template directory not found: {template_source_root}")
+        shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
+        self._copy_requirement_workspace(requirement, requirement_root, requirements_dir)
+        self._copy_optional_tree(Path(requirement.tests_path), tests_dir)
+        self.traceability_seed_builder.write_seed_file(
+            arc_dir / "traceability-seed.json",
+            requirement,
+            requirement_yaml_path=requirements_dir / "requirements.yaml",
+        )
 
-        prompt_text = self._build_prompt(requirement)
-        (prompt_dir / "task_prompt.txt").write_text(prompt_text, encoding="utf-8")
         (workspace_root / "runner-spec.json").write_text(
             json.dumps(
                 {
+                    "agent_source": submission.agent_source,
+                    "runtime": submission.runtime,
                     "submission_dir": "/workspace/submission",
-                    "sdk_dir": "/workspace/sdk",
                     "template_dir": "/workspace/template",
-                    "task_dir": "/workspace/task",
                     "tests_dir": "/workspace/tests",
-                    "artifacts_dir": "/workspace/artifacts",
-                    "runner_events_path": "/workspace/artifacts/runner-events.jsonl",
-                    "prompt_path": "/workspace/prompt/task_prompt.txt",
+                    "arc_dir": ".arc",
+                    "project_dir": "/workspace/template",
+                    "requirement_dir": "requirements",
+                    "output_dir": ".",
+                    "runner_events_path": ".arc/runner-events.jsonl",
+                    "traceability_dir": ".arc/traceability",
                     "task": {
                         "category": requirement.category,
                         "requirement_id": requirement.id,
@@ -79,136 +87,52 @@ class WorkspaceAssembler:
         return workspace_root
 
     @staticmethod
-    def _build_prompt(requirement: Requirement) -> str:
-        return "\n".join(
-            [
-                "You are given a starter application template and a task package.",
-                "Modify the template implementation to satisfy all requirements.",
-                "",
-                "Materials:",
-                "- Base template project: /workspace/template",
-                "- Requirement document: /workspace/task/requirements.md",
-                "- Prerequisites document: /workspace/task/prerequisites.md",
-                "- Task assets: /workspace/task/assets",
-                "- Reference images: /workspace/task/reference",
-                "",
-                "Instructions:",
-                "1. Read prerequisites.md and requirements.md completely.",
-                "2. Use the files in assets/ and reference/ when implementing the product.",
-                "3. Apply your changes directly inside /workspace/template.",
-                "4. Keep the project runnable with the template's frontend and backend structure.",
-                "5. Use the built-in visualization SDK when you finish major requirement nodes.",
-                "6. In Python you can import directly with: from arcbench_visual import mark_design_done, mark_implementation_done, mark_test_passed, mark_test_failed",
-                "7. JavaScript SDK path: /workspace/sdk/arcbench_visual.js",
-                "8. TypeScript SDK path: /workspace/sdk/arcbench_visual.ts",
-                "9. Reference nodes by requirement tree node id, for example ROOT or REQ-1.",
-                "10. When implementation is complete, exit the program successfully.",
-                "",
-                f"Requirement ID: {requirement.id}",
-                f"Requirement title: {requirement.title}",
-                f"Category: {requirement.category}",
-            ]
-        ) + "\n"
+    def _copy_optional_tree(source: Path, destination: Path) -> None:
+        if not source.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+            return
+        shutil.copytree(source, destination, dirs_exist_ok=True)
 
-    @staticmethod
-    def _write_visual_sdk_files(sdk_dir: Path) -> None:
-        (sdk_dir / "arcbench_visual.py").write_text(
-            "\n".join(
-                [
-                    "import json",
-                    "import os",
-                    "import time",
-                    "",
-                    "_RUNNER_EVENTS_PATH = os.environ.get('ARCBENCH_RUNNER_EVENTS_PATH', '/workspace/artifacts/runner-events.jsonl')",
-                    "",
-                    "",
-                    "def emit_requirement_state(node_id: str, phase: str, status: str, message: str | None = None) -> None:",
-                    "    if not node_id or not str(node_id).strip():",
-                    "        return",
-                    "    payload = {",
-                    "        'type': 'requirement_state',",
-                    "        'node_id': str(node_id).strip(),",
-                    "        'phase': phase,",
-                    "        'status': status,",
-                    "        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()),",
-                    "        'message': message,",
-                    "    }",
-                    "    os.makedirs(os.path.dirname(_RUNNER_EVENTS_PATH), exist_ok=True)",
-                    "    with open(_RUNNER_EVENTS_PATH, 'a', encoding='utf-8') as output:",
-                    "        output.write(json.dumps(payload, ensure_ascii=True) + '\\n')",
-                    "",
-                    "",
-                    "def mark_design_done(node_id: str, message: str | None = None) -> None:",
-                    "    emit_requirement_state(node_id, 'design', 'completed', message)",
-                    "",
-                    "",
-                    "def mark_implementation_done(node_id: str, message: str | None = None) -> None:",
-                    "    emit_requirement_state(node_id, 'implement', 'completed', message)",
-                    "",
-                    "",
-                    "def mark_test_passed(node_id: str, message: str | None = None) -> None:",
-                    "    emit_requirement_state(node_id, 'test', 'passed', message)",
-                    "",
-                    "",
-                    "def mark_test_failed(node_id: str, message: str | None = None) -> None:",
-                    "    emit_requirement_state(node_id, 'test', 'failed', message)",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        visual_js = "\n".join(
-            [
-                "import fs from 'node:fs';",
-                "import path from 'node:path';",
-                "",
-                "const runnerEventsPath = process.env.ARCBENCH_RUNNER_EVENTS_PATH || '/workspace/artifacts/runner-events.jsonl';",
-                "",
-                "export function emitRequirementState(nodeId, phase, status, message) {",
-                "  if (!nodeId || !String(nodeId).trim()) return;",
-                "  const payload = {",
-                "    type: 'requirement_state',",
-                "    node_id: String(nodeId).trim(),",
-                "    phase,",
-                "    status,",
-                "    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),",
-                "    message: message ?? null,",
-                "  };",
-                "  fs.mkdirSync(path.dirname(runnerEventsPath), { recursive: true });",
-                "  fs.appendFileSync(runnerEventsPath, `${JSON.stringify(payload)}\\n`, 'utf-8');",
-                "}",
-                "",
-                "export function markDesignDone(nodeId, message) {",
-                "  emitRequirementState(nodeId, 'design', 'completed', message);",
-                "}",
-                "",
-                "export function markImplementationDone(nodeId, message) {",
-                "  emitRequirementState(nodeId, 'implement', 'completed', message);",
-                "}",
-                "",
-                "export function markTestPassed(nodeId, message) {",
-                "  emitRequirementState(nodeId, 'test', 'passed', message);",
-                "}",
-                "",
-                "export function markTestFailed(nodeId, message) {",
-                "  emitRequirementState(nodeId, 'test', 'failed', message);",
-                "}",
-                "",
-            ]
-        )
-        (sdk_dir / "arcbench_visual.js").write_text(visual_js, encoding="utf-8")
-        (sdk_dir / "arcbench_visual.ts").write_text(
-            "\n".join(
-                [
-                    "export type RequirementPhase = 'design' | 'implement' | 'test';",
-                    "export type RequirementStatus = 'completed' | 'passed' | 'failed';",
-                    "",
-                    *visual_js.splitlines(),
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
+    def _copy_requirement_workspace(
+        self,
+        requirement: Requirement,
+        requirement_root: Path,
+        requirements_dir: Path,
+    ) -> None:
+        if requirements_dir.exists():
+            shutil.rmtree(requirements_dir)
+        requirements_dir.mkdir(parents=True, exist_ok=True)
+
+        excluded_names = {"template", "tests"}
+        for source_path in requirement_root.iterdir():
+            if source_path.name in excluded_names:
+                continue
+            destination_path = requirements_dir / source_path.name
+            if source_path.is_dir():
+                shutil.copytree(source_path, destination_path, dirs_exist_ok=True)
+            elif source_path.is_file():
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+
+        requirement_markdown_path = Path(requirement.requirements_path)
+        requirement_yaml_path = requirement_markdown_path.with_name("requirements.yaml")
+        prerequisites_path = Path(requirement.prerequisites_path)
+        if requirement_markdown_path.is_file():
+            shutil.copy2(requirement_markdown_path, requirements_dir / "requirements.md")
+        if requirement_yaml_path.is_file():
+            shutil.copy2(requirement_yaml_path, requirements_dir / "requirements.yaml")
+        if prerequisites_path.is_file():
+            shutil.copy2(prerequisites_path, requirements_dir / "prerequisites.md")
+        elif not (requirements_dir / "prerequisites.md").exists():
+            (requirements_dir / "prerequisites.md").write_text("", encoding="utf-8")
+
+        self._copy_optional_tree(Path(requirement.assets_path), requirements_dir / "assets")
+        self._copy_optional_tree(Path(requirement.references_path), requirements_dir / "reference")
+
+        if not (requirements_dir / "requirements.yaml").is_file():
+            raise FileNotFoundError(
+                f"Requirement source is missing requirements.yaml: {requirement_yaml_path}"
+            )
 
     @staticmethod
     def _flatten_single_root(agent_dir: Path) -> None:

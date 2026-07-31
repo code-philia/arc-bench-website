@@ -1,0 +1,212 @@
+id: ROOT
+name: Create PDF
+type: FOLDER
+description: An Android PDF creator and document manager that lets users convert images into PDFs, handle initial confirmations and settings, navigate through menus, and open, rename, or share created files.
+dependencies: []
+children:
+- id: REQ-1
+  name: Convert Images Into A PDF
+  type: FOLDER
+  description: The app shall allow users to move past the initial entry flow, reach the image-to-PDF tool, select images, and generate a PDF with the required confirmations.
+  dependencies: []
+  children:
+  - id: REQ-1.1
+    name: Skip The Onboarding Flow
+    type: ATOMIC
+    description: The app shall allow users to skip the onboarding screen and proceed into the app.
+    dependencies: []
+    scenarios:
+    - name: Skip The Intro Screen
+      steps:
+      - keyword: GIVEN
+        content: The app is launched and the onboarding screen is shown.
+      - keyword: WHEN
+        content: The user taps the skip button with resource-id "swati4star.createpdf:id/btn_skip".
+      - keyword: THEN
+        content: The app proceeds from the intro flow to the next startup step.
+  - id: REQ-1.2
+    name: Confirm The Initial Dialog
+    type: ATOMIC
+    description: The app shall allow users to acknowledge the initial confirmation dialog that appears after onboarding is skipped.
+    dependencies:
+    - REQ-1.1
+    scenarios:
+    - name: Accept The First Startup Confirmation
+      steps:
+      - keyword: GIVEN
+        content: The onboarding flow has been skipped and a confirmation or system dialog is displayed.
+      - keyword: WHEN
+        content: The user taps the positive button with resource-id "android:id/button1".
+      - keyword: THEN
+        content: The app continues to the startup settings area.
+  - id: REQ-1.3
+    name: Toggle The Startup Setting
+    type: ATOMIC
+    description: The app shall allow users to change the available startup toggle setting before entering the main tool flow.
+    dependencies:
+    - REQ-1.2
+    scenarios:
+    - name: Change The Initial Toggle State
+      steps:
+      - keyword: GIVEN
+        content: The startup settings area is visible.
+      - keyword: WHEN
+        content: The user taps the switch control with resource-id "android:id/switch_widget".
+      - keyword: THEN
+        content: The toggle state changes and the app remains ready for the next navigation step.
+  - id: REQ-1.4
+    name: Open The Main Navigation Flow
+    type: ATOMIC
+    description: The app shall allow users to move through the navigation controls that lead from the startup area to the main tool options.
+    dependencies:
+    - REQ-1.3
+    scenarios:
+    - name: Proceed Through The Navigation Controls
+      steps:
+      - keyword: GIVEN
+        content: The startup settings area is visible after the initial toggle has been handled.
+      - keyword: WHEN
+        content: The user taps a control identified by class "android.widget.ImageButton", triggers a confirmation, and accepts it with the positive button using resource-id "android:id/button1".
+      - keyword: THEN
+        content: The app proceeds to the main navigation flow for its tools and options.
+  - id: REQ-1.5
+    name: Open The Images To PDF Tool
+    type: ATOMIC
+    description: The app shall allow users to navigate through its menus and open the image-to-PDF conversion tool.
+    dependencies:
+    - REQ-1.4
+    scenarios:
+    - name: Navigate To The Images To PDF Feature
+      steps:
+      - keyword: GIVEN
+        content: The app is in its main navigation flow.
+      - keyword: WHEN
+        content: The user taps an option with resource-id "swati4star.createpdf:id/option_name", taps a control identified by class "android.widget.ImageButton" to expose the drawer or menu, selects a menu label with resource-id "swati4star.createpdf:id/design_menu_item_text", and taps the option with resource-id "swati4star.createpdf:id/option_name" and text "Images to PDF".
+      - keyword: THEN
+        content: The image-to-PDF conversion screen is opened.
+  - id: REQ-1.6
+    name: Start Image Selection
+    type: ATOMIC
+    description: The app shall allow users to open the image picker from the image-to-PDF conversion screen.
+    dependencies:
+    - REQ-1.5
+    scenarios:
+    - name: Open The Image Picker
+      steps:
+      - keyword: GIVEN
+        content: The "Images to PDF" screen is open.
+      - keyword: WHEN
+        content: The user taps the button with resource-id "swati4star.createpdf:id/addImages" and text "SELECT IMAGES".
+      - keyword: THEN
+        content: The image picker is opened.
+  - id: REQ-1.7
+    name: Select Images And Apply The Selection
+    type: ATOMIC
+    description: The app shall allow users to select images in the picker and apply the selection to the PDF creation flow.
+    dependencies:
+    - REQ-1.6
+    scenarios:
+    - name: Select One Image And Apply
+      steps:
+      - keyword: GIVEN
+        content: The image picker is open.
+      - keyword: WHEN
+        content: The user toggles the checkbox with resource-id "swati4star.createpdf:id/check_view" and confirms the choice with the action button using resource-id "swati4star.createpdf:id/button_apply" and text "Apply(1)".
+      - keyword: THEN
+        content: The selected image is attached to the PDF creation flow.
+  - id: REQ-1.8
+    name: Generate A PDF From The Selected Images
+    type: ATOMIC
+    description: The app shall allow users to generate a PDF after selecting images for conversion.
+    dependencies:
+    - REQ-1.7
+    scenarios:
+    - name: Create A PDF After Image Selection
+      steps:
+      - keyword: GIVEN
+        content: At least one image has already been selected for conversion.
+      - keyword: WHEN
+        content: The user taps the create button with resource-id "swati4star.createpdf:id/pdfCreate" and text "CREATE PDF" and confirms with the positive dialog button using resource-id "swati4star.createpdf:id/md_buttonDefaultPositive" and text "OK".
+      - keyword: THEN
+        content: The app proceeds to generate a PDF from the selected images.
+- id: REQ-2
+  name: Manage Existing PDF Files
+  type: FOLDER
+  description: The app shall allow users to open the in-app file list and perform file-level actions such as opening, renaming, and sharing created PDF documents.
+  dependencies: []
+  children:
+  - id: REQ-2.1
+    name: Open The View Files List
+    type: ATOMIC
+    description: The app shall allow users to open the in-app list of created documents from the main options area.
+    dependencies:
+    - REQ-1.1
+    scenarios:
+    - name: Open The Document List From Main Options
+      steps:
+      - keyword: GIVEN
+        content: The introductory screen has been skipped and the app is at its main options area.
+      - keyword: WHEN
+        content: The user taps the entry with resource-id "swati4star.createpdf:id/option_name" and text "View Files".
+      - keyword: THEN
+        content: The in-app document list is displayed.
+  - id: REQ-2.2
+    name: Open File Actions For A Listed Document
+    type: ATOMIC
+    description: The app shall allow users to select a listed document and open its file action dialog.
+    dependencies:
+    - REQ-2.1
+    scenarios:
+    - name: Select A File And Open Its Action Dialog
+      steps:
+      - keyword: GIVEN
+        content: The in-app document list is open.
+      - keyword: WHEN
+        content: The user toggles the selection checkbox with resource-id "swati4star.createpdf:id/checkbox" and taps the file entry label with resource-id "swati4star.createpdf:id/fileName".
+      - keyword: THEN
+        content: The Material-style file action dialog is opened for the selected document.
+  - id: REQ-2.3
+    name: Open A PDF File
+    type: ATOMIC
+    description: The app shall allow users to open a listed PDF document from the file action dialog.
+    dependencies:
+    - REQ-2.2
+    scenarios:
+    - name: Open A Document From The File Action Dialog
+      steps:
+      - keyword: GIVEN
+        content: The file action dialog for a listed document is open.
+      - keyword: WHEN
+        content: The user selects the dialog item with resource-id "swati4star.createpdf:id/md_title" and text "Open File".
+      - keyword: THEN
+        content: The selected PDF is opened in a document viewer.
+  - id: REQ-2.4
+    name: Rename A PDF File
+    type: ATOMIC
+    description: The app shall allow users to rename a listed PDF document from the file action dialog.
+    dependencies:
+    - REQ-2.2
+    scenarios:
+    - name: Rename A Listed Document
+      steps:
+      - keyword: GIVEN
+        content: The document list is available after previously using the file action dialog.
+      - keyword: WHEN
+        content: The user returns to the list with the top-left navigation control rendered as class "android.widget.ImageButton", taps the same file entry again, selects the action with resource-id "swati4star.createpdf:id/md_title" and text "Rename File", enters "moutain.pdf" into the input with resource-id "android:id/input", and confirms with the positive button using resource-id "swati4star.createpdf:id/md_buttonDefaultPositive".
+      - keyword: THEN
+        content: The file name is updated to "moutain.pdf" in the list.
+  - id: REQ-2.5
+    name: Share A PDF File
+    type: ATOMIC
+    description: The app shall allow users to share a listed PDF document from the file action dialog through the Android share flow.
+    dependencies:
+    - REQ-2.2
+    scenarios:
+    - name: Share A Listed Document
+      steps:
+      - keyword: GIVEN
+        content: The document list is available after previously using the file action dialog.
+      - keyword: WHEN
+        content: The user taps the same file entry again, reopens the action dialog, and selects the action with resource-id "swati4star.createpdf:id/md_title" and text "Share File".
+      - keyword: THEN
+        content: The Android system share interface is opened for the selected document.

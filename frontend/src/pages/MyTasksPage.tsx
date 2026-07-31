@@ -1,4 +1,4 @@
-import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -11,7 +11,14 @@ function typeLabel(type: string) {
   if (type === "mobile") return "Mobile";
   if (type === "kernel") return "Kernel";
   if (type === "mixed") return "Mixed";
+  if (type === "cli") return "CLI";
   return type;
+}
+
+function taskAccentClass(type: string) {
+  if (type === "android") return "mobile";
+  if (type === "web" || type === "mobile" || type === "kernel" || type === "mixed" || type === "cli") return type;
+  return "mixed";
 }
 
 export default function MyTasksPage() {
@@ -62,11 +69,6 @@ export default function MyTasksPage() {
       <div className="competition-shell">
         <section className="competition-detail-hero">
           <div className="competition-detail-copy">
-            <div className="breadcrumb">
-              <span>Playground</span>
-              <span className="sep">/</span>
-              <span className="current">My Tasks</span>
-            </div>
             <div className="competition-type-chip large">Personal Bank</div>
             <h1>My Tasks</h1>
             <p>Task requirements that you created from the Playground authoring flow.</p>
@@ -96,37 +98,61 @@ export default function MyTasksPage() {
           {tasks.length === 0 ? (
             <div className="empty-state">No custom tasks yet.</div>
           ) : (
-            <table className="task-table">
+            <table className="task-table task-resource-table">
               <thead>
                 <tr>
-                  <th style={{ width: "180px" }}>ID</th>
+                  <th style={{ width: "220px" }}>ID</th>
                   <th>Task</th>
                   <th style={{ width: "120px" }}>Type</th>
                   <th style={{ width: "110px" }}>Nodes</th>
                   <th style={{ width: "110px" }}>Atomic</th>
                   <th style={{ width: "160px" }}>Updated</th>
+                  <th style={{ width: "52px" }}>
+                    <span className="visually-hidden">Open task</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.id} onClick={() => navigate(`/playground/my-tasks/${task.id}`)}>
-                    <td className="task-id">{task.id}</td>
-                    <td>
-                      <div className="task-name">
-                        <Link className="inline-link" to={`/playground/my-tasks/${task.id}`}>
-                          {task.title}
-                        </Link>
-                        <span className="sub">{task.summary || "No summary provided."}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="model-chip">{typeLabel(task.task_type)}</span>
-                    </td>
-                    <td>{task.node_count}</td>
-                    <td>{task.atomic_count}</td>
-                    <td>{new Date(task.updated_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
+                {tasks.map((task) => {
+                  const taskHref = `/playground/my-tasks/${task.id}`;
+
+                  return (
+                    <tr
+                      key={task.id}
+                      className={`task-resource-row ${taskAccentClass(task.task_type)}`}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigate(taskHref)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(taskHref);
+                        }
+                      }}
+                    >
+                      <td className="task-id">{task.id}</td>
+                      <td>
+                        <div className="task-name">
+                          <Link className="inline-link" to={taskHref}>
+                            {task.title}
+                          </Link>
+                          <span className="sub">{task.summary || "No summary provided."}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="model-chip">{typeLabel(task.task_type)}</span>
+                      </td>
+                      <td>{task.node_count}</td>
+                      <td>{task.atomic_count}</td>
+                      <td>{new Date(task.updated_at).toLocaleDateString()}</td>
+                      <td>
+                        <span className="task-row-action" aria-hidden="true">
+                          <RightOutlined />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

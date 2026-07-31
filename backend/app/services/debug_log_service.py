@@ -10,7 +10,7 @@ class DebugLogService:
         self.log_path = workspace_path / "execution.debug.log"
 
     def append(self, source: str, message: str) -> Path:
-        self.workspace_path.mkdir(parents=True, exist_ok=True)
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         with self.log_path.open("a", encoding="utf-8") as output:
             output.write(f"[{timestamp}] [{source}] {message}\n")

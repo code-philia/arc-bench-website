@@ -1,0 +1,18 @@
+{
+  "name": "arcbench-typescript-agent-template",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "arcbench-agent-runtime-js": "file:./arcbench-agent-runtime-js",
+    "openai": "^4.104.0",
+    "tsx": "^4.20.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "typescript": "^5.8.3"
+  }
+}

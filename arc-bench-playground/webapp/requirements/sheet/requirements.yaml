@@ -1,0 +1,670 @@
+id: ROOT
+name: Online Spreadsheet Data Workspace Core Requirements
+type: FOLDER
+dependencies: []
+description: A compact online spreadsheet application with an interface inspired by Google Sheets, focused on workbook and worksheet management, grid data editing, formula calculation, sorting and filtering, data validation, and basic pivot analysis. The workbook home page opens a workbook editor; every grid, formula-bar, row/column, filter, validation, and pivot operation runs in the context of that workbook and its active worksheet. Persist workbook metadata, worksheet IDs and order, active worksheet, each worksheet’s last selected cell, row and column structure, raw cell values/types/formulas, formula calculation state, filter configuration, validation rules, and pivot-table configuration. On refresh or reopen, load this complete state before rendering. Commit every state-changing action atomically; on failure, retain the last successfully saved state. Shared collaboration, version history restoration, complex visual styling, charts, macro scripts, real-time collaborative cursors, and external office-suite integrations are outside the core scope.
+children:
+- id: REQ-1
+  name: Workbook Access and Lifecycle
+  type: FOLDER
+  dependencies: []
+  description: Support managing workbooks in the application, including list viewing, opening, creation, renaming, and CSV import and export. Workbook identifiers, names, last-updated times, and included worksheets must be stored and cannot exist only in the frontend session.
+  children:
+  - id: REQ-1-1
+    name: Workbook Navigation
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support viewing and opening available workbooks from the home page.
+
+
+      Screenshot reference:
+
+      ![image](reference/workbook-home.png)
+    children:
+    - id: REQ-1-1-1
+      name: View and open workbooks
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user views available workbooks on the workbook home page. Each record displays at least the workbook name and last-updated time. After the user selects a record, the system reads workbook metadata, the worksheet list, and the current active worksheet from storage and enters the editing page.
+
+
+        Screenshot reference:
+
+        ![image](reference/workbook-home.png)
+      scenarios:
+      - name: Open a workbook
+        steps:
+        - keyword: GIVEN
+          content: At least one saved workbook exists.
+        - keyword: WHEN
+          content: The user selects the workbook on the home page.
+        - keyword: THEN
+          content: The system reads from storage and opens the corresponding editing page and current active worksheet.
+        - keyword: THEN
+          content: The workbook name and last-updated time shown on the page match the home-page record.
+  - id: REQ-1-2
+    name: Workbook Creation and Naming
+    type: FOLDER
+    dependencies: []
+    description: Support creating blank workbooks and changing workbook names. Creation results and name changes must be written to storage and restored after reopening.
+    children:
+    - id: REQ-1-2-1
+      name: Create a blank workbook
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user creates a blank workbook from the workbook home page. The system generates a workbook identifier, associates it with the application, creates a blank worksheet named Sheet1, records the current active worksheet and A1 selection state, and enters the editing page. The creation operation is complete only after the workbook and default worksheet are successfully written to storage. If the write fails, no incomplete workbook may be left behind.
+
+
+        Screenshot reference:
+
+        ![image](reference/create-workbook.png)
+      scenarios:
+      - name: Create and reopen a blank workbook
+        steps:
+        - keyword: GIVEN
+          content: The user is on the workbook home page.
+        - keyword: WHEN
+          content: The user performs the create blank workbook operation.
+        - keyword: THEN
+          content: The system creates a workbook associated with the application and containing Sheet1.
+        - keyword: THEN
+          content: The editing page opens Sheet1 and selects A1.
+        - keyword: THEN
+          content: After refreshing or reopening, the workbook and default worksheet still exist.
+    - id: REQ-1-2-2
+      name: Rename a workbook
+      type: ATOMIC
+      dependencies: []
+      description: A user can change the workbook name on the editing page of the workbook. After trimming leading and trailing spaces, the name must not be empty. The name must be written to storage before the editing page title and workbook home page are updated. If the write fails, the original name is retained and an error is shown. After reopening the workbook, the last successfully saved name should be displayed.
+      scenarios:
+      - name: Save a valid workbook name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook.
+        - keyword: WHEN
+          content: The user enters a non-empty name and confirms.
+        - keyword: THEN
+          content: The system writes the new name to storage, and both the editing page and workbook home page display the new name.
+        - keyword: THEN
+          content: After reopening the workbook, the new name is still displayed.
+      - name: Reject an empty workbook name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened the workbook, and the new name is empty after trimming leading and trailing spaces.
+        - keyword: WHEN
+          content: The user attempts to save the workbook name.
+        - keyword: THEN
+          content: The system rejects the change, displays that the name cannot be empty, and keeps the stored original name.
+  - id: REQ-1-3
+    name: CSV Data Exchange
+    type: FOLDER
+    dependencies: []
+    description: Support importing external CSV data completely as a persistent workbook and exporting the current active worksheet as CSV.
+    children:
+    - id: REQ-1-3-1
+      name: Import CSV to create a workbook
+      type: ATOMIC
+      dependencies: []
+      description: A user selects a CSV file from the workbook home page. The system parses data in the original row and column order, preserves empty fields, supports UTF-8 Chinese, English, and numeric text, and creates a new workbook that stores the import result in Sheet1. Workbook metadata, the Sheet1 structure, and all cells should be written to storage as one complete transaction. The first row remains ordinary data and is not automatically removed. If parsing or writing fails, no partially imported workbook may be left behind.
+      scenarios:
+      - name: Import a valid CSV
+        steps:
+        - keyword: GIVEN
+          content: A readable UTF-8 CSV file exists.
+        - keyword: WHEN
+          content: The user selects the file and confirms import.
+        - keyword: THEN
+          content: The system creates a new workbook, and the cells in Sheet1 correspond to the CSV rows and columns.
+        - keyword: THEN
+          content: Empty fields and Chinese content are still preserved after reopening.
+      - name: Reject an unparseable CSV
+        steps:
+        - keyword: GIVEN
+          content: The selected file cannot be parsed as CSV.
+        - keyword: WHEN
+          content: The user confirms import.
+        - keyword: THEN
+          content: The system displays an import failure message and does not create a partially populated workbook.
+    - id: REQ-1-3-2
+      name: Export the current worksheet as CSV
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user can export the current active worksheet of the workbook. The system generates CSV from the saved worksheet state in the actual row and column order, preserves empty cells, and correctly escapes text containing commas, quotes, or newlines. Formula cells export the current calculated result rather than the formula expression. Export is a read-only operation and must not modify the workbook in storage.
+
+
+        Screenshot reference:
+
+        ![image](reference/export-csv.png)
+      scenarios:
+      - name: Export a saved worksheet
+        steps:
+        - keyword: GIVEN
+          content: The workbook is open, and the active worksheet contains text, numbers, empty cells, and formula results.
+        - keyword: WHEN
+          content: The user performs the export CSV operation.
+        - keyword: THEN
+          content: The system generates a CSV file consistent with the active worksheet’s row and column order.
+        - keyword: THEN
+          content: Formula cells write the current results, and the original data remains unchanged after reopening the workbook.
+- id: REQ-2
+  name: Worksheets and Grid Structure
+  type: FOLDER
+  dependencies: []
+  description: Support managing multiple worksheets in one workbook and adjusting row and column structure. Worksheet names, order, active state, row and column structure, and associated data must be persisted as part of the workbook data.
+  children:
+  - id: REQ-2-1
+    name: Worksheet Lifecycle
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support creating, switching, renaming, and deleting worksheets, and ensure that data in each worksheet remains independent and is preserved after reopening.
+
+
+      Screenshot reference:
+
+      ![image](reference/worksheet-lifecycle.png)
+    children:
+    - id: REQ-2-1-1
+      name: Add a worksheet
+      type: ATOMIC
+      dependencies: []
+      description: A user adds a worksheet from the worksheet tab bar. The system creates a blank worksheet, generates a non-duplicate default name such as Sheet2, updates the worksheet list and current active worksheet, and writes them to storage. Creation is shown as complete only after the write succeeds. Existing worksheets and their data must not change.
+      scenarios:
+      - name: Create and persist a new worksheet
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook.
+        - keyword: WHEN
+          content: The user clicks add worksheet.
+        - keyword: THEN
+          content: The system adds a blank worksheet with a unique name, writes it to storage, and activates it.
+        - keyword: THEN
+          content: After reopening the workbook, the worksheet still exists.
+    - id: REQ-2-1-2
+      name: Switch worksheets
+      type: ATOMIC
+      dependencies: []
+      description: After the user clicks another worksheet tab, the system reads the target worksheet's saved grid data, row and column structure, and formulas, then switches the grid, selected cell, and formula bar. The switching process must not modify the data of the previous active worksheet. When returning to the previous worksheet, its last successfully saved state should be restored. The current active worksheet identifier should also be recorded.
+      scenarios:
+      - name: Preserve each worksheet’s data after switching
+        steps:
+        - keyword: GIVEN
+          content: The workbook has at least two worksheets, and the current worksheet has saved data.
+        - keyword: WHEN
+          content: The user switches to another worksheet and then returns to the original worksheet.
+        - keyword: THEN
+          content: Each tab displays its own data.
+        - keyword: THEN
+          content: After returning to the original worksheet, its original data remains unchanged.
+    - id: REQ-2-1-3
+      name: Rename a worksheet
+      type: ATOMIC
+      dependencies: []
+      description: A user changes the name from the worksheet tab menu. After trimming leading and trailing spaces, the new name must not be empty and must be unique within the same workbook. The system updates the tab after writing the new name to storage. If writing fails, the name is duplicated, or the name is empty, the original name is retained. After reopening, the last successfully saved name should be displayed.
+      scenarios:
+      - name: Save a unique worksheet name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook, and the target name is not used by another worksheet.
+        - keyword: WHEN
+          content: The user submits the new name.
+        - keyword: THEN
+          content: The system saves the name and updates the tab. After reopening the workbook, the name remains.
+      - name: Reject a duplicate worksheet name
+        steps:
+        - keyword: GIVEN
+          content: Another worksheet in the same workbook already uses the target name.
+        - keyword: WHEN
+          content: The user attempts to rename the current worksheet to that name.
+        - keyword: THEN
+          content: The system displays a duplicate-name message and keeps the original name.
+    - id: REQ-2-1-4
+      name: Delete a worksheet
+      type: ATOMIC
+      dependencies:
+      - REQ-5-3
+      description: A user deletes a worksheet after confirmation. The system deletes the worksheet's metadata, row and column structure, cells, formulas, and associated rules from storage, updates the worksheet list, and activates an adjacent worksheet. A workbook must always keep at least one worksheet, so deletion should be rejected when only one worksheet remains. If deletion fails, the page must not pretend that deletion succeeded. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes.
+      scenarios:
+      - name: Delete the current worksheet from a multi-sheet workbook
+        steps:
+        - keyword: GIVEN
+          content: The workbook contains at least two worksheets.
+        - keyword: WHEN
+          content: The user confirms deletion of the current worksheet.
+        - keyword: THEN
+          content: The system deletes the worksheet and its data from storage and activates another worksheet.
+        - keyword: THEN
+          content: After reopening, the deleted worksheet still does not exist.
+      - name: Reject deleting the last worksheet
+        steps:
+        - keyword: GIVEN
+          content: The workbook has only one worksheet remaining.
+        - keyword: WHEN
+          content: The user attempts to delete the worksheet.
+        - keyword: THEN
+          content: The system rejects deletion and keeps the worksheet.
+  - id: REQ-2-2
+    name: Row and Column Structure Management
+    type: FOLDER
+    dependencies: []
+    description: Support inserting and deleting rows and columns, and consistently write the changed structure, cell positions, formula references, and validation rules to storage.
+    children:
+    - id: REQ-2-2-1
+      name: Insert and delete rows
+      type: ATOMIC
+      dependencies:
+      - REQ-5-3
+      description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes.
+        A user inserts a blank row above or below a target row through the row-number menu, or deletes the target row. On insertion, affected rows shift down as a whole. On deletion, subsequent rows shift up as a whole. The system must save the new row order, cell positions, formula references, and validation rules in one data update. If writing fails, the original structure is restored; the frontend display must not be moved alone.
+
+
+        Screenshot reference:
+
+        ![image](reference/manage-rows.png)
+      scenarios:
+      - name: Insert a row and preserve data
+        steps:
+        - keyword: GIVEN
+          content: The user is signed in and has opened the target worksheet, and consecutive rows already contain data.
+        - keyword: WHEN
+          content: The user inserts a row above the target row.
+        - keyword: THEN
+          content: A blank row appears at the target position, existing rows shift down as a whole, and no data is lost.
+      - name: Delete a row and reopen
+        steps:
+        - keyword: GIVEN
+          content: The user is signed in and has opened the target worksheet.
+        - keyword: WHEN
+          content: The user deletes the target row and reopens the workbook.
+        - keyword: THEN
+          content: The target row remains deleted, and subsequent rows are displayed in the new order.
+    - id: REQ-2-2-2
+      name: Insert and delete columns
+      type: ATOMIC
+      dependencies:
+      - REQ-5-3
+      description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes.
+        A user inserts a blank column to the left or right of a target column through the column-header menu, or deletes the target column. On insertion, affected columns shift right as a whole. On deletion, subsequent columns shift left as a whole. The new column order, cell positions, and formula references must be written to storage consistently. Data outside the deleted column must not be lost. Formulas depending on that column should be updated according to a uniform rule or saved as recognizable reference errors.
+
+
+        Screenshot reference:
+
+        ![image](reference/manage-columns.png)
+      scenarios:
+      - name: Insert a column and preserve data
+        steps:
+        - keyword: GIVEN
+          content: The user is signed in and has opened the target worksheet, and consecutive columns already contain data.
+        - keyword: WHEN
+          content: The user inserts a column next to the target column.
+        - keyword: THEN
+          content: A blank column appears at the target position, existing columns shift as a whole, and values are preserved.
+      - name: Delete a column referenced by formulas
+        steps:
+        - keyword: GIVEN
+          content: The worksheet contains formulas referencing the target column.
+        - keyword: WHEN
+          content: The user deletes the target column.
+        - keyword: THEN
+          content: The target column is deleted, and related formulas are adjusted according to a uniform rule or display a clear reference error.
+- id: REQ-3
+  name: Cell and Range Editing
+  type: FOLDER
+  dependencies: []
+  description: Support data entry in cells and contiguous ranges, bulk paste, copy and cut, and undo and redo. Every successfully submitted data change must be written atomically to storage. If writing fails, an error should be shown and the most recent successfully saved state should be retained.
+  children:
+  - id: REQ-3-1
+    name: Direct Data Entry
+    type: FOLDER
+    dependencies: []
+    description: Support entering data through the grid, formula bar, or external clipboard, and save the raw cell content and its type.
+    children:
+    - id: REQ-3-1-1
+      name: Edit cells through the grid or formula bar
+      type: ATOMIC
+      dependencies:
+      - REQ-4-2-1
+      description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-2-1 (Recalculate dependent formulas after source data changes); it must reuse that context and remain consistent when the prerequisite state changes.
+        After selecting a cell, a user can directly change its raw content in the grid or formula bar. Cells support text, numbers, boolean-like values, date text, and formulas beginning with an equals sign. When the user presses Enter or clicks another cell to commit, the system saves the cell coordinate, raw content, and content type. Pressing Escape cancels uncommitted changes. Formula cells display calculated results in the grid and the stored original formula in the formula bar. If storage fails, the previous saved value is retained and an error is shown.
+
+
+        Screenshot reference:
+
+        ![image](reference/edit-cell.png)
+      scenarios:
+      - name: Commit a cell edit
+        steps:
+        - keyword: GIVEN
+          content: The user is signed in, has opened the target worksheet, and the target cell is selected.
+        - keyword: WHEN
+          content: The user enters new content and commits it.
+        - keyword: THEN
+          content: The system saves the new content, and the grid and formula bar display the committed result according to the content type.
+        - keyword: THEN
+          content: After reopening the workbook, the content still exists.
+      - name: Cancel an uncommitted edit
+        steps:
+        - keyword: GIVEN
+          content: The cell is being edited and has not yet been committed.
+        - keyword: WHEN
+          content: The user presses Escape.
+        - keyword: THEN
+          content: The system restores the content from before editing and does not save the new value.
+    - id: REQ-3-1-2
+      name: Paste two-dimensional tabular data
+      type: ATOMIC
+      dependencies: []
+      description: A user pastes text containing tab-separated columns and newline-separated rows into a starting cell. The system parses the complete rectangle, preserves empty fields, only overwrites cells inside the target rectangle, and writes all target values to storage as one atomic operation. If the target exceeds the existing grid, the system should expand and save the row and column structure or explicitly reject before writing. It must not silently discard some values.
+      scenarios:
+      - name: Paste a rectangular data range
+        steps:
+        - keyword: GIVEN
+          content: The user is signed in and has opened the target worksheet, and the clipboard contains two-dimensional tabular text.
+        - keyword: WHEN
+          content: The user selects the starting cell and pastes.
+        - keyword: THEN
+          content: The system saves all target cells at once, with each value written to the corresponding position.
+        - keyword: THEN
+          content: Data outside the rectangular range remains unchanged, and the pasted result remains after reopening.
+  - id: REQ-3-2
+    name: Range Transfer and Operation Recovery
+    type: FOLDER
+    dependencies: []
+    description: Support transferring data between ranges and changing the current workbook state through undo and redo. The final state must be synchronized to storage.
+    children:
+    - id: REQ-3-2-1
+      name: Copy, cut, and paste cell ranges
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user selects a contiguous rectangular range, performs copy or cut, and then selects a target location to paste. After copying, the source range remains unchanged. For cut, the source range is cleared only after the entire target range is successfully written. Values and formulas preserve their original two-dimensional layout. When formulas are copied, relative references are adjusted according to the target offset. The source range, target range, and adjusted formulas must be saved as one consistent state, and cells outside the ranges must not change.
+
+
+        Screenshot reference:
+
+        ![image](reference/copy-paste-range.png)
+      scenarios:
+      - name: Copy a range and adjust formulas
+        steps:
+        - keyword: GIVEN
+          content: The worksheet has a contiguous selection and an available target range.
+        - keyword: WHEN
+          content: The user copies the selection and pastes it to the target location.
+        - keyword: THEN
+          content: The target range receives content with the same layout, and the source range remains unchanged.
+        - keyword: THEN
+          content: Relative references in formulas are adjusted according to the target location.
+        - keyword: THEN
+          content: After reopening the workbook, the source and target ranges keep the saved state after copying.
+      - name: Cut a range and clear the source range
+        steps:
+        - keyword: GIVEN
+          content: The worksheet has a contiguous selection and an available target range.
+        - keyword: WHEN
+          content: The user cuts the selection and pastes it successfully.
+        - keyword: THEN
+          content: The target range receives the original content, and the system saves the target range and clears the source range.
+    - id: REQ-3-2-2
+      name: Undo and redo recent operations
+      type: ATOMIC
+      dependencies: []
+      description: A user can undo recent cell edits, bulk pastes, range moves, and row or column structure changes in the current workbook session. Consecutive undos restore states in reverse order. Redo reapplies the operation that was just undone. The current data state produced after each undo or redo should be written to storage so that it remains after refresh. When a new change is made after undo, the original redo branch is cleared.
+      scenarios:
+      - name: Undo and redo a change
+        steps:
+        - keyword: GIVEN
+          content: The user has just completed a cell, range, or structure change.
+        - keyword: WHEN
+          content: The user performs undo and then redo.
+        - keyword: THEN
+          content: Undo restores the state before the change.
+        - keyword: THEN
+          content: Redo reapplies the same change, saves the result, and preserves it after refresh.
+      - name: A new change after undo clears the redo branch
+        steps:
+        - keyword: GIVEN
+          content: The user has undone an operation, and a redo record currently exists.
+        - keyword: WHEN
+          content: The user performs a different new change.
+        - keyword: THEN
+          content: The new change is saved, and the original redo record can no longer restore the old branch.
+- id: REQ-4
+  name: Formula Calculation
+  type: FOLDER
+  dependencies: []
+  description: Support basic formula calculation, relative references, dependency recalculation, and error handling. Raw formula expressions must be persisted. When reopening a workbook, the system should restore or recalculate results based on stored source data and must not rely on results that exist only in frontend memory.
+  children:
+  - id: REQ-4-1
+    name: Formula Entry and Functions
+    type: FOLDER
+    dependencies:
+    - REQ-3-1-1
+    - REQ-3-2-1
+    description: Support entering basic expressions and aggregate functions, and save adjusted independent formula expressions when formulas are copied. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar), REQ-3-2-1 (Copy, cut, and paste cell ranges); it must reuse that context and remain consistent when the prerequisite state changes.
+    children:
+    - id: REQ-4-1-1
+      name: Calculate basic expressions and aggregate functions
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar); it must reuse that context and remain consistent when the prerequisite state changes.
+        A user enters a formula beginning with an equals sign. The formula engine supports at least numeric constants, parentheses, addition, subtraction, multiplication, division, cell references, and SUM, AVERAGE, COUNT, MIN, and MAX over contiguous ranges. The system saves the raw formula expression, the grid displays the result calculated from current source data, and the formula bar displays the original expression. Function names are case-insensitive, and empty cells are handled according to a uniform rule.
+
+
+        Screenshot reference:
+
+        ![image](reference/basic-formulas.png)
+      scenarios:
+      - name: Calculate an arithmetic expression
+        steps:
+        - keyword: GIVEN
+          content: A1 and B1 contain numbers.
+        - keyword: WHEN
+          content: The user enters =(A1+B1)*2 in another cell.
+        - keyword: THEN
+          content: The formula cell displays the correct result, and the formula bar displays the original expression.
+        - keyword: THEN
+          content: After reopening the workbook, the formula bar still displays the original expression and the grid result is correct.
+      - name: Calculate a SUM range function
+        steps:
+        - keyword: GIVEN
+          content: B2 through B10 contain numbers and empty cells.
+        - keyword: WHEN
+          content: The user enters =SUM(B2:B10).
+        - keyword: THEN
+          content: The formula cell displays the sum of all numbers, and empty cells do not cause calculation failure.
+    - id: REQ-4-1-2
+      name: Copy formulas and adjust relative references
+      type: ATOMIC
+      dependencies:
+      - REQ-3-2-1
+      - REQ-4-2-2
+      description: When a formula cell is copied to another location, relative row and column references should change according to the offset between the target location and source location. For example, after copying =A1+B1 from C1 to C2, the target formula should be =A2+B2. The system writes the adjusted target formula to storage as an independent expression, keeps the source formula unchanged, and calculates the target result from the new references. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-2-1 (Copy, cut, and paste cell ranges), REQ-4-2-2 (Display and fix formula errors); it must reuse that context and remain consistent when the prerequisite state changes.
+      scenarios:
+      - name: Copy a formula to the next row
+        steps:
+        - keyword: GIVEN
+          content: C1 is =A1+B1, and A2 and B2 contain numbers.
+        - keyword: WHEN
+          content: The user copies C1 and pastes it to C2.
+        - keyword: THEN
+          content: C2 saves =A2+B2 and displays the calculation result for the second row.
+        - keyword: THEN
+          content: The formula and result in C1 remain unchanged.
+        - keyword: THEN
+          content: After reopening the workbook, C1 and C2 still save their respective formula expressions.
+  - id: REQ-4-2
+    name: Dependency Updates and Error Handling
+    type: FOLDER
+    dependencies:
+    - REQ-2
+    - REQ-3
+    description: Support recalculating dependencies after source data changes and isolating formula errors, while ensuring that formulas in storage and redisplayed results remain consistent. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2 (Worksheets and Grid Structure), REQ-3 (Cell and Range Editing); it must reuse that context and remain consistent when the prerequisite state changes.
+    children:
+    - id: REQ-4-2-1
+      name: Recalculate dependent formulas after source data changes
+      type: ATOMIC
+      dependencies:
+      - REQ-2
+      - REQ-3
+      description: The system tracks dependencies between formula cells and referenced cells. After a source value change is committed, all directly and indirectly dependent formulas must be recalculated in dependency order, and the source value, formula expressions, and consistent calculation state must be saved together. When reopening a workbook, results should be restored or recalculated based on the currently stored source values; stale cached results must not be displayed long term. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2 (Worksheets and Grid Structure), REQ-3 (Cell and Range Editing); it must reuse that context and remain consistent when the prerequisite state changes.
+      scenarios:
+      - name: Update chained dependent formulas
+        steps:
+        - keyword: GIVEN
+          content: A1 is 10, B1 is =A1*2, and C1 is =B1+5.
+        - keyword: WHEN
+          content: The user changes A1 to 20 and commits it.
+        - keyword: THEN
+          content: B1 updates to 40, and C1 updates to 45.
+        - keyword: THEN
+          content: After reopening the workbook, the updated results are still displayed.
+    - id: REQ-4-2-2
+      name: Display and fix formula errors
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      description: The formula engine displays stable and recognizable error values for division by zero, invalid references, unsupported functions, malformed expressions, and direct or indirect circular references. The system saves the raw formula submitted by the user and its error state. A single error must not affect other cells. After the user changes the formula to a valid expression, the system saves the new formula, recalculates, and removes the error state. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar); it must reuse that context and remain consistent when the prerequisite state changes.
+      scenarios:
+      - name: Display formula errors
+        steps:
+        - keyword: GIVEN
+          content: The worksheet is editable, and the target cell allows formula input.
+        - keyword: WHEN
+          content: The user enters an invalid formula such as division by zero or a circular reference.
+        - keyword: THEN
+          content: The target cell displays a recognizable error, and other cells can still be viewed and edited normally.
+      - name: Fix an erroneous formula
+        steps:
+        - keyword: GIVEN
+          content: The formula cell currently displays an error.
+        - keyword: WHEN
+          content: The user changes it to a valid expression.
+        - keyword: THEN
+          content: The error state is removed, and the cell displays the new calculated result.
+- id: REQ-5
+  name: Data Organization and Analysis
+  type: FOLDER
+  dependencies: []
+  description: Support data sorting, filtering, validation, and pivot summaries. Sorted row order, filter conditions, validation rules, pivot table source ranges, and configuration must be persisted. After reopening, the same data organization and analysis state should be restored.
+  children:
+  - id: REQ-5-1
+    name: Sorting and Filtering
+    type: FOLDER
+    dependencies: []
+    description: Support sorting by column and filtering by value or condition, and store the sort result and current filter configuration.
+    children:
+    - id: REQ-5-1-1
+      name: Sort a data range by a specified column
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user selects a rectangular data range and specifies one column for ascending or descending sort. The user may declare that the first row is a header. The system compares numbers, dates, and text according to their respective rules and moves complete rows as a whole, avoiding column misalignment within the same record. The sorted row order and cell positions must be written to storage, and data outside the selection must not change.
+
+
+        Screenshot reference:
+
+        ![image](reference/sort-range.png)
+      scenarios:
+      - name: Sort by sales amount descending
+        steps:
+        - keyword: GIVEN
+          content: The selection contains a header row and multiple records with numeric sales amounts.
+        - keyword: WHEN
+          content: The user selects the sales amount column for descending sort and declares the first row as a header.
+        - keyword: THEN
+          content: The header remains in the first row, and complete records are sorted by sales amount from high to low.
+        - keyword: THEN
+          content: Data outside the selection remains unchanged.
+        - keyword: THEN
+          content: After reopening the workbook, records are still ordered according to the saved order.
+    - id: REQ-5-1-2
+      name: Filter rows by value or condition
+      type: ATOMIC
+      dependencies:
+      - REQ-5-3
+      description: A user creates filters for a data range that contains headers. Column filters support at least selecting specific values, text contains, numeric comparison, date comparison, blank, and non-blank conditions. Conditions from different columns are combined with AND. Non-matching rows are hidden, not deleted. The system saves the filter range, each column condition, and enabled state. After reopening, the filtered view is restored. Clearing filters only deletes the configuration and does not modify source data. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes.
+      scenarios:
+      - name: Combine multiple filter conditions
+        steps:
+        - keyword: GIVEN
+          content: The data range contains headers such as region, sales amount, and status.
+        - keyword: WHEN
+          content: The user filters region to East China and sales amount greater than 1000.
+        - keyword: THEN
+          content: The system saves the filter configuration, shows only rows satisfying both conditions, and leaves the total source data unchanged.
+        - keyword: THEN
+          content: After reopening the workbook, the same filter conditions are still applied.
+        - keyword: THEN
+          content: After clearing filters, all source records are restored and values remain unchanged.
+  - id: REQ-5-2
+    name: Data Validation
+    type: FOLDER
+    dependencies:
+    - REQ-3-1-1
+    - REQ-3-1-2
+    - REQ-3-2-1
+    description: Support configuring dropdown or numeric validation for cell ranges, and persist rules, scopes, and valid cell values. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar), REQ-3-1-2 (Paste two-dimensional tabular data), REQ-3-2-1 (Copy, cut, and paste cell ranges); it must reuse that context and remain consistent when the prerequisite state changes.
+    children:
+    - id: REQ-5-2-1
+      name: Set dropdown or numeric validation for a range
+      type: ATOMIC
+      dependencies: []
+      description: A user selects a target range and creates a dropdown-list rule or numeric upper/lower-bound rule. The system saves the rule type, parameters, and scope. Dropdown cells provide a selection entry point and save the selected text. Numeric cells accept only numbers that satisfy the range. Invalid input should be blocked or clearly marked. After reopening, the rule continues to apply. When a rule is modified or deleted, storage is updated, but existing cell values must not be automatically deleted.
+      scenarios:
+      - name: Save a dropdown validation rule
+        steps:
+        - keyword: GIVEN
+          content: The target range is editable, with allowed values Not Started, In Progress, and Completed.
+        - keyword: WHEN
+          content: The user selects In Progress in one target cell.
+        - keyword: THEN
+          content: The cell saves In Progress, and other target cells still have independent dropdown entry points.
+      - name: Handle invalid numeric input
+        steps:
+        - keyword: GIVEN
+          content: The target cell is configured with a numeric rule from 0 to 100.
+        - keyword: WHEN
+          content: The user attempts to submit 120.
+        - keyword: THEN
+          content: The system blocks or marks the value according to a uniform policy and explains the allowed range.
+  - id: REQ-5-3
+    name: Basic Pivot Summaries
+    type: FOLDER
+    dependencies:
+    - REQ-2-1-1
+    description: Support creating basic pivot tables and saving the source range, field selections, aggregation method, and generated result. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-1 (Add a worksheet); it must reuse that context and remain consistent when the prerequisite state changes.
+    children:
+    - id: REQ-5-3-1
+      name: Create and refresh a basic pivot table
+      type: ATOMIC
+      dependencies:
+      - REQ-2-2
+      description: A user selects a source data range with headers and creates a pivot table in a new worksheet. Configuration supports at least one row field, one optional column field, one value field, and SUM, COUNT, or AVERAGE aggregation. The system saves the source range, field configuration, aggregation method, and pivot result. After source data changes, the user can refresh and overwrite the saved result. If the source range is invalid, an error is shown and the source worksheet must not be modified. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-2 (Row and Column Structure Management); it must reuse that context and remain consistent when the prerequisite state changes.
+      scenarios:
+      - name: Summarize sales amount by region
+        steps:
+        - keyword: GIVEN
+          content: The source range contains region and sales amount fields and multiple records.
+        - keyword: WHEN
+          content: The user uses region as the row field, sales amount as the value field, and selects SUM.
+        - keyword: THEN
+          content: The system generates the correct total sales amount for each region in a new worksheet.
+        - keyword: THEN
+          content: The source worksheet remains unchanged.
+      - name: Refresh an existing pivot table
+        steps:
+        - keyword: GIVEN
+          content: The pivot table already exists, and source records have been modified.
+        - keyword: WHEN
+          content: The user performs refresh.
+        - keyword: THEN
+          content: The system recalculates the summary based on current source data, and the result remains after reopening.

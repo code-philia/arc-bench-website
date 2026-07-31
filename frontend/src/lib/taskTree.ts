@@ -30,7 +30,11 @@ function isRecord(value: unknown): value is UnknownRecord {
 }
 
 function quoteYaml(value: string): string {
-  const escaped = value.replaceAll("\\", "\\\\").replaceAll("'", "''");
+  const escaped = value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\n", "\\n")
+    .replaceAll("'", "''");
   return `'${escaped}'`;
 }
 
@@ -55,12 +59,56 @@ function parseScalar(raw: string): unknown {
     return Number(value);
   }
   if (value.startsWith("'") && value.endsWith("'")) {
-    return value.slice(1, -1).replaceAll("''", "'").replaceAll("\\\\", "\\");
+    return value
+      .slice(1, -1)
+      .replaceAll("''", "'")
+      .replaceAll("\\n", "\n")
+      .replaceAll("\\\\", "\\");
   }
   if (value.startsWith('"') && value.endsWith('"')) {
     return value.slice(1, -1);
   }
   return value;
+}
+
+function isBlockScalarIndicator(value: string): boolean {
+  return /^[>|][+-]?$/.test(value.trim());
+}
+
+function collectBlockScalar(
+  tokens: LineToken[],
+  startIndex: number,
+  parentIndent: number,
+  indicator: string,
+): [string, number] {
+  const lines: string[] = [];
+  let index = startIndex;
+
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token.indent <= parentIndent) {
+      break;
+    }
+    lines.push(token.text);
+    index += 1;
+  }
+
+  const normalizedIndicator = indicator.trim();
+  const isFolded = normalizedIndicator.startsWith(">");
+  const chompStrip = normalizedIndicator.endsWith("-");
+
+  let content = "";
+  if (isFolded) {
+    content = lines.join(" ").replace(/\s+/g, " ").trim();
+  } else {
+    content = lines.join("\n");
+  }
+
+  if (!chompStrip && content) {
+    content += "\n";
+  }
+
+  return [content, index];
 }
 
 function tokenizeYaml(input: string): LineToken[] {
@@ -116,14 +164,23 @@ function parseObject(tokens: LineToken[], startIndex: number, indent: number): [
     const rawValue = token.text.slice(separator + 1).trim();
 
     if (!rawValue) {
-      if (index + 1 < tokens.length && tokens[index + 1].indent > indent) {
-        const [nested, nextIndex] = parseBlock(tokens, index + 1, tokens[index + 1].indent);
+      const nextToken = tokens[index + 1];
+      const isIndentlessArray = nextToken?.indent === indent && nextToken.text.startsWith("- ");
+      if (nextToken && (nextToken.indent > indent || isIndentlessArray)) {
+        const [nested, nextIndex] = parseBlock(tokens, index + 1, nextToken.indent);
         result[key] = nested;
         index = nextIndex;
         continue;
       }
       result[key] = {};
       index += 1;
+      continue;
+    }
+
+    if (isBlockScalarIndicator(rawValue)) {
+      const [blockValue, nextIndex] = collectBlockScalar(tokens, index + 1, indent, rawValue);
+      result[key] = blockValue;
+      index = nextIndex;
       continue;
     }
 
@@ -165,8 +222,14 @@ function parseArray(tokens: LineToken[], startIndex: number, indent: number): [u
       const key = rest.slice(0, separator).trim();
       const rawValue = rest.slice(separator + 1).trim();
       const item: UnknownRecord = {};
-      item[key] = rawValue ? parseScalar(rawValue) : "";
-      index += 1;
+      if (rawValue && isBlockScalarIndicator(rawValue)) {
+        const [blockValue, nextIndex] = collectBlockScalar(tokens, index + 1, indent, rawValue);
+        item[key] = blockValue;
+        index = nextIndex;
+      } else {
+        item[key] = rawValue ? parseScalar(rawValue) : "";
+        index += 1;
+      }
 
       while (index < tokens.length) {
         const next = tokens[index];
@@ -420,7 +483,7 @@ export function requirementMarkdownToTree(markdown: string): RequirementNode {
   nodeMap.set(root.id, root);
 
   type Section = {
-    level: 2 | 3;
+    level: number;
     id: string;
     name: string;
     body: string[];
@@ -433,13 +496,13 @@ export function requirementMarkdownToTree(markdown: string): RequirementNode {
     if (line.startsWith("# ")) {
       continue;
     }
-    const sectionMatch = /^(##|###)\s+(REQ-[^\s]+)\s+(.+)$/.exec(line.trim());
+    const sectionMatch = /^(#{2,6})\s+(REQ-[^\s]+)\s+(.+)$/.exec(line.trim());
     if (sectionMatch) {
       if (currentSection) {
         sections.push(currentSection);
       }
       currentSection = {
-        level: sectionMatch[1].length as 2 | 3,
+        level: sectionMatch[1].length,
         id: sectionMatch[2].trim(),
         name: sectionMatch[3].trim(),
         body: [],
@@ -487,55 +550,53 @@ export function requirementMarkdownToTree(markdown: string): RequirementNode {
 
 function renderScenarioYaml(scenario: RequirementScenario, indent: number): string[] {
   const pad = " ".repeat(indent);
+  const nestedPad = " ".repeat(indent + 2);
   const lines = [`${pad}- name: ${quoteYaml(scenario.name)}`];
   if (scenario.steps.length === 0) {
-    lines.push(`${pad}  steps: []`);
+    lines.push(`${nestedPad}steps: []`);
     return lines;
   }
-  lines.push(`${pad}  steps:`);
+  lines.push(`${nestedPad}steps:`);
   scenario.steps.forEach((step) => {
-    lines.push(`${pad}    - keyword: ${step.keyword}`);
-    lines.push(`${pad}      content: ${quoteYaml(step.content)}`);
+    lines.push(`${nestedPad}  - keyword: ${step.keyword}`);
+    lines.push(`${nestedPad}    content: ${quoteYaml(step.content)}`);
   });
   return lines;
 }
 
-function renderNodeYaml(node: RequirementNode, indent: number): string[] {
+function renderNodeYaml(node: RequirementNode, indent: number, asListItem = false): string[] {
   const pad = " ".repeat(indent);
+  const fieldIndent = indent + (asListItem ? 2 : 0);
+  const fieldPad = " ".repeat(fieldIndent);
   const lines = [
-    `${pad}id: ${node.id}`,
-    `${pad}name: ${quoteYaml(node.name)}`,
-    `${pad}type: ${node.type}`,
-    `${pad}description: ${quoteYaml(node.description)}`,
-    `${pad}dependencies: ${node.dependencies.length === 0 ? "[]" : ""}`,
+    asListItem ? `${pad}- id: ${node.id}` : `${pad}id: ${node.id}`,
+    `${fieldPad}name: ${quoteYaml(node.name)}`,
+    `${fieldPad}type: ${node.type}`,
+    `${fieldPad}description: ${quoteYaml(node.description)}`,
   ];
 
-  if (node.dependencies.length > 0) {
+  if (node.dependencies.length === 0) {
+    lines.push(`${fieldPad}dependencies: []`);
+  } else {
+    lines.push(`${fieldPad}dependencies:`);
     node.dependencies.forEach((dependency) => {
-      lines.push(`${pad}  - ${dependency}`);
+      lines.push(`${fieldPad}  - ${quoteYaml(dependency)}`);
     });
   }
 
   if (node.children.length > 0) {
-    lines.push(`${pad}children:`);
+    lines.push(`${fieldPad}children:`);
     node.children.forEach((child) => {
-      const childLines = renderNodeYaml(child, indent + 2);
-      childLines.forEach((line, index) => {
-        if (index === 0) {
-          lines.push(`${pad}  - ${line.trimStart()}`);
-        } else {
-          lines.push(`${pad}    ${line.trimStart()}`);
-        }
-      });
+      lines.push(...renderNodeYaml(child, fieldIndent + 2, true));
     });
   } else if (node.type === "FOLDER") {
-    lines.push(`${pad}children: []`);
+    lines.push(`${fieldPad}children: []`);
   }
 
   if (node.scenarios.length > 0) {
-    lines.push(`${pad}scenarios:`);
+    lines.push(`${fieldPad}scenarios:`);
     node.scenarios.forEach((scenario) => {
-      lines.push(...renderScenarioYaml(scenario, indent + 2));
+      lines.push(...renderScenarioYaml(scenario, fieldIndent + 2));
     });
   }
 
@@ -551,8 +612,8 @@ type MarkdownSection = {
   body: string[];
 };
 
-function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[]) {
-  const title = `## ${node.id} ${node.name}`;
+function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[], depth: number) {
+  const title = `${"#".repeat(Math.min(depth + 2, 6))} ${node.id} ${node.name}`;
   const body: string[] = [];
 
   if (node.description) {
@@ -578,7 +639,7 @@ function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[
   }
 
   sections.push({ heading: title, body });
-  node.children.forEach((child) => buildMarkdownSections(child, sections));
+  node.children.forEach((child) => buildMarkdownSections(child, sections, depth + 1));
 }
 
 function flattenChapterList(nodes: RequirementNode[], depth: number): string[] {
@@ -590,7 +651,7 @@ function flattenChapterList(nodes: RequirementNode[], depth: number): string[] {
 
 export function taskTreeToMarkdown(root: RequirementNode): string {
   const sections: MarkdownSection[] = [];
-  buildMarkdownSections(root, sections);
+  root.children.forEach((child) => buildMarkdownSections(child, sections, 0));
 
   const intro = [
     `# ${root.name}`,
@@ -617,6 +678,18 @@ export function findNodeById(root: RequirementNode, nodeId: string): Requirement
     }
   }
   return null;
+}
+
+export function cloneRequirementTree(node: RequirementNode): RequirementNode {
+  return {
+    ...node,
+    dependencies: [...node.dependencies],
+    children: node.children.map(cloneRequirementTree),
+    scenarios: node.scenarios.map((scenario) => ({
+      ...scenario,
+      steps: scenario.steps.map((step) => ({ ...step })),
+    })),
+  };
 }
 
 export function updateNodeInTree(
@@ -665,11 +738,45 @@ export function appendSiblingNode(root: RequirementNode, nodeId: string, sibling
   };
 }
 
-export function nextChildId(parent: RequirementNode): string {
-  if (parent.id === "ROOT") {
-    return `REQ-${parent.children.length + 1}`;
+export function findParentNode(root: RequirementNode, nodeId: string): RequirementNode | null {
+  if (root.children.some((child) => child.id === nodeId)) {
+    return root;
   }
-  return `${parent.id}.${parent.children.length + 1}`;
+  for (const child of root.children) {
+    const match = findParentNode(child, nodeId);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+function nextChildIndex(parent: RequirementNode): number {
+  const prefix = parent.id === "ROOT" ? "REQ-" : `${parent.id}.`;
+  let maxIndex = 0;
+
+  parent.children.forEach((child) => {
+    if (!child.id.startsWith(prefix)) {
+      return;
+    }
+
+    const suffix = child.id.slice(prefix.length);
+    if (!/^\d+$/.test(suffix)) {
+      return;
+    }
+
+    maxIndex = Math.max(maxIndex, Number(suffix));
+  });
+
+  return maxIndex + 1;
+}
+
+export function nextChildId(parent: RequirementNode): string {
+  const nextIndex = nextChildIndex(parent);
+  if (parent.id === "ROOT") {
+    return `REQ-${nextIndex}`;
+  }
+  return `${parent.id}.${nextIndex}`;
 }
 
 export function buildNewChildNode(parent: RequirementNode): RequirementNode {
@@ -682,6 +789,161 @@ export function buildNewChildNode(parent: RequirementNode): RequirementNode {
     dependencies: [],
     children: [],
     scenarios: [{ name: "New scenario", steps: [] }],
+  };
+}
+
+export type ReindexedTaskTreeResult = {
+  tree: RequirementNode;
+  idMap: Record<string, string>;
+};
+
+type DescriptionOutlineNode = {
+  name: string;
+  description: string;
+  children: DescriptionOutlineNode[];
+};
+
+function trimBlankLines(lines: string[]): string[] {
+  const next = [...lines];
+  while (next.length > 0 && !next[0].trim()) {
+    next.shift();
+  }
+  while (next.length > 0 && !next[next.length - 1].trim()) {
+    next.pop();
+  }
+  return next;
+}
+
+function parseDescriptionOutline(description: string): {
+  rootDescription: string;
+  children: DescriptionOutlineNode[];
+} | null {
+  const normalized = description.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const headingMatches = lines
+    .map((line) => /^(#{1,6})\s+(.+?)\s*$/.exec(line))
+    .filter((match): match is RegExpExecArray => Boolean(match));
+
+  if (headingMatches.length === 0) {
+    return null;
+  }
+
+  const highestLevel = headingMatches.reduce((min, match) => Math.min(min, match[1].length), 6);
+  const rootLines: string[] = [];
+  const rootChildren: DescriptionOutlineNode[] = [];
+  const stack: Array<{ level: number; node: DescriptionOutlineNode }> = [];
+
+  for (const line of lines) {
+    const headingMatch = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const name = headingMatch[2].trim();
+      while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+        stack.pop();
+      }
+      const nextNode: DescriptionOutlineNode = {
+        name: name || "Untitled section",
+        description: "",
+        children: [],
+      };
+      if (stack.length === 0 || level === highestLevel) {
+        rootChildren.push(nextNode);
+      } else {
+        stack[stack.length - 1].node.children.push(nextNode);
+      }
+      stack.push({ level, node: nextNode });
+      continue;
+    }
+
+    if (stack.length === 0) {
+      rootLines.push(line);
+      continue;
+    }
+
+    const currentNode = stack[stack.length - 1].node;
+    currentNode.description = currentNode.description
+      ? `${currentNode.description}\n${line}`
+      : line;
+  }
+
+  const normalizeOutlineNode = (node: DescriptionOutlineNode): DescriptionOutlineNode => ({
+    ...node,
+    description: trimBlankLines(node.description.split("\n")).join("\n"),
+    children: node.children.map(normalizeOutlineNode),
+  });
+
+  return {
+    rootDescription: trimBlankLines(rootLines).join("\n"),
+    children: rootChildren.map(normalizeOutlineNode),
+  };
+}
+
+function buildOutlineNodes(parentId: string, outlineChildren: DescriptionOutlineNode[]): RequirementNode[] {
+  return outlineChildren.map((outlineNode, index) => {
+    const nextId = parentId === "ROOT" ? `REQ-${index + 1}` : `${parentId}.${index + 1}`;
+    const children = buildOutlineNodes(nextId, outlineNode.children);
+    return {
+      id: nextId,
+      name: outlineNode.name,
+      type: children.length > 0 ? "FOLDER" : "ATOMIC",
+      description: outlineNode.description,
+      dependencies: [],
+      children,
+      scenarios: [],
+    };
+  });
+}
+
+export function autoStructureNodeFromDescription(node: RequirementNode, nextDescription: string): RequirementNode {
+  const outline = parseDescriptionOutline(nextDescription);
+  if (!outline) {
+    return {
+      ...node,
+      description: nextDescription,
+    };
+  }
+
+  const nextChildren = buildOutlineNodes(node.id, outline.children);
+  return {
+    ...node,
+    description: outline.rootDescription,
+    children: nextChildren,
+    type: nextChildren.length > 0 ? "FOLDER" : node.type,
+  };
+}
+
+function cloneWithReindexedIds(
+  node: RequirementNode,
+  nextId: string,
+  idMap: Record<string, string>,
+): RequirementNode {
+  idMap[node.id] = nextId;
+  return {
+    ...node,
+    id: nextId,
+    children: node.children.map((child, index) =>
+      cloneWithReindexedIds(
+        child,
+        nextId === "ROOT" ? `REQ-${index + 1}` : `${nextId}.${index + 1}`,
+        idMap,
+      )),
+  };
+}
+
+function remapDependencies(node: RequirementNode, idMap: Record<string, string>): RequirementNode {
+  return {
+    ...node,
+    dependencies: node.dependencies.map((dependency) => idMap[dependency] ?? dependency),
+    children: node.children.map((child) => remapDependencies(child, idMap)),
+  };
+}
+
+export function reindexRequirementTree(root: RequirementNode): ReindexedTaskTreeResult {
+  const idMap: Record<string, string> = {};
+  const reindexedTree = cloneWithReindexedIds(root, "ROOT", idMap);
+  return {
+    tree: remapDependencies(reindexedTree, idMap),
+    idMap,
   };
 }
 

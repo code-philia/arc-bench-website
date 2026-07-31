@@ -8,6 +8,7 @@ type AuthContextValue = {
   isLoading: boolean;
   login: (payload: { email: string; password: string }) => Promise<UserSummary>;
   register: (payload: { email: string; username: string; password: string }) => Promise<UserSummary>;
+  updateProfile: (payload: { github_email?: string | null; github_username?: string | null }) => Promise<UserSummary>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -45,14 +46,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return response.user;
   }, []);
 
+  const updateProfile = useCallback(async (payload: { github_email?: string | null; github_username?: string | null }) => {
+    const response = await api.updateProfile(payload);
+    setUser(response.user);
+    return response.user;
+  }, []);
+
   const logout = useCallback(async () => {
     await api.logout();
     setUser(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, register, logout, refresh }),
-    [user, isLoading, login, register, logout, refresh],
+    () => ({ user, isLoading, login, register, updateProfile, logout, refresh }),
+    [user, isLoading, login, register, updateProfile, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

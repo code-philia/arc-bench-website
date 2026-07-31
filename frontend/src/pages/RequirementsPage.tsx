@@ -1,4 +1,4 @@
-import { RightOutlined, TrophyFilled } from "@ant-design/icons";
+import { InfoCircleOutlined, RightOutlined, StarFilled, TrophyFilled } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -7,45 +7,9 @@ import type { CompetitionSummary } from "../lib/types";
 
 type LeaderboardTrack = "all" | "web" | "mobile" | "kernel";
 
-type HeroRow = {
-  username: string;
-  model: string;
-  track: Exclude<LeaderboardTrack, "all">;
-  avgTokenEfficiency: number;
-  avgPassRate: number;
-};
-
-const heroRows: HeroRow[] = [
-  { username: "arc_alice", model: "Claude Sonnet 4", track: "web", avgTokenEfficiency: 84.8, avgPassRate: 89.2 },
-  { username: "browsersmith", model: "GPT-4.1", track: "web", avgTokenEfficiency: 82.3, avgPassRate: 86.1 },
-  { username: "mobileforge", model: "Gemini 2.5 Pro", track: "mobile", avgTokenEfficiency: 79.2, avgPassRate: 84.4 },
-  { username: "kernel_lane", model: "DeepSeek V3", track: "kernel", avgTokenEfficiency: 81.1, avgPassRate: 85.2 },
-  { username: "operator_xu", model: "Claude 3.5 Sonnet", track: "web", avgTokenEfficiency: 78.5, avgPassRate: 82.9 },
-  { username: "mobilepilot", model: "Gemini Flash", track: "mobile", avgTokenEfficiency: 76.4, avgPassRate: 79.8 },
-  { username: "ops_nova", model: "Qwen 3 Coder", track: "kernel", avgTokenEfficiency: 74.6, avgPassRate: 77.5 },
-];
-
-const rankBadges = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
-
-function competitionTypeLabel(type: string) {
-  if (type === "web") return "WEB";
-  if (type === "android") return "MOBILE";
-  if (type === "mixed") return "MIXED";
-  return type.toUpperCase();
-}
-
-function competitionAccent(type: string) {
-  if (type === "web") return "web";
-  if (type === "android") return "mobile";
-  if (type === "mixed") return "mixed";
-  return "web";
-}
-
-function bankMetaLabel(type: string) {
-  if (type === "web") return "Web Arena";
-  if (type === "android") return "Mobile Arena";
-  if (type === "mixed") return "Mixed Track";
-  return "Browse";
+function rankDisplay(rank: number) {
+  if (rank > 3) return <span className="competition-rank-plain">{rank}</span>;
+  return <span className={`competition-rank-badge rank-${rank}`}><span>{rank}</span>{rank === 1 ? <StarFilled /> : <TrophyFilled />}</span>;
 }
 
 export default function RequirementsPage() {
@@ -54,136 +18,55 @@ export default function RequirementsPage() {
   const [activeTrack, setActiveTrack] = useState<LeaderboardTrack>("all");
 
   useEffect(() => {
-    api
-      .listCompetitions()
-      .then(setCompetitions)
-      .catch(() => setCompetitions([]))
-      .finally(() => setLoading(false));
+    api.listCompetitions().then(setCompetitions).catch(() => setCompetitions([])).finally(() => setLoading(false));
   }, []);
 
-  const leaderboardRows = useMemo(() => {
-    const filtered = activeTrack === "all" ? heroRows : heroRows.filter((row) => row.track === activeTrack);
-    const sorted = [...filtered].sort((a, b) => {
-      return b.avgPassRate - a.avgPassRate || b.avgTokenEfficiency - a.avgTokenEfficiency;
-    });
-    return sorted.map((row, index) => ({ ...row, rank: index + 1 }));
-  }, [activeTrack]);
-
-  const leader = leaderboardRows[0] ?? null;
+  const leaderboardRows = useMemo(() => Array.from({ length: 5 }, (_, index) => ({ rank: index + 1 })), [activeTrack]);
 
   return (
-    <div className="page library-page competition-home-page">
-      <div className="competition-shell competition-home-shell">
-        <div className="breadcrumb competition-home-breadcrumb">
-          <span>Competition</span>
-          <span className="sep">/</span>
-          <span className="current">Home</span>
-        </div>
+    <div className="page competition-home-page">
+      <div className="competition-container">
+        <section className="competition-hero">
+          <div className="competition-hero-icon"><TrophyFilled /></div>
+          <div><div className="competition-eyebrow">ArcBench Arena</div><h1>Competitions</h1><p>Save one agent submission, then run it against any published task in a competition.</p></div>
+        </section>
 
         <div className="competition-home-grid">
-          <section className="competition-heroes-panel leaderboard-card leaderboard-card-clean">
-            <div className="competition-heroes-header compact">
-              <div className="competition-heroes-heading-block">
-                <div className="competition-panel-kicker">
-                  <TrophyFilled /> Hero Board
-                </div>
-                <div className="leaderboard-segmented" role="tablist" aria-label="Leaderboard track filter">
-                  {[
-                    { key: "all", label: "All" },
-                    { key: "web", label: "Web" },
-                    { key: "mobile", label: "Mobile" },
-                    { key: "kernel", label: "Kernel" },
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={`leaderboard-segment ${activeTrack === item.key ? "active" : ""}`}
-                      onClick={() => setActiveTrack(item.key as LeaderboardTrack)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="competition-hero-summary compact">
-                <span className="summary-label">Current leader</span>
-                <strong>{leader?.username ?? "-"}</strong>
-                <span className="competition-hero-summary-model">{leader?.model ?? "No data"}</span>
-              </div>
+          <section className="competition-leaderboard competition-leaderboard-main">
+            <div className="competition-leaderboard-header">
+              <div className="competition-eyebrow">Hero board</div>
+              <h2>Leaderboard</h2>
             </div>
-
-            <div className="leaderboard-table-wrap competition-heroes-table-wrap">
-              <table className="leaderboard-table leaderboard-table-clean competition-heroes-table compact">
-                <thead>
-                  <tr>
-                    <th style={{ width: "84px" }}>Rank</th>
-                    <th>User</th>
-                    <th style={{ width: "220px" }}>Model</th>
-                    <th style={{ width: "148px" }}>Avg. Pass Rate</th>
-                    <th style={{ width: "148px" }}>Avg. Token Eff.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboardRows.map((row) => (
-                    <tr key={`${row.username}-${row.model}`} className={row.rank === 1 ? "is-top" : ""}>
-                      <td className="leaderboard-rank-cell">
-                        {row.rank <= 3 ? (
-                          <span className={`competition-rank-badge rank-${row.rank}`}>{rankBadges[row.rank - 1]}</span>
-                        ) : (
-                          row.rank
-                        )}
-                      </td>
-                      <td>
-                        <div className="competition-user-cell compact">
-                          <strong>{row.username}</strong>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="leaderboard-model-cell compact">
-                          <span className="model-chip">{row.model}</span>
-                        </div>
-                      </td>
-                      <td>{row.avgPassRate.toFixed(1)}%</td>
-                      <td>{row.avgTokenEfficiency.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
+            <div className="competition-leaderboard-controls">
+              <div className="competition-track-filter" role="tablist" aria-label="Leaderboard track filter">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "web", label: "Web" },
+                  { key: "mobile", label: "Mobile" },
+                  { key: "kernel", label: "Kernel" },
+                ].map((track) => <button key={track.key} type="button" className={activeTrack === track.key ? "active" : ""} onClick={() => setActiveTrack(track.key as LeaderboardTrack)}>{track.label}</button>)}
+              </div>
+              <div className="competition-leader-summary"><span>Current leader</span><strong>-</strong><span>No data yet <RightOutlined /></span></div>
+            </div>
+            <div className="competition-table-wrap">
+              <table className="competition-ranking-table">
+                <thead><tr><th>Rank</th><th>User</th><th>Model</th><th><span>Avg. Pass Rate <InfoCircleOutlined /></span></th><th>Total Token</th><th>Runtime</th></tr></thead>
+                <tbody>{leaderboardRows.map((row) => <tr key={row.rank}><td>{rankDisplay(row.rank)}</td><td><strong>-</strong></td><td>-</td><td>-</td><td>-</td><td>-</td></tr>)}</tbody>
               </table>
             </div>
           </section>
 
-          <aside className="competition-bank-panel playground-bank">
-            <div className="playground-bank-shell competition-bank-shell-compact">
-              <div className="playground-bank-title">Competition Bank</div>
-
-              {loading ? (
-                <div className="loading-state competition-bank-state">Loading competitions...</div>
-              ) : competitions.length === 0 ? (
-                <div className="empty-state competition-bank-state">No competitions available.</div>
-              ) : (
-                <div className="playground-bank-list">
-                  {competitions.map((competition) => (
-                    <Link
-                      key={competition.id}
-                      to={`/competitions/${competition.id}`}
-                      className={`playground-bank-item ${competitionAccent(competition.type)}`}
-                    >
-                      <div className="playground-bank-item-copy">
-                        <div className={`playground-bank-badge ${competitionAccent(competition.type)}`}>
-                          {competitionTypeLabel(competition.type)}
-                        </div>
-                        <h2>{competition.title}</h2>
-                        <p>{competition.summary}</p>
-                      </div>
-                      <div className="playground-bank-meta">
-                        <span>{bankMetaLabel(competition.type)}</span>
-                        <RightOutlined />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+          <aside className="competition-bank">
+            <div className="competition-section-heading"><div><div className="competition-eyebrow">Open & upcoming</div><h2>Competition bank</h2></div><span>{competitions.length} available</span></div>
+            {loading ? <div className="competition-empty">Loading competitions...</div>
+              : competitions.length === 0 ? <div className="competition-empty">No competitions have been created yet.</div>
+                : <div className="competition-card-grid">
+                  {competitions.map((competition) => <Link key={competition.id} to={`/competitions/${competition.id}`} className="competition-card">
+                    <div className="competition-card-topline"><span className="competition-status">{competition.status === "open" ? "OPEN" : "UPCOMING"}</span><TrophyFilled aria-hidden="true" /></div>
+                    <h3>{competition.title}</h3><p>{competition.summary}</p>
+                    <div className="competition-card-footer"><span>{competition.task_count} tasks · {competition.total_tests} tests</span><RightOutlined aria-hidden="true" /></div>
+                  </Link>)}
+                </div>}
           </aside>
         </div>
       </div>

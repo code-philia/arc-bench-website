@@ -36,14 +36,16 @@ class RuntimePathService:
     def get_workspace_root(self, submission: Submission, username: str | None = None) -> Path:
         return self.get_submission_root(submission, username=username) / "workspace"
 
+    @staticmethod
+    def get_template_root_from_workspace(workspace_path: Path) -> Path:
+        return workspace_path / "template"
+
+    @staticmethod
+    def get_arc_dir_from_workspace(workspace_path: Path) -> Path:
+        return workspace_path / "template" / ".arc"
+
     def get_archive_path(self, submission: Submission, username: str | None = None) -> Path:
         return self.get_submission_root(submission, username=username) / "agent.zip"
-
-    def get_event_log_path_by_identity(self, username: str, user_id: str, submission_id: str) -> Path:
-        return self.get_submission_root_by_identity(username, user_id, submission_id) / "events.log"
-
-    def get_event_log_path(self, submission: Submission, username: str | None = None) -> Path:
-        return self.get_submission_root(submission, username=username) / "events.log"
 
     @staticmethod
     def resolve_existing_path(path_value: str | None) -> Path | None:

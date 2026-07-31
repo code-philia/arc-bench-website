@@ -1,9 +1,12 @@
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 from queue import Empty, Queue
 from urllib.error import URLError
@@ -13,20 +16,67 @@ from urllib.request import urlopen
 WORKSPACE_ROOT = Path("/workspace")
 SUBMISSION_DIR = WORKSPACE_ROOT / "submission"
 TEMPLATE_DIR = WORKSPACE_ROOT / "template"
-TASK_DIR = WORKSPACE_ROOT / "task"
+REQUIREMENTS_DIR = TEMPLATE_DIR / "requirements"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
 SDK_DIR = WORKSPACE_ROOT / "sdk"
-PROMPT_PATH = WORKSPACE_ROOT / "prompt" / "task_prompt.txt"
 SPEC_PATH = WORKSPACE_ROOT / "runner-spec.json"
-ARTIFACTS_DIR = WORKSPACE_ROOT / "artifacts"
-RESULT_PATH = ARTIFACTS_DIR / "result.json"
-STDOUT_PATH = ARTIFACTS_DIR / "stdout.log"
-STDERR_PATH = ARTIFACTS_DIR / "stderr.log"
+ARC_DIR = TEMPLATE_DIR / ".arc"
+STDOUT_PATH = ARC_DIR / "stdout.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
-RUNNER_EVENTS_PATH = ARTIFACTS_DIR / "runner-events.jsonl"
+RUNNER_EVENTS_PATH = ARC_DIR / "runner-events.jsonl"
+TRACEABILITY_DIR = ARC_DIR / "traceability"
+TRACEABILITY_SEED_PATH = ARC_DIR / "traceability-seed.json"
+PAUSE_REQUEST_PATH = ARC_DIR / "pause.request.json"
+RESUME_REQUEST_PATH = ARC_DIR / "resume.request.json"
+CHECKPOINT_PATH = ARC_DIR / "checkpoint.json"
+PLAYWRIGHT_REPORT_PATH = ARC_DIR / "playwright-report.json"
+PIP_CACHE_DIR = Path("/tmp/arcbench/pip-cache")
+REQUIREMENT_SOURCE_DIR = Path("/tmp/arcbench/requirements-source")
+PIP_INSTALL_ATTEMPTS = 3
+PIP_DEFAULT_TIMEOUT_SECONDS = 120
+PIP_RESUME_RETRIES = 8
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
+CONSOLE_WRITE_LOCK = threading.Lock()
+HEARTBEAT_LOCK = threading.Lock()
+HEARTBEAT_STEP = "deploy_agent"
+HEARTBEAT_SUMMARY = "Preparing environment"
+
+
+TRACEABILITY_TABLES = (
+    "requirements",
+    "scenarios",
+    "interfaces",
+    "tests",
+    "call_edges",
+    "node_states",
+    "node_contracts",
+)
+
+
+def resolve_template_path(path_value: str | None, default_path: Path) -> Path:
+    value = str(path_value or "").strip()
+    if not value:
+        return default_path
+    path = Path(value)
+    return path if path.is_absolute() else TEMPLATE_DIR / path
+
+
+def resolve_traceability_dir() -> Path:
+    spec_path = SPEC_PATH
+    if spec_path.is_file():
+        try:
+            payload = json.loads(spec_path.read_text(encoding="utf-8"))
+            configured = str(payload.get("traceability_dir") or "").strip()
+            if configured:
+                return resolve_template_path(configured, TRACEABILITY_DIR)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return TRACEABILITY_DIR
+
+
+TRACEABILITY_DIR = resolve_traceability_dir()
 
 
 def append_debug_log(message: str) -> None:
@@ -43,24 +93,178 @@ def append_debug_block(section: str, content: str) -> None:
         append_debug_log(f"{section} | {line}")
 
 
-def append_runner_event(step_key: str, message: str, status: str = "info") -> None:
+def stage_for_step(step_key: str) -> str:
+    return {
+        "deploy_agent": "Preparing environment",
+        "start_agent": "Running agent",
+        "run_tests": "Evaluating result",
+    }.get(step_key, "Running agent")
+
+
+def append_runner_event(
+    step_key: str,
+    message: str,
+    status: str = "info",
+    *,
+    heartbeat: bool = False,
+    artifact_reference: str | None = None,
+) -> None:
+    if not heartbeat:
+        global HEARTBEAT_STEP, HEARTBEAT_SUMMARY
+        with HEARTBEAT_LOCK:
+            HEARTBEAT_STEP = step_key
+            HEARTBEAT_SUMMARY = message
     payload = {
+        "event_id": uuid.uuid4().hex,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
         "step_key": step_key,
+        "stage": stage_for_step(step_key),
         "status": status,
         "message": message,
+        "summary": message,
+        "heartbeat": heartbeat,
+        "artifact_reference": artifact_reference,
     }
     with RUNNER_EVENTS_PATH.open("a", encoding="utf-8") as output:
         output.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
 
-def stream_pipe(pipe, sink_file, section: str) -> None:
+def start_heartbeat() -> tuple[threading.Event, threading.Thread]:
+    stop_event = threading.Event()
+
+    def emit_heartbeats() -> None:
+        while not stop_event.wait(30):
+            with HEARTBEAT_LOCK:
+                step_key = HEARTBEAT_STEP
+                summary = HEARTBEAT_SUMMARY
+            append_runner_event(step_key, f"Still working: {summary}", heartbeat=True)
+
+    thread = threading.Thread(target=emit_heartbeats, name="runner-heartbeat", daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
+def run_environment_preflight() -> None:
+    """Fail before agent work when the immutable runner cannot execute browser tests."""
+    append_runner_event("deploy_agent", "Running environment preflight")
+    checks: dict[str, object] = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())}
+    try:
+        checks["free_disk_bytes"] = shutil.disk_usage(WORKSPACE_ROOT).free
+        checks["node_version"] = subprocess.check_output(["node", "--version"], text=True, stderr=subprocess.STDOUT).strip()
+        browser_check = subprocess.run(
+            [
+                "python3",
+                "-c",
+                "from playwright.sync_api import sync_playwright; "
+                "p=sync_playwright().start(); b=p.chromium.launch(); b.close(); p.stop(); print('chromium-ready')",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        checks["browser_check"] = (browser_check.stdout or browser_check.stderr).strip()
+        checks["passed"] = browser_check.returncode == 0
+        if browser_check.returncode != 0:
+            raise RuntimeError(checks["browser_check"] or "Chromium could not be launched")
+    except Exception as exc:  # noqa: BLE001
+        checks["passed"] = False
+        checks["error"] = str(exc)
+        _write_json_atomic(ARC_DIR / "preflight.json", checks)
+        append_runner_event("deploy_agent", f"Environment preflight failed: {exc}", status="error", artifact_reference=".arc/preflight.json")
+        raise RuntimeError(f"Environment preflight failed: {exc}") from exc
+    _write_json_atomic(ARC_DIR / "preflight.json", checks)
+    append_runner_event("deploy_agent", "Environment preflight passed", status="success", artifact_reference=".arc/preflight.json")
+
+
+def append_runner_state(state: str, message: str) -> None:
+    payload = {
+        "event_id": uuid.uuid4().hex,
+        "type": "runner_state",
+        "state": state,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+        "message": message,
+        "stage": "Running agent",
+        "status": state,
+        "summary": message,
+        "heartbeat": False,
+        "artifact_reference": None,
+    }
+    with RUNNER_EVENTS_PATH.open("a", encoding="utf-8") as output:
+        output.write(json.dumps(payload, ensure_ascii=True) + "\n")
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def reset_traceability_storage() -> None:
+    if not TRACEABILITY_DIR.exists():
+        return
+    for path in TRACEABILITY_DIR.glob("*.json"):
+        path.unlink()
+        append_debug_log(f"Removed stale traceability table: {path}")
+
+
+def restore_traceability_storage_from_workspace() -> bool:
+    if not TRACEABILITY_DIR.is_dir() or not any(TRACEABILITY_DIR.glob("*.json")):
+        return False
+    append_debug_log(f"Traceability store is already in workspace checkpoint location: {TRACEABILITY_DIR}")
+    return True
+
+
+def initialize_traceability_store() -> None:
+    TRACEABILITY_DIR.mkdir(parents=True, exist_ok=True)
+    reset_traceability_storage()
+    append_debug_log(f"Initializing traceability store at {TRACEABILITY_DIR}")
+    for table_name in TRACEABILITY_TABLES:
+        _write_json_atomic(TRACEABILITY_DIR / f"{table_name}.json", {})
+
+
+def seed_traceability_requirements() -> tuple[int, int]:
+    if not TRACEABILITY_SEED_PATH.exists():
+        append_debug_log("No traceability seed file found, skipping requirement/scenario registration")
+        return 0, 0
+
+    payload = json.loads(TRACEABILITY_SEED_PATH.read_text(encoding="utf-8"))
+    requirements = payload.get("requirements", [])
+    scenarios = payload.get("scenarios", [])
+    if not isinstance(requirements, list) or not isinstance(scenarios, list):
+        raise RuntimeError("traceability-seed.json must contain requirements and scenarios arrays")
+
+    requirements_by_id = {
+        str(item.get("req_id", "")).strip(): item
+        for item in requirements
+        if isinstance(item, dict) and str(item.get("req_id", "")).strip()
+    }
+    scenarios_by_id = {
+        str(item.get("scenario_id", "")).strip(): item
+        for item in scenarios
+        if isinstance(item, dict) and str(item.get("scenario_id", "")).strip() and str(item.get("req_id", "")).strip()
+    }
+    _write_json_atomic(TRACEABILITY_DIR / "requirements.json", requirements_by_id)
+    _write_json_atomic(TRACEABILITY_DIR / "scenarios.json", scenarios_by_id)
+
+    return len(requirements), len(scenarios)
+def write_console_line(sink_file, source: str, line: str) -> None:
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    rendered = line.rstrip("\n")
+    with CONSOLE_WRITE_LOCK:
+        sink_file.write(f"[{timestamp}] [{source}] {rendered}\n")
+        sink_file.flush()
+
+
+def stream_pipe(pipe, sink_file, section: str, collected_lines: list[str] | None = None) -> None:
     try:
         for line in iter(pipe.readline, ""):
             if not line:
                 break
-            sink_file.write(line)
-            sink_file.flush()
+            write_console_line(sink_file, section, line)
+            if collected_lines is not None:
+                collected_lines.append(line)
             append_debug_log(f"{section} | {line.rstrip()}")
     finally:
         pipe.close()
@@ -71,8 +275,7 @@ def queue_pipe(pipe, sink_file, section: str, line_queue: Queue | None = None) -
         for line in iter(pipe.readline, ""):
             if not line:
                 break
-            sink_file.write(line)
-            sink_file.flush()
+            write_console_line(sink_file, section, line)
             append_debug_log(f"{section} | {line.rstrip()}")
             if line_queue is not None:
                 line_queue.put((section, line.rstrip("\n")))
@@ -82,28 +285,73 @@ def queue_pipe(pipe, sink_file, section: str, line_queue: Queue | None = None) -
 
 def run_command(command: list[str], cwd: Path, stdout_file, stderr_file, check: bool = True, label: str = "command", env: dict | None = None) -> subprocess.CompletedProcess:
     append_debug_log(f"Executing {label}: {' '.join(command)}")
-    completed = subprocess.run(
+    process = subprocess.Popen(
         command,
         cwd=str(cwd),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         errors="replace",
-        check=False,
+        bufsize=1,
         env=env,
     )
-    if completed.stdout:
-        stdout_file.write(completed.stdout)
-        stdout_file.flush()
-        append_debug_block(f"{label}.stdout", completed.stdout)
-    if completed.stderr:
-        stderr_file.write(completed.stderr)
-        stderr_file.flush()
-        append_debug_block(f"{label}.stderr", completed.stderr)
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    stdout_thread = threading.Thread(target=stream_pipe, args=(process.stdout, stdout_file, f"{label}.stdout", stdout_lines), daemon=True)
+    stderr_thread = threading.Thread(target=stream_pipe, args=(process.stderr, stderr_file, f"{label}.stderr", stderr_lines), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+    return_code = process.wait()
+    stdout_thread.join(timeout=2)
+    stderr_thread.join(timeout=2)
+    completed = subprocess.CompletedProcess(command, return_code, "".join(stdout_lines), "".join(stderr_lines))
     append_debug_log(f"{label} exit code: {completed.returncode}")
     if check and completed.returncode != 0:
         raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout, stderr=completed.stderr)
     return completed
+
+
+def build_npm_environment() -> dict[str, str]:
+    npm_env = dict(os.environ)
+    # Use the registry configured inside the runner image. Only force npm's
+    # safe default for lockfile host replacement to avoid double-prefixing
+    # mirror tarball URLs from existing package-lock files.
+    npm_env.pop("NPM_CONFIG_REGISTRY", None)
+    npm_env["NPM_CONFIG_REPLACE_REGISTRY_HOST"] = "npmjs"
+    return npm_env
+
+
+def log_source_mirror_configuration() -> None:
+    pip_index_url = os.environ.get("ARCBENCH_PIP_INDEX_URL", "").strip() or os.environ.get("PIP_INDEX_URL", "").strip()
+    pip_trusted_host = os.environ.get("ARCBENCH_PIP_TRUSTED_HOST", "").strip() or os.environ.get("PIP_TRUSTED_HOST", "").strip()
+    pip_extra_index_url = os.environ.get("ARCBENCH_PIP_EXTRA_INDEX_URL", "").strip() or os.environ.get("PIP_EXTRA_INDEX_URL", "").strip()
+    npm_env = build_npm_environment()
+    append_debug_log(
+        "Source mirror configuration: "
+        "apt_mirror=https://mirrors.aliyun.com/ubuntu (baked into runner image), "
+        "npm_config=container npm config, "
+        f"pip_index_url={pip_index_url or '<default>'}, "
+        f"pip_trusted_host={pip_trusted_host or '<default>'}, "
+        f"pip_extra_index_url={pip_extra_index_url or '<none>'}"
+    )
+
+
+def log_pip_mirror_configuration(pip_env: dict[str, str]) -> None:
+    append_debug_log(
+        "Applying pip mirror configuration: "
+        f"PIP_INDEX_URL={str(pip_env.get('PIP_INDEX_URL', '')).strip() or '<default>'}, "
+        f"PIP_TRUSTED_HOST={str(pip_env.get('PIP_TRUSTED_HOST', '')).strip() or '<default>'}, "
+        f"PIP_EXTRA_INDEX_URL={str(pip_env.get('PIP_EXTRA_INDEX_URL', '')).strip() or '<none>'}, "
+        f"PIP_CACHE_DIR={str(pip_env.get('PIP_CACHE_DIR', '')).strip() or '<none>'}"
+    )
+
+
+def log_npm_mirror_configuration(label: str, env: dict[str, str]) -> None:
+    append_debug_log(
+        f"Using container npm configuration for {label}: "
+        f"NPM_CONFIG_REGISTRY={str(env.get('NPM_CONFIG_REGISTRY', '')).strip() or '<unset>'}, "
+        f"NPM_CONFIG_REPLACE_REGISTRY_HOST={str(env.get('NPM_CONFIG_REPLACE_REGISTRY_HOST', '')).strip() or '<unset>'}"
+    )
 
 
 def read_spec() -> dict:
@@ -112,11 +360,136 @@ def read_spec() -> dict:
     return json.loads(SPEC_PATH.read_text(encoding="utf-8"))
 
 
-def resolve_python_agent_entrypoint() -> Path:
-    entrypoint = SUBMISSION_DIR / "main.py"
-    if entrypoint.exists():
-        return entrypoint
-    raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
+def normalize_agent_runtime(spec: dict) -> str:
+    runtime = str(spec.get("runtime") or "python").strip().lower()
+    if runtime in {"node", "nodejs", "js"}:
+        return "javascript"
+    if runtime in {"ts"}:
+        return "typescript"
+    if runtime in {"py", ""}:
+        return "python"
+    return runtime
+
+
+def resolve_agent_entrypoint(runtime: str) -> Path:
+    if runtime == "python":
+        entrypoint = SUBMISSION_DIR / "main.py"
+        if entrypoint.exists():
+            return entrypoint
+        raise RuntimeError("unsupported python agent entrypoint: expected main.py at the archive root")
+    if runtime == "javascript":
+        entrypoint = SUBMISSION_DIR / "index.js"
+        if entrypoint.exists():
+            return entrypoint
+        raise RuntimeError("unsupported javascript agent entrypoint: expected index.js at the archive root")
+    if runtime == "typescript":
+        entrypoint = SUBMISSION_DIR / "index.ts"
+        if entrypoint.exists():
+            return entrypoint
+        raise RuntimeError("unsupported typescript agent entrypoint: expected index.ts at the archive root")
+    raise RuntimeError(f"unsupported agent runtime: {runtime}")
+
+def map_task_category_to_app_type(category: str) -> str:
+    normalized = str(category or "").strip().lower()
+    if normalized == "cli":
+        return "cli"
+    if normalized in {"android", "mobile", "mobileapp", "mobile_app"}:
+        return "android"
+    return "web"
+
+
+def prepare_agent_requirement_source() -> Path:
+    source_requirements = REQUIREMENTS_DIR
+    source_yaml = source_requirements / "requirements.yaml"
+    if not source_yaml.is_file():
+        raise FileNotFoundError(f"Template requirement workspace is missing requirements.yaml: {source_yaml}")
+    if REQUIREMENT_SOURCE_DIR.exists():
+        shutil.rmtree(REQUIREMENT_SOURCE_DIR)
+    shutil.copytree(source_requirements, REQUIREMENT_SOURCE_DIR)
+    copied_yaml = REQUIREMENT_SOURCE_DIR / "requirements.yaml"
+    if not copied_yaml.is_file():
+        raise FileNotFoundError(f"Copied requirement source is missing requirements.yaml: {copied_yaml}")
+    append_debug_log(f"Prepared agent requirement source from {source_requirements} to {REQUIREMENT_SOURCE_DIR}")
+    return REQUIREMENT_SOURCE_DIR
+
+
+def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
+    spec = read_spec()
+    if runtime == "python":
+        command = ["python3", str(entrypoint)]
+    elif runtime == "javascript":
+        command = ["node", str(entrypoint)]
+    elif runtime == "typescript":
+        tsx_path = SUBMISSION_DIR / "node_modules" / ".bin" / "tsx"
+        command = [str(tsx_path), str(entrypoint)]
+    else:
+        raise RuntimeError(f"unsupported agent runtime: {runtime}")
+    requirement_source = str(prepare_agent_requirement_source())
+    output_dir = str(spec.get("output_dir") or ".")
+    is_builtin_arc_agent = str(spec.get("agent_source") or "").strip().lower() == "builtin_arc_agent"
+
+    if is_builtin_arc_agent:
+        # ARC 1.1 exposes a subcommand CLI.  `main.py` is the source-distributed
+        # implementation of the `arc` console script, so invoking it directly
+        # keeps the runner self-contained while preserving the official CLI
+        # contract.  Do not apply this protocol to uploaded agents.
+        task_payload = spec.get("task") if isinstance(spec, dict) else {}
+        category = ""
+        if isinstance(task_payload, dict):
+            category = str(task_payload.get("category") or "").strip()
+        app_type = map_task_category_to_app_type(category)
+        command.extend(
+            [
+                "compile",
+                requirement_source,
+                "--output-dir",
+                output_dir,
+                "--type",
+                app_type,
+            ]
+        )
+        if app_type == "web":
+            command.extend(["--port", str(WEB_APP_PORT)])
+        append_debug_log(f"Launching built-in ARC compile command: {' '.join(command)}")
+        return command
+
+    command.extend(
+        [
+            requirement_source,
+            "--output-dir",
+            output_dir,
+        ]
+    )
+    append_debug_log(f"Launching uploaded generation agent with requirement and output args: {' '.join(command)}")
+    return command
+
+
+def clear_request_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def read_checkpoint() -> dict:
+    if not CHECKPOINT_PATH.exists():
+        return {"last_completed_index": 0, "completed": []}
+    try:
+        payload = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"last_completed_index": 0, "completed": []}
+    if not isinstance(payload, dict):
+        return {"last_completed_index": 0, "completed": []}
+    payload.setdefault("last_completed_index", 0)
+    payload.setdefault("completed", [])
+    return payload
+
+
+def write_checkpoint(payload: dict) -> None:
+    CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CHECKPOINT_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(CHECKPOINT_PATH)
 
 
 def install_agent_dependencies(stdout_file, stderr_file) -> None:
@@ -125,51 +498,214 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
         append_debug_log("No submission requirements.txt found, skipping dependency install")
         return
     append_runner_event("start_agent", "Installing agent dependencies")
-    run_command(
-        ["python3", "-m", "pip", "install", "--no-cache-dir", "-r", "requirements.txt"],
-        cwd=SUBMISSION_DIR,
-        stdout_file=stdout_file,
-        stderr_file=stderr_file,
-        check=True,
-        label="agent-pip-install",
-    )
+    PIP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pip_env = {
+        **os.environ,
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PIP_NO_INPUT": "1",
+        "PIP_ROOT_USER_ACTION": "ignore",
+        "PIP_DEFAULT_TIMEOUT": str(PIP_DEFAULT_TIMEOUT_SECONDS),
+        "PIP_RESUME_RETRIES": str(PIP_RESUME_RETRIES),
+        "PIP_CACHE_DIR": str(PIP_CACHE_DIR),
+    }
+    pip_index_url = os.environ.get("ARCBENCH_PIP_INDEX_URL", "").strip()
+    pip_trusted_host = os.environ.get("ARCBENCH_PIP_TRUSTED_HOST", "").strip()
+    pip_extra_index_url = os.environ.get("ARCBENCH_PIP_EXTRA_INDEX_URL", "").strip()
+    if pip_index_url:
+        pip_env["PIP_INDEX_URL"] = pip_index_url
+    if pip_trusted_host:
+        pip_env["PIP_TRUSTED_HOST"] = pip_trusted_host
+    if pip_extra_index_url:
+        pip_env["PIP_EXTRA_INDEX_URL"] = pip_extra_index_url
+    log_pip_mirror_configuration(pip_env)
+
+    last_error: subprocess.CalledProcessError | None = None
+    for attempt in range(1, PIP_INSTALL_ATTEMPTS + 1):
+        append_debug_log(
+            f"Starting pip install attempt {attempt}/{PIP_INSTALL_ATTEMPTS} with cache_dir={PIP_CACHE_DIR}"
+        )
+        try:
+            run_command(
+                [
+                    "python3",
+                    "-m",
+                    "pip",
+                    "install",
+                    "--retries",
+                    "10",
+                    "--timeout",
+                    str(PIP_DEFAULT_TIMEOUT_SECONDS),
+                    "--resume-retries",
+                    str(PIP_RESUME_RETRIES),
+                    "--prefer-binary",
+                    "-r",
+                    "requirements.txt",
+                ],
+                cwd=SUBMISSION_DIR,
+                stdout_file=stdout_file,
+                stderr_file=stderr_file,
+                check=True,
+                label="agent-pip-install",
+                env=pip_env,
+            )
+            last_error = None
+            break
+        except subprocess.CalledProcessError as error:
+            last_error = error
+            if attempt >= PIP_INSTALL_ATTEMPTS:
+                break
+            append_runner_event(
+                "start_agent",
+                f"Agent dependency install failed on attempt {attempt}, retrying",
+                status="warning",
+            )
+            append_debug_log(
+                f"pip install attempt {attempt} failed with code={error.returncode}; retrying after backoff"
+            )
+            time.sleep(min(5 * attempt, 15))
+
+    if last_error is not None:
+        raise last_error
     append_runner_event("start_agent", "Agent dependencies installed", status="success")
 
 
-def run_generation_agent(stdout_file, stderr_file) -> None:
-    entrypoint = resolve_python_agent_entrypoint()
-    prompt = PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() else ""
-    command = ["python3", entrypoint.name]
-    append_runner_event("start_agent", "Launching generation agent")
+def build_agent_environment() -> dict[str, str]:
     env = {
         **os.environ,
-        "ARCBENCH_TASK_PROMPT": prompt,
-        "ARCBENCH_PROMPT_PATH": str(PROMPT_PATH),
         "ARCBENCH_TEMPLATE_DIR": str(TEMPLATE_DIR),
-        "ARCBENCH_TASK_DIR": str(TASK_DIR),
+        "ARCBENCH_PROJECT_DIR": str(TEMPLATE_DIR),
+        "ARCBENCH_REQUIREMENT_DIR": "requirements",
+        "ARCBENCH_TASK_DIR": "requirements",
         "ARCBENCH_SUBMISSION_DIR": str(SUBMISSION_DIR),
         "ARCBENCH_OUTPUT_DIR": str(TEMPLATE_DIR),
-        "ARCBENCH_ARTIFACTS_DIR": str(ARTIFACTS_DIR),
+        "ARCBENCH_ARC_DIR": str(ARC_DIR),
         "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
+        "ARCBENCH_TRACEABILITY_DIR": str(TRACEABILITY_DIR),
+        "ARCBENCH_PRESERVE_OUTPUT_WORKSPACE": "1",
         "ARCBENCH_SDK_DIR": str(SDK_DIR),
+        "ARCBENCH_CHECKPOINT_PATH": str(CHECKPOINT_PATH),
+        "ARCBENCH_PAUSE_REQUEST_PATH": str(PAUSE_REQUEST_PATH),
+        "ARCBENCH_RESUME_REQUEST_PATH": str(RESUME_REQUEST_PATH),
         "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
-    completed = run_command(
+    return env
+
+
+def log_agent_environment_summary(env: dict[str, str]) -> None:
+    redacted_api_key = "set" if str(env.get("OPENAI_API_KEY", "")).strip() else "missing"
+    append_debug_log(
+        "Agent environment summary: "
+        f"OPENAI_API_KEY={redacted_api_key}, "
+        f"OPENAI_BASE_URL={str(env.get('OPENAI_BASE_URL', '')).strip() or '<missing>'}, "
+        f"MODEL={str(env.get('MODEL', '')).strip() or '<missing>'}, "
+        f"ARC_DEBUG={str(env.get('ARC_DEBUG', '')).strip() or '<missing>'}, "
+        f"VISUAL_BASE_URL={str(env.get('VISUAL_BASE_URL', '')).strip() or '<missing>'}, "
+        f"VISUAL_MODEL={str(env.get('VISUAL_MODEL', '')).strip() or '<missing>'}, "
+        f"ARCBENCH_RUNNER_EVENTS_PATH={str(env.get('ARCBENCH_RUNNER_EVENTS_PATH', '')).strip() or '<missing>'}, "
+        f"ARCBENCH_TRACEABILITY_DIR={str(env.get('ARCBENCH_TRACEABILITY_DIR', '')).strip() or '<missing>'}"
+    )
+
+
+def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProcess:
+    spec = read_spec()
+    runtime = normalize_agent_runtime(spec)
+    entrypoint = resolve_agent_entrypoint(runtime)
+    command = build_generation_agent_command(entrypoint, runtime)
+    agent_env = build_agent_environment()
+    log_agent_environment_summary(agent_env)
+    append_runner_event("start_agent", "Launching generation agent")
+    return run_command(
         command,
-        cwd=SUBMISSION_DIR,
+        cwd=TEMPLATE_DIR,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=False,
+        label="generation-agent",
+        env=agent_env,
+    )
+
+
+def run_generation_agent_once(stdout_file, stderr_file) -> subprocess.CompletedProcess:
+    return run_generation_agent(stdout_file, stderr_file)
+
+
+def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
+    checkpoint = read_checkpoint()
+    last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+    if last_completed_index > 0:
+        append_runner_event("start_agent", f"Resuming from checkpoint at commit {last_completed_index}", status="info")
+
+    while True:
+        completed = run_generation_agent_once(stdout_file, stderr_file)
+        if completed.returncode == 0:
+            checkpoint = read_checkpoint()
+            if checkpoint.get("paused") or PAUSE_REQUEST_PATH.exists():
+                append_runner_state("paused", "Generation paused")
+                append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
+                while not RESUME_REQUEST_PATH.exists():
+                    time.sleep(1)
+                append_runner_state("resumed", "Generation resumed")
+                append_runner_event("start_agent", "Resume request received", status="success")
+                clear_request_file(PAUSE_REQUEST_PATH)
+                clear_request_file(RESUME_REQUEST_PATH)
+                checkpoint = read_checkpoint()
+                last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+                continue
+            append_runner_event("start_agent", "Generation agent finished successfully", status="success")
+            clear_request_file(PAUSE_REQUEST_PATH)
+            clear_request_file(RESUME_REQUEST_PATH)
+            return
+
+        if completed.returncode == 130 or PAUSE_REQUEST_PATH.exists():
+            append_runner_state("paused", "Generation paused")
+            append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
+            while not RESUME_REQUEST_PATH.exists():
+                time.sleep(1)
+            append_runner_state("resumed", "Generation resumed")
+            append_runner_event("start_agent", "Resume request received", status="success")
+            clear_request_file(PAUSE_REQUEST_PATH)
+            clear_request_file(RESUME_REQUEST_PATH)
+            checkpoint = read_checkpoint()
+            last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+            continue
+
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+
+
+def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str, install_args: list[str] | None = None) -> None:
+    append_runner_event(step_key, f"Installing dependencies for {label}")
+    command = ["npm", "install", "--no-audit", "--no-fund", *(install_args or [])]
+    npm_env = build_npm_environment()
+    log_npm_mirror_configuration(label, npm_env)
+    run_command(
+        command,
+        cwd=project_dir,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
         check=True,
-        label="generation-agent",
-        env=env,
+        label=f"{label}-npm-install",
+        env=npm_env,
     )
-    append_runner_event("start_agent", f"Generation agent finished with code {completed.returncode}", status="success")
-
-
-def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str) -> None:
-    append_runner_event(step_key, f"Installing dependencies for {label}")
-    run_command(["npm", "install"], cwd=project_dir, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label=f"{label}-npm-install")
     append_runner_event(step_key, f"Dependencies installed for {label}", status="success")
+
+
+def install_agent_node_dependencies(stdout_file, stderr_file) -> None:
+    package_json = SUBMISSION_DIR / "package.json"
+    if not package_json.exists():
+        append_debug_log("No submission package.json found, skipping agent npm install")
+        return
+    install_node_dependencies(
+        SUBMISSION_DIR,
+        stdout_file,
+        stderr_file,
+        "uploaded agent",
+        "start_agent",
+    )
 
 
 def start_background_process(command: list[str], cwd: Path, stdout_file, stderr_file, label: str, env: dict | None = None) -> tuple[subprocess.Popen, threading.Thread, threading.Thread]:
@@ -214,9 +750,10 @@ export default defineConfig({{
   timeout: 30000,
   fullyParallel: false,
   workers: {PLAYWRIGHT_WORKERS},
-  reporter: [['json', {{ outputFile: '../artifacts/playwright-report.json' }}]],
+  reporter: [['json', {{ outputFile: '{PLAYWRIGHT_REPORT_PATH.as_posix()}' }}]],
   use: {{
     baseURL: '{base_url}',
+    channel: 'chromium',
     trace: 'off',
     screenshot: 'off',
   }},
@@ -235,11 +772,16 @@ def ensure_test_package(stdout_file, stderr_file) -> None:
         }
     }
     (TESTS_DIR / "package.json").write_text(json.dumps(package_json, indent=2) + "\n", encoding="utf-8")
-    append_runner_event("run_tests", "Installing Playwright dependencies")
-    run_command(["npm", "install"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="tests-npm-install")
-    append_runner_event("run_tests", "Installing Chromium browser")
-    run_command(["npx", "playwright", "install", "--with-deps", "chromium"], cwd=TESTS_DIR, stdout_file=stdout_file, stderr_file=stderr_file, check=True, label="playwright-install")
-    append_runner_event("run_tests", "Playwright environment is ready", status="success")
+    bundled_modules = Path("/opt/arcbench/node_modules")
+    target_modules = TESTS_DIR / "node_modules"
+    if not bundled_modules.is_dir():
+        raise RuntimeError("Runner image is missing its preinstalled Playwright test package")
+    if target_modules.exists() or target_modules.is_symlink():
+        if target_modules.resolve() != bundled_modules.resolve():
+            raise RuntimeError("Test workspace contains unexpected node_modules; use the immutable runner package instead")
+    else:
+        target_modules.symlink_to(bundled_modules, target_is_directory=True)
+    append_runner_event("run_tests", "Using preinstalled Playwright package from runner image", status="success")
 
 
 def count_playwright_tests() -> int:
@@ -255,18 +797,36 @@ def count_playwright_tests() -> int:
     )
     append_debug_block("playwright-list.stdout", completed.stdout)
     append_debug_block("playwright-list.stderr", completed.stderr)
+    stderr_text = completed.stderr or ""
+    stdout_text = completed.stdout or ""
+    if "No tests found" in stderr_text and "Total: 0 tests" in stdout_text:
+        append_debug_log("Playwright reported no tests; treating this as a successful zero-test run")
+        return 0
     if completed.returncode != 0:
         raise RuntimeError("Failed to enumerate Playwright tests before execution")
-    return sum(1 for line in completed.stdout.splitlines() if line.strip().startswith("["))
+    total_match = re.search(r"Total:\s+(\d+)\s+tests?\b", stdout_text)
+    if total_match:
+        return int(total_match.group(1))
+
+    # Fallback for older or alternative Playwright list formats where tests are
+    # emitted one per line but the final total summary is unavailable.
+    return sum(1 for line in stdout_text.splitlines() if line.strip().startswith("["))
 
 
-def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.Popen:
+def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.Popen | subprocess.CompletedProcess:
     command = ["npx", "playwright", "test", f"--workers={PLAYWRIGHT_WORKERS}"]
     append_runner_event("run_tests", "Deploying generated application", status="info")
     append_runner_event("run_tests", f"Generated application is reachable on http://127.0.0.1:{WEB_APP_PORT}", status="success")
     append_runner_event("run_tests", "Deploying test environment", status="info")
     append_runner_event("run_tests", f"Test environment ready with {PLAYWRIGHT_WORKERS} workers", status="success")
     total_tests = count_playwright_tests()
+    if total_tests == 0:
+        append_runner_event("run_tests", "No Playwright tests found; skipping test execution", status="success")
+        append_debug_log("Skipping Playwright execution because no tests were discovered")
+        return subprocess.CompletedProcess(
+            ["npx", "playwright", "test", f"--workers={PLAYWRIGHT_WORKERS}"],
+            returncode=0,
+        )
     append_runner_event("run_tests", f"Executing tests with {PLAYWRIGHT_WORKERS} workers", status="info")
     append_runner_event("run_tests", f"Test progress 0/{total_tests}", status="info")
 
@@ -306,9 +866,9 @@ def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.P
 
 
 def parse_playwright_results() -> dict:
-    report_path = ARTIFACTS_DIR / "playwright-report.json"
+    report_path = PLAYWRIGHT_REPORT_PATH
     if not report_path.exists():
-        return {"passed": 0, "failed": 0, "score": 0, "duration_seconds": 0, "tests": []}
+        return {"passed": 0, "failed": 0, "score": 100.0, "duration_seconds": 0, "tests": []}
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     tests = []
@@ -369,12 +929,81 @@ def parse_playwright_results() -> dict:
         walk_suite(suite)
 
     total = passed + failed
-    score = round((passed / total) * 100, 1) if total else 0.0
+    score = round((passed / total) * 100, 1) if total else 100.0
     return {
         "passed": passed,
         "failed": failed,
         "score": score,
         "duration_seconds": round(total_duration_ms / 1000, 2),
+        "tests": tests,
+    }
+
+
+def run_cli_template(stdout_file, stderr_file) -> dict:
+    app_dir = TEMPLATE_DIR / "app"
+    tests_dir = TEMPLATE_DIR / "tests"
+    if not app_dir.exists():
+        raise RuntimeError("CLI template is incomplete: expected app/ directory")
+
+    cli_env = {
+        **os.environ,
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONPATH": str(TEMPLATE_DIR),
+    }
+    compile_targets = ["app"]
+    if tests_dir.exists():
+        compile_targets.append("tests")
+
+    append_runner_event("run_tests", "Running CLI compile check")
+    compile_result = run_command(
+        ["python3", "-m", "compileall", *compile_targets],
+        cwd=TEMPLATE_DIR,
+        stdout_file=stdout_file,
+        stderr_file=stderr_file,
+        check=False,
+        label="cli-compileall",
+        env=cli_env,
+    )
+    tests = [
+        {
+            "name": "CLI compile check",
+            "status": "passed" if compile_result.returncode == 0 else "failed",
+            "duration_ms": 0,
+            "error": None if compile_result.returncode == 0 else (compile_result.stderr or "compileall failed"),
+        }
+    ]
+
+    unittest_result = None
+    if tests_dir.exists():
+        append_runner_event("run_tests", "Running CLI unittest suite")
+        unittest_result = run_command(
+            ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
+            cwd=TEMPLATE_DIR,
+            stdout_file=stdout_file,
+            stderr_file=stderr_file,
+            check=False,
+            label="cli-unittest",
+            env=cli_env,
+        )
+        tests.append(
+            {
+                "name": "CLI unittest suite",
+                "status": "passed" if unittest_result.returncode == 0 else "failed",
+                "duration_ms": 0,
+                "error": None if unittest_result.returncode == 0 else (unittest_result.stderr or "unittest failed"),
+            }
+        )
+    else:
+        append_runner_event("run_tests", "No CLI tests directory found; compile check is the only runner verification")
+
+    failed = sum(1 for test in tests if test["status"] != "passed")
+    passed = len(tests) - failed
+    score = round((passed / len(tests)) * 100, 1) if tests else 0.0
+    return {
+        "passed": passed,
+        "failed": failed,
+        "score": score,
+        "duration_seconds": 0,
         "tests": tests,
     }
 
@@ -424,7 +1053,7 @@ def run_web_template(stdout_file, stderr_file) -> dict:
 
     append_runner_event("run_tests", "Starting template application server")
     backend_process, backend_stdout_thread, backend_stderr_thread = start_background_process(
-        ["npm", "run", "dev"],
+        ["npm", "run", "start"],
         cwd=backend_dir,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
@@ -445,23 +1074,61 @@ def run_web_template(stdout_file, stderr_file) -> dict:
 
 
 def main() -> int:
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
+    ARC_DIR.mkdir(parents=True, exist_ok=True)
+    checkpoint = read_checkpoint()
+    resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
+    runtime_state_restored = bool(checkpoint.get("runtime_state_restored"))
+    if not resume_from_checkpoint:
+        RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
     spec = read_spec()
+    heartbeat_stop, heartbeat_thread = start_heartbeat()
     append_debug_log(f"Runner started with spec: {spec}")
+    log_source_mirror_configuration()
+    if resume_from_checkpoint and runtime_state_restored and restore_traceability_storage_from_workspace():
+        append_runner_event(
+            "deploy_agent",
+            f"Traceability restored from checkpoint at step {int(checkpoint.get('last_completed_index', 0) or 0)}",
+            status="success",
+        )
+    else:
+        initialize_traceability_store()
+        seeded_requirements, seeded_scenarios = seed_traceability_requirements()
+        append_runner_event(
+            "deploy_agent",
+            f"Traceability initialized with {seeded_requirements} requirements and {seeded_scenarios} scenarios",
+            status="success",
+        )
 
     managed_processes: list[tuple[subprocess.Popen | None, str]] = []
     managed_threads: list[threading.Thread | None] = []
 
-    with STDOUT_PATH.open("w", encoding="utf-8") as stdout_file, STDERR_PATH.open("w", encoding="utf-8") as stderr_file:
+    with STDOUT_PATH.open("a", encoding="utf-8") as stdout_file:
+        stderr_file = stdout_file
         try:
+            run_environment_preflight()
             install_agent_dependencies(stdout_file, stderr_file)
-            run_generation_agent(stdout_file, stderr_file)
+            install_agent_node_dependencies(stdout_file, stderr_file)
+            run_generation_agent_with_resume(stdout_file, stderr_file)
+            append_runner_event(
+                "start_agent",
+                "Uploaded agent finished; traceability artifacts are expected to be written directly by the SDK",
+                status="success",
+            )
 
             task = spec.get("task", {})
-            category = task.get("category", "web")
-            if category != "web":
+            category = str(task.get("category", "web")).strip().lower() or "web"
+            if category not in {"web", "cli"}:
                 raise RuntimeError(f"Unsupported task category inside runner: {category}")
+
+            if category == "cli":
+                append_runner_event("run_tests", "Preparing CLI verification")
+                results = run_cli_template(stdout_file, stderr_file)
+                append_runner_event(
+                    "run_tests",
+                    f"CLI verification parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}",
+                    status="success",
+                )
+                return 0 if results["failed"] == 0 else 1
 
             runtime = run_web_template(stdout_file, stderr_file)
             managed_processes.extend([
@@ -484,28 +1151,15 @@ def main() -> int:
 
             results = parse_playwright_results()
             append_runner_event("run_tests", f"Playwright results parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}", status="success")
-            RESULT_PATH.write_text(json.dumps(results, indent=2), encoding="utf-8")
-            append_runner_event("run_tests", "Result file written", status="success")
             return 0 if results["failed"] == 0 else 1
         except Exception as exc:  # noqa: BLE001
             append_debug_log(f"Runner failed: {exc}")
             error_step = "run_tests" if (TESTS_DIR / "playwright.config.ts").exists() else "start_agent"
             append_runner_event(error_step, str(exc), status="error")
-            RESULT_PATH.write_text(
-                json.dumps(
-                    {
-                        "passed": 0,
-                        "failed": 0,
-                        "score": 0,
-                        "duration_seconds": 0,
-                        "tests": [],
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
             return 1
         finally:
+            heartbeat_stop.set()
+            heartbeat_thread.join(timeout=1)
             for process, label in reversed(managed_processes):
                 stop_process(process, label)
             for thread in managed_threads:

@@ -1,0 +1,12 @@
+{
+  "name": "arcbench-javascript-agent-template",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "arcbench-agent-runtime-js": "file:./arcbench-agent-runtime-js",
+    "openai": "^4.104.0"
+  }
+}

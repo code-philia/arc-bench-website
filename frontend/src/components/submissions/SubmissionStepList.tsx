@@ -1,9 +1,16 @@
+import { useMemo } from "react";
+
 import type { SubmissionStep } from "../../lib/types";
 
 type SubmissionStepListProps = {
   steps: SubmissionStep[];
   submissionStatus?: string;
   failureReason?: string | null;
+};
+
+type StepLogRendererProps = {
+  step: SubmissionStep;
+  logClassName: (logLine: string) => string;
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
@@ -17,6 +24,16 @@ function normalizeSteps(
   submissionStatus?: string,
   failureReason?: string | null,
 ): SubmissionStep[] {
+  if (submissionStatus === "PAUSED" || submissionStatus === "PAUSE_REQUESTED") {
+    return steps.map((step) => (step.status === "running"
+      ? {
+          ...step,
+          status: "paused",
+          description: submissionStatus === "PAUSE_REQUESTED" ? "Pausing current run" : step.description,
+        }
+      : step));
+  }
+
   if (submissionStatus !== "FAILED") {
     return steps;
   }
@@ -83,6 +100,24 @@ function normalizeSteps(
   });
 }
 
+function StepLogRenderer({ step, logClassName }: StepLogRendererProps) {
+  const recentLogs = useMemo(() => step.logs.slice(-5), [step.logs]);
+
+  if (recentLogs.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="step-log-list">
+      {recentLogs.map((logLine, index) => (
+        <div key={`${step.key}-${index}-${logLine}`} className={logClassName(logLine)}>
+          {logLine}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SubmissionStepList({
   steps,
   submissionStatus,
@@ -108,15 +143,7 @@ export default function SubmissionStepList({
             <div className="step-stage-label">Stage {index + 1}</div>
             <div className="step-title">{step.title}</div>
             <div className="step-desc">{step.description}</div>
-            {step.logs.length ? (
-              <div className="step-log-list">
-                {step.logs.map((logLine) => (
-                  <div key={logLine} className={logClassName(logLine)}>
-                    {logLine}
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <StepLogRenderer step={step} logClassName={logClassName} />
           </div>
         </div>
       ))}

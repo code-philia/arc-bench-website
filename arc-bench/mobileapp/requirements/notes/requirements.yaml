@@ -1,0 +1,242 @@
+id: ROOT
+name: Notes
+type: FOLDER
+description: A notes editor that supports note creation and file saving, content enhancement tools, and Android integrations for printing, sharing, and backup.
+dependencies: []
+children:
+- id: REQ-1
+  name: Create Open And Save Notes
+  type: FOLDER
+  description: The editor shall support starting a fresh note, opening the note picker dialog, and saving the current note through a Save As dialog.
+  dependencies: []
+  children:
+  - id: REQ-1.1
+    name: Start A New Note
+    type: ATOMIC
+    description: The app shall provide a new note action that opens a fresh editor for composing note content.
+    dependencies: []
+    scenarios:
+    - name: Open A Fresh Note Editor
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user taps the new note action with resource-id "org.billthefarmer.notes:id/newNote".
+      - keyword: THEN
+        content: A fresh editing screen is shown for composing a new note.
+  - id: REQ-1.2
+    name: Open Note Picker
+    type: ATOMIC
+    description: The app shall provide an open note action that shows the note picker dialog from the editor.
+    dependencies: []
+    scenarios:
+    - name: Show The Open Note Dialog
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user taps the open note control with resource-id "org.billthefarmer.notes:id/openNote".
+      - keyword: THEN
+        content: An open dialog is displayed for selecting a note file, including the negative button "CANCEL" with resource-id "android:id/button2".
+  - id: REQ-1.3
+    name: Cancel Open Note Dialog
+    type: ATOMIC
+    description: The app shall allow users to dismiss the open note dialog without loading a file.
+    dependencies:
+    - REQ-1.2
+    scenarios:
+    - name: Dismiss The Open Note Dialog
+      steps:
+      - keyword: GIVEN
+        content: The open note dialog is displayed.
+      - keyword: WHEN
+        content: The user taps the negative button "CANCEL" with resource-id "android:id/button2".
+      - keyword: THEN
+        content: The dialog is dismissed and the editor remains open without loading a note file.
+  - id: REQ-1.4
+    name: Save Note As A Named File
+    type: ATOMIC
+    description: The app shall provide a Save As action from the overflow menu, accept a file name in the Save As dialog, and save the current note under that name.
+    dependencies: []
+    scenarios:
+    - name: Show The Save As Dialog
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open with editable content.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects "Save as…".
+      - keyword: THEN
+        content: A Save As dialog is displayed with the input field resource-id "org.billthefarmer.notes:id/pathText" and the positive button "SAVE" using resource-id "android:id/button1".
+    - name: Save The Note As test.md
+      steps:
+      - keyword: GIVEN
+        content: The Save As dialog is open with the input field resource-id "org.billthefarmer.notes:id/pathText" and the positive button "SAVE" using resource-id "android:id/button1".
+      - keyword: WHEN
+        content: The user enters "test.md" into resource-id "org.billthefarmer.notes:id/pathText" and confirms with the positive button "SAVE" using resource-id "android:id/button1".
+      - keyword: THEN
+        content: The note is saved under the name "test.md", the dialog closes, and the editor remains visible.
+- id: REQ-2
+  name: Enhance Note Content
+  type: FOLDER
+  description: The app shall provide overflow actions for inserting dates, invoking media selection, and editing styles or scripts through dedicated dialogs.
+  dependencies: []
+  children:
+  - id: REQ-2.1
+    name: Insert Date Into The Note
+    type: ATOMIC
+    description: The app shall provide an action that inserts a date stamp into the current note content.
+    dependencies: []
+    scenarios:
+    - name: Insert A Date Stamp
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open with the cursor in the note.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Add date".
+      - keyword: THEN
+        content: A date stamp is inserted into the note content.
+  - id: REQ-2.2
+    name: Add Media
+    type: ATOMIC
+    description: The app shall provide an Add Media action that opens the Android document picker and lets users return to the editor without attaching a file.
+    dependencies: []
+    scenarios:
+    - name: Open The Android Document Picker
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Add media…".
+      - keyword: THEN
+        content: The system picker opens in package "com.google.android.documentsui".
+    - name: Leave The Media Picker Without Selecting A File
+      steps:
+      - keyword: GIVEN
+        content: The Android document picker is open after the user selected the overflow item with resource-id "android:id/title" and text "Add media…".
+      - keyword: WHEN
+        content: The user presses Back.
+      - keyword: THEN
+        content: The app returns to the note editor without attaching media.
+  - id: REQ-2.3
+    name: Edit Styles
+    type: ATOMIC
+    description: The app shall provide a styles editor dialog from the overflow menu and apply style changes when the dialog is confirmed.
+    dependencies: []
+    scenarios:
+    - name: Open The Styles Dialog
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Edit styles…".
+      - keyword: THEN
+        content: A style-edit dialog is displayed.
+    - name: Confirm The Styles Dialog
+      steps:
+      - keyword: GIVEN
+        content: The style-edit dialog is open after the user selected the overflow item with resource-id "android:id/title" and text "Edit styles…".
+      - keyword: WHEN
+        content: The user confirms with resource-id "org.billthefarmer.notes:id/accept".
+      - keyword: THEN
+        content: The styles are applied and the editor view is restored.
+  - id: REQ-2.4
+    name: Open Script Editor
+    type: ATOMIC
+    description: The app shall provide a script editor dialog from the overflow menu.
+    dependencies: []
+    scenarios:
+    - name: Open The Script Dialog
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Edit script…".
+      - keyword: THEN
+        content: A script editor dialog is displayed.
+  - id: REQ-2.5
+    name: Apply Script Changes
+    type: ATOMIC
+    description: The app shall apply script changes when the user confirms the script editor dialog.
+    dependencies:
+    - REQ-2.4
+    scenarios:
+    - name: Confirm The Script Dialog
+      steps:
+      - keyword: GIVEN
+        content: The script editor dialog is open after the user selected the overflow item with resource-id "android:id/title" and text "Edit script…".
+      - keyword: WHEN
+        content: The user confirms with resource-id "org.billthefarmer.notes:id/accept".
+      - keyword: THEN
+        content: The script changes are saved or applied and the editor view is restored.
+- id: REQ-3
+  name: Use Android Integrations
+  type: FOLDER
+  description: The editor shall integrate with Android system flows for printing, sharing, and backing up note content.
+  dependencies: []
+  children:
+  - id: REQ-3.1
+    name: Print Note
+    type: ATOMIC
+    description: The app shall provide a print action that launches the Android print flow and lets users return to the editor afterward.
+    dependencies: []
+    scenarios:
+    - name: Launch The Android Print Flow
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Print…".
+      - keyword: THEN
+        content: The system print flow opens in package "com.android.printspooler".
+    - name: Leave Print And Return To The Editor
+      steps:
+      - keyword: GIVEN
+        content: The Android print flow is open after the user selected the overflow item with resource-id "android:id/title" and text "Print…".
+      - keyword: WHEN
+        content: The user presses Back.
+      - keyword: THEN
+        content: The app returns to the note editor.
+  - id: REQ-3.2
+    name: Share Note
+    type: ATOMIC
+    description: The app shall provide a share action that opens the Android sharing UI and lets users return to the editor after dismissing it.
+    dependencies: []
+    scenarios:
+    - name: Launch The Android Share UI
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Share…".
+      - keyword: THEN
+        content: The Android sharing UI is displayed.
+    - name: Leave Share And Return To The Editor
+      steps:
+      - keyword: GIVEN
+        content: The Android sharing UI is open after the user selected the overflow item with resource-id "android:id/title" and text "Share…".
+      - keyword: WHEN
+        content: The user presses Back.
+      - keyword: THEN
+        content: The app returns to the note editor.
+  - id: REQ-3.3
+    name: Back Up Note
+    type: ATOMIC
+    description: The app shall provide a backup action that opens the backup confirmation flow and initiates backup when the user confirms it.
+    dependencies: []
+    scenarios:
+    - name: Start The Backup Flow
+      steps:
+      - keyword: GIVEN
+        content: The note editor is open.
+      - keyword: WHEN
+        content: The user opens the overflow menu with content-desc "More options" and selects the item with resource-id "android:id/title" and text "Backup…".
+      - keyword: THEN
+        content: A save prompt is displayed with the positive button "SAVE" using resource-id "android:id/button1".
+    - name: Confirm Backup With The SAVE Button
+      steps:
+      - keyword: GIVEN
+        content: The backup flow is open and the "SAVE" button with resource-id "android:id/button1" is visible after the user selected the overflow item with resource-id "android:id/title" and text "Backup…".
+      - keyword: WHEN
+        content: The user taps the "SAVE" button using resource-id "android:id/button1".
+      - keyword: THEN
+        content: The backup operation is initiated.
