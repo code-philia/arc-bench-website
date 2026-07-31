@@ -1,6 +1,6 @@
 # Online Spreadsheet Data Workspace Core Requirements
 
-A compact online spreadsheet application with an interface inspired by Google Sheets, focused on workbook and worksheet management, grid data editing, formula calculation, sorting and filtering, data validation, and basic pivot analysis. Workbook metadata, worksheet structure, raw cell values and formulas, row and column order, filter configuration, validation rules, and pivot table configuration must be written to persistent storage. When the page is refreshed or a workbook is reopened, the last successfully written data state should be restored. Shared collaboration, historical state restoration, complex visual styling, charts, macro scripts, real-time collaborative cursors, and external office-suite integrations are outside the core scope.
+A compact online spreadsheet application with an interface inspired by Google Sheets, focused on workbook and worksheet management, grid data editing, formula calculation, sorting and filtering, data validation, and basic pivot analysis. The workbook home page opens a workbook editor; every grid, formula-bar, row/column, filter, validation, and pivot operation runs in the context of that workbook and its active worksheet. Persist workbook metadata, worksheet IDs and order, active worksheet, each worksheet’s last selected cell, row and column structure, raw cell values/types/formulas, formula calculation state, filter configuration, validation rules, and pivot-table configuration. On refresh or reopen, load this complete state before rendering. Commit every state-changing action atomically; on failure, retain the last successfully saved state. Shared collaboration, version history restoration, complex visual styling, charts, macro scripts, real-time collaborative cursors, and external office-suite integrations are outside the core scope.
 
 ## REQ-1 Workbook Access and Lifecycle
 
@@ -193,10 +193,10 @@ A user changes the name from the worksheet tab menu. After trimming leading and 
 
 #### REQ-2-1-4 Delete a worksheet
 
-A user deletes a worksheet after confirmation. The system deletes the worksheet's metadata, row and column structure, cells, formulas, and associated rules from storage, updates the worksheet list, and activates an adjacent worksheet. A workbook must always keep at least one worksheet, so deletion should be rejected when only one worksheet remains. If deletion fails, the page must not pretend that deletion succeeded.
+A user deletes a worksheet after confirmation. The system deletes the worksheet's metadata, row and column structure, cells, formulas, and associated rules from storage, updates the worksheet list, and activates an adjacent worksheet. A workbook must always keep at least one worksheet, so deletion should be rejected when only one worksheet remains. If deletion fails, the page must not pretend that deletion succeeded. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-5-3
 
 **Scenarios:**
 
@@ -219,13 +219,13 @@ Support inserting and deleting rows and columns, and consistently write the chan
 
 #### REQ-2-2-1 Insert and delete rows
 
-A user inserts a blank row above or below a target row through the row-number menu, or deletes the target row. On insertion, affected rows shift down as a whole. On deletion, subsequent rows shift up as a whole. The system must save the new row order, cell positions, formula references, and validation rules in one data update. If writing fails, the original structure is restored; the frontend display must not be moved alone.
+This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes. A user inserts a blank row above or below a target row through the row-number menu, or deletes the target row. On insertion, affected rows shift down as a whole. On deletion, subsequent rows shift up as a whole. The system must save the new row order, cell positions, formula references, and validation rules in one data update. If writing fails, the original structure is restored; the frontend display must not be moved alone.
 
 Screenshot reference:
 ![image](reference/manage-rows.png)
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-5-3
 
 **Scenarios:**
 
@@ -240,13 +240,13 @@ Screenshot reference:
 
 #### REQ-2-2-2 Insert and delete columns
 
-A user inserts a blank column to the left or right of a target column through the column-header menu, or deletes the target column. On insertion, affected columns shift right as a whole. On deletion, subsequent columns shift left as a whole. The new column order, cell positions, and formula references must be written to storage consistently. Data outside the deleted column must not be lost. Formulas depending on that column should be updated according to a uniform rule or saved as recognizable reference errors.
+This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes. A user inserts a blank column to the left or right of a target column through the column-header menu, or deletes the target column. On insertion, affected columns shift right as a whole. On deletion, subsequent columns shift left as a whole. The new column order, cell positions, and formula references must be written to storage consistently. Data outside the deleted column must not be lost. Formulas depending on that column should be updated according to a uniform rule or saved as recognizable reference errors.
 
 Screenshot reference:
 ![image](reference/manage-columns.png)
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-5-3
 
 **Scenarios:**
 
@@ -275,13 +275,13 @@ Support entering data through the grid, formula bar, or external clipboard, and 
 
 #### REQ-3-1-1 Edit cells through the grid or formula bar
 
-After selecting a cell, a user can directly change its raw content in the grid or formula bar. Cells support text, numbers, boolean-like values, date text, and formulas beginning with an equals sign. When the user presses Enter or clicks another cell to commit, the system saves the cell coordinate, raw content, and content type. Pressing Escape cancels uncommitted changes. Formula cells display calculated results in the grid and the stored original formula in the formula bar. If storage fails, the previous saved value is retained and an error is shown.
+This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-2-1 (Recalculate dependent formulas after source data changes); it must reuse that context and remain consistent when the prerequisite state changes. After selecting a cell, a user can directly change its raw content in the grid or formula bar. Cells support text, numbers, boolean-like values, date text, and formulas beginning with an equals sign. When the user presses Enter or clicks another cell to commit, the system saves the cell coordinate, raw content, and content type. Pressing Escape cancels uncommitted changes. Formula cells display calculated results in the grid and the stored original formula in the formula bar. If storage fails, the previous saved value is retained and an error is shown.
 
 Screenshot reference:
 ![image](reference/edit-cell.png)
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-4-2-1
 
 **Scenarios:**
 
@@ -368,20 +368,20 @@ Support basic formula calculation, relative references, dependency recalculation
 
 ### REQ-4-1 Formula Entry and Functions
 
-Support entering basic expressions and aggregate functions, and save adjusted independent formula expressions when formulas are copied.
+Support entering basic expressions and aggregate functions, and save adjusted independent formula expressions when formulas are copied. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar), REQ-3-2-1 (Copy, cut, and paste cell ranges); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** FOLDER
-**Dependencies:** None
+**Dependencies:** REQ-3-1-1, REQ-3-2-1
 
 #### REQ-4-1-1 Calculate basic expressions and aggregate functions
 
-A user enters a formula beginning with an equals sign. The formula engine supports at least numeric constants, parentheses, addition, subtraction, multiplication, division, cell references, and SUM, AVERAGE, COUNT, MIN, and MAX over contiguous ranges. The system saves the raw formula expression, the grid displays the result calculated from current source data, and the formula bar displays the original expression. Function names are case-insensitive, and empty cells are handled according to a uniform rule.
+This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar); it must reuse that context and remain consistent when the prerequisite state changes. A user enters a formula beginning with an equals sign. The formula engine supports at least numeric constants, parentheses, addition, subtraction, multiplication, division, cell references, and SUM, AVERAGE, COUNT, MIN, and MAX over contiguous ranges. The system saves the raw formula expression, the grid displays the result calculated from current source data, and the formula bar displays the original expression. Function names are case-insensitive, and empty cells are handled according to a uniform rule.
 
 Screenshot reference:
 ![image](reference/basic-formulas.png)
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-3-1-1
 
 **Scenarios:**
 
@@ -397,10 +397,10 @@ Screenshot reference:
 
 #### REQ-4-1-2 Copy formulas and adjust relative references
 
-When a formula cell is copied to another location, relative row and column references should change according to the offset between the target location and source location. For example, after copying =A1+B1 from C1 to C2, the target formula should be =A2+B2. The system writes the adjusted target formula to storage as an independent expression, keeps the source formula unchanged, and calculates the target result from the new references.
+When a formula cell is copied to another location, relative row and column references should change according to the offset between the target location and source location. For example, after copying =A1+B1 from C1 to C2, the target formula should be =A2+B2. The system writes the adjusted target formula to storage as an independent expression, keeps the source formula unchanged, and calculates the target result from the new references. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-2-1 (Copy, cut, and paste cell ranges), REQ-4-2-2 (Display and fix formula errors); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-3-2-1, REQ-4-2-2
 
 **Scenarios:**
 
@@ -413,17 +413,17 @@ When a formula cell is copied to another location, relative row and column refer
 
 ### REQ-4-2 Dependency Updates and Error Handling
 
-Support recalculating dependencies after source data changes and isolating formula errors, while ensuring that formulas in storage and redisplayed results remain consistent.
+Support recalculating dependencies after source data changes and isolating formula errors, while ensuring that formulas in storage and redisplayed results remain consistent. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2 (Worksheets and Grid Structure), REQ-3 (Cell and Range Editing); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** FOLDER
-**Dependencies:** None
+**Dependencies:** REQ-2, REQ-3
 
 #### REQ-4-2-1 Recalculate dependent formulas after source data changes
 
-The system tracks dependencies between formula cells and referenced cells. After a source value change is committed, all directly and indirectly dependent formulas must be recalculated in dependency order, and the source value, formula expressions, and consistent calculation state must be saved together. When reopening a workbook, results should be restored or recalculated based on the currently stored source values; stale cached results must not be displayed long term.
+The system tracks dependencies between formula cells and referenced cells. After a source value change is committed, all directly and indirectly dependent formulas must be recalculated in dependency order, and the source value, formula expressions, and consistent calculation state must be saved together. When reopening a workbook, results should be restored or recalculated based on the currently stored source values; stale cached results must not be displayed long term. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2 (Worksheets and Grid Structure), REQ-3 (Cell and Range Editing); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-2, REQ-3
 
 **Scenarios:**
 
@@ -435,10 +435,10 @@ The system tracks dependencies between formula cells and referenced cells. After
 
 #### REQ-4-2-2 Display and fix formula errors
 
-The formula engine displays stable and recognizable error values for division by zero, invalid references, unsupported functions, malformed expressions, and direct or indirect circular references. The system saves the raw formula submitted by the user and its error state. A single error must not affect other cells. After the user changes the formula to a valid expression, the system saves the new formula, recalculates, and removes the error state.
+The formula engine displays stable and recognizable error values for division by zero, invalid references, unsupported functions, malformed expressions, and direct or indirect circular references. The system saves the raw formula submitted by the user and its error state. A single error must not affect other cells. After the user changes the formula to a valid expression, the system saves the new formula, recalculates, and removes the error state. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-3-1-1
 
 **Scenarios:**
 
@@ -486,10 +486,10 @@ Screenshot reference:
 
 #### REQ-5-1-2 Filter rows by value or condition
 
-A user creates filters for a data range that contains headers. Column filters support at least selecting specific values, text contains, numeric comparison, date comparison, blank, and non-blank conditions. Conditions from different columns are combined with AND. Non-matching rows are hidden, not deleted. The system saves the filter range, each column condition, and enabled state. After reopening, the filtered view is restored. Clearing filters only deletes the configuration and does not modify source data.
+A user creates filters for a data range that contains headers. Column filters support at least selecting specific values, text contains, numeric comparison, date comparison, blank, and non-blank conditions. Conditions from different columns are combined with AND. Non-matching rows are hidden, not deleted. The system saves the filter range, each column condition, and enabled state. After reopening, the filtered view is restored. Clearing filters only deletes the configuration and does not modify source data. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-3 (Basic Pivot Summaries); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-5-3
 
 **Scenarios:**
 
@@ -502,10 +502,10 @@ A user creates filters for a data range that contains headers. Column filters su
 
 ### REQ-5-2 Data Validation
 
-Support configuring dropdown or numeric validation for cell ranges, and persist rules, scopes, and valid cell values.
+Support configuring dropdown or numeric validation for cell ranges, and persist rules, scopes, and valid cell values. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-1-1 (Edit cells through the grid or formula bar), REQ-3-1-2 (Paste two-dimensional tabular data), REQ-3-2-1 (Copy, cut, and paste cell ranges); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** FOLDER
-**Dependencies:** None
+**Dependencies:** REQ-3-1-1, REQ-3-1-2, REQ-3-2-1
 
 #### REQ-5-2-1 Set dropdown or numeric validation for a range
 
@@ -527,17 +527,17 @@ A user selects a target range and creates a dropdown-list rule or numeric upper/
 
 ### REQ-5-3 Basic Pivot Summaries
 
-Support creating basic pivot tables and saving the source range, field selections, aggregation method, and generated result.
+Support creating basic pivot tables and saving the source range, field selections, aggregation method, and generated result. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-1 (Add a worksheet); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** FOLDER
-**Dependencies:** None
+**Dependencies:** REQ-2-1-1
 
 #### REQ-5-3-1 Create and refresh a basic pivot table
 
-A user selects a source data range with headers and creates a pivot table in a new worksheet. Configuration supports at least one row field, one optional column field, one value field, and SUM, COUNT, or AVERAGE aggregation. The system saves the source range, field configuration, aggregation method, and pivot result. After source data changes, the user can refresh and overwrite the saved result. If the source range is invalid, an error is shown and the source worksheet must not be modified.
+A user selects a source data range with headers and creates a pivot table in a new worksheet. Configuration supports at least one row field, one optional column field, one value field, and SUM, COUNT, or AVERAGE aggregation. The system saves the source range, field configuration, aggregation method, and pivot result. After source data changes, the user can refresh and overwrite the saved result. If the source range is invalid, an error is shown and the source worksheet must not be modified. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-2 (Row and Column Structure Management); it must reuse that context and remain consistent when the prerequisite state changes.
 
 **Type:** ATOMIC
-**Dependencies:** None
+**Dependencies:** REQ-2-2
 
 **Scenarios:**
 

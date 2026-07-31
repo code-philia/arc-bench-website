@@ -1,21 +1,25 @@
 id: ROOT
 name: GitHub Collaboration Platform Core Requirements
 type: FOLDER
-description: A compact GitHub-style collaboration platform focused on account access, repositories, code changes, issues, pull requests and basic organization access control.
+dependencies: []
+description: A compact GitHub-style collaboration platform focused on account access, organizations and members, repositories and Git content, issues, pull requests, and basic access control. Users enter as visitors or through authenticated sessions; every write runs in a specific account, organization, repository, branch, or work-item context. Persist accounts and sessions, organization members and teams, repositories with visibility and access roles, branches and commits, file content, issues and comments, and pull requests with review and merge state. On reopen, restore the last successfully saved state. Every write must verify the current identity and resource permission, report failures, and avoid partial objects or partial state changes. Real-time collaboration, Actions, Packages, Wiki, project boards, notification delivery, and external Git remote protocols are outside the core scope.
 children:
 - id: REQ-1
   name: Identity and Access
   type: FOLDER
+  dependencies: []
   description: Core account registration, recovery, sign-in and sign-out capabilities.
   children:
   - id: REQ-1-1
     name: Account Onboarding and Recovery
     type: FOLDER
+    dependencies: []
     description: Capabilities required for visitors to create, recover and access accounts.
     children:
     - id: REQ-1-1-1
       name: Register a new GitHub account
       type: ATOMIC
+      dependencies: []
       description: >
         A visitor uses this capability from account access pages. The capability requires that the visitor can provide the required account information. The user completes the main choices or confirmation steps for register a new github account. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system creates or begins verification for the new account and makes the account available after required checks are complete.
 
@@ -34,7 +38,10 @@ children:
     - id: REQ-1-1-2
       name: Sign in with an existing account
       type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-1 (Register a new GitHub account); it must reuse that context and remain consistent when the prerequisite state changes.
         A visitor uses this capability from account access pages. The capability requires that the visitor has an existing account and valid credentials. The user completes the main choices or confirmation steps for sign in with an existing account. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system starts an authenticated session and shows the signed-in user's workspace.
 
         Screenshot reference: ![image](reference/github-sign-in.png)
@@ -52,7 +59,10 @@ children:
     - id: REQ-1-1-3
       name: Recover account access by verified email
       type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-1 (Register a new GitHub account); it must reuse that context and remain consistent when the prerequisite state changes.
         A visitor uses this capability from account access pages. The capability requires that the visitor can identify a verified account email address. The user completes the main choices or confirmation steps for recover account access by verified email. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system accepts the recovery request and provides the next account-recovery step without exposing account secrets.
 
         Screenshot reference: ![image](reference/github-password-reset.png)
@@ -70,7 +80,10 @@ children:
   - id: REQ-1-2
     name: Sign out and end the current web session
     type: ATOMIC
+    dependencies:
+    - REQ-1-1-2
     description: >
+      This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       An authenticated user ends the current web session from the account access area. The system confirms the sign-out action when needed, invalidates the active session and returns protected account, repository or organization pages to an unauthenticated access state.
 
       Screenshot reference: ![image](reference/github-account-menu-sign-out.png)
@@ -88,7 +101,10 @@ children:
   - id: REQ-1-3
     name: Change the account password
     type: ATOMIC
+    dependencies:
+    - REQ-1-1-2
     description: >
+      This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       An authenticated user changes the account password from account security settings. The user provides the required current and new credential information, and the system validates the change, prevents unauthorized updates and applies the new password to later sign-in attempts.
 
       Screenshot reference: ![image](reference/github-password-settings.png)
@@ -106,16 +122,21 @@ children:
 - id: REQ-2
   name: Organization and Governance
   type: FOLDER
-  description: Basic organization membership, team and repository access management.
+  dependencies:
+  - REQ-1-1-2
+  description: Basic organization membership, team and repository access management. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
   children:
   - id: REQ-2-1
     name: Organization Identity and Discovery
     type: FOLDER
-    description: Core organization creation capability.
+    dependencies:
+    - REQ-1-1-2
+    description: Core organization creation capability. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-2-1-1
       name: Browse organization repositories
       type: ATOMIC
+      dependencies: []
       description: >
         A visitor or organization member uses this capability from organization administration or public organization pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for browse organization repositories. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The requested information is displayed with the relevant filters, metadata or status indicators visible to the user.
 
@@ -134,7 +155,9 @@ children:
     - id: REQ-2-1-2
       name: Create an organization after authentication
       type: ATOMIC
-      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for create an organization after authentication. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
+      dependencies:
+      - REQ-1-1-2
+      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for create an organization after authentication. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Create an organization after authentication
         steps:
@@ -149,12 +172,16 @@ children:
   - id: REQ-2-2
     name: Team and Membership Management
     type: FOLDER
-    description: Capabilities for creating teams, inviting members, removing members and organizing access.
+    dependencies:
+    - REQ-2-1-2
+    description: Capabilities for creating teams, inviting members, removing members and organizing access. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-2 (Create an organization after authentication); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-2-2-1
       name: Create an organization team
       type: ATOMIC
-      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for create an organization team. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
+      dependencies:
+      - REQ-2-1-2
+      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for create an organization team. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-2 (Create an organization after authentication); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Create an organization team
         steps:
@@ -169,7 +196,9 @@ children:
     - id: REQ-2-2-2
       name: Manage organization team membership and hierarchy
       type: ATOMIC
-      description: A visitor or organization member uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for manage organization team membership and hierarchy. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
+      dependencies:
+      - REQ-2-2-1
+      description: A visitor or organization member uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for manage organization team membership and hierarchy. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-2-1 (Create an organization team); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Manage organization team membership and hierarchy
         steps:
@@ -184,7 +213,9 @@ children:
     - id: REQ-2-2-3
       name: Invite a user to an organization
       type: ATOMIC
-      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for invite a user to an organization. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
+      dependencies:
+      - REQ-2-1-2
+      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for invite a user to an organization. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-2 (Create an organization after authentication); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Invite a user to an organization
         steps:
@@ -199,7 +230,9 @@ children:
     - id: REQ-2-2-4
       name: Remove a member from an organization
       type: ATOMIC
-      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for remove a member from an organization. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The selected object or permission is removed after confirmation, and later views reflect the removal.
+      dependencies:
+      - REQ-2-1-2
+      description: An organization owner uses this capability from organization administration or public organization pages. The capability requires that the user is authenticated and has the required organization permission. The user completes the main choices or confirmation steps for remove a member from an organization. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The selected object or permission is removed after confirmation, and later views reflect the removal. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-2 (Create an organization after authentication); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Remove a member from an organization
         steps:
@@ -214,7 +247,10 @@ children:
   - id: REQ-2-3
     name: Grant repository access to people and teams
     type: ATOMIC
-    description: An organization owner or repository administrator grants repository access to people or teams and selects the basic role that defines what each participant can do. The system applies the permission assignment, prevents unauthorized role changes and allows members to access the repository according to the granted role.
+    dependencies:
+    - REQ-2-1-2
+    - REQ-2-2-1
+    description: An organization owner or repository administrator grants repository access to people or teams and selects the basic role that defines what each participant can do. The system applies the permission assignment, prevents unauthorized role changes and allows members to access the repository according to the granted role. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-2-1-2 (Create an organization after authentication), REQ-2-2-1 (Create an organization team); it must reuse that context and remain consistent when the prerequisite state changes.
     scenarios:
     - name: Grant repository access to people and teams
       steps:
@@ -229,11 +265,13 @@ children:
 - id: REQ-3
   name: Repository Asset Management
   type: FOLDER
+  dependencies: []
   description: Capabilities for locating, creating, opening and configuring repositories.
   children:
   - id: REQ-3-1
     name: Search and locate repositories
     type: ATOMIC
+    dependencies: []
     description: >
       A visitor or authenticated user searches for repositories they are allowed to view. The system accepts a search query, applies repository-oriented filtering or scoping, and displays matching repositories with enough metadata for the user to open the intended repository.
 
@@ -252,12 +290,17 @@ children:
   - id: REQ-3-2
     name: Repository Creation and Distribution
     type: FOLDER
-    description: Core repository creation capability.
+    dependencies:
+    - REQ-1-1-2
+    description: Core repository creation capability. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-3-2-1
       name: Create a repository with owner, visibility and initialization options
       type: ATOMIC
+      dependencies:
+      - REQ-1-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
         An authorized administrator uses this capability from repository pages. The capability requires that the user is authenticated and has administrator permission for the target repository. The user completes the main choices or confirmation steps for create a repository with owner, visibility and initialization options. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
 
         Screenshot reference: ![image](reference/github-create-repository.png)
@@ -275,7 +318,11 @@ children:
     - id: REQ-3-2-2
       name: Fork a repository into another namespace
       type: ATOMIC
+      dependencies:
+      - REQ-3-3
+      - REQ-1-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
         An authenticated user uses this capability from repository pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for fork a repository into another namespace. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. A new fork is created under the selected owner and links back to the source repository.
 
         Screenshot reference: ![image](reference/github-fork-repository.png)
@@ -293,7 +340,10 @@ children:
     - id: REQ-3-2-3
       name: Copy a repository clone URL
       type: ATOMIC
+      dependencies:
+      - REQ-3-3
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
         A visitor or authenticated user uses this capability from repository pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for copy a repository clone url. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The selected repository access value is available for the user to paste into their local tooling.
 
         Screenshot reference: ![image](reference/github-code-clone-menu.png)
@@ -311,6 +361,7 @@ children:
   - id: REQ-3-3
     name: View a public repository overview
     type: ATOMIC
+    dependencies: []
     description: >
       A visitor or authorized user opens a repository overview to confirm the repository identity, visibility, description, primary metadata and available content. The overview provides the main entry point for browsing files, reviewing repository context and beginning collaboration.
 
@@ -329,7 +380,11 @@ children:
   - id: REQ-3-4
     name: Change repository visibility with permission checks
     type: ATOMIC
+    dependencies:
+    - REQ-3-3
+    - REQ-1-1-2
     description: >
+      This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       A repository administrator changes the repository visibility after reviewing the effect on access. The system blocks unauthorized changes, applies the selected visibility and enforces the updated access rules when users open the repository later.
 
       Screenshot reference: ![image](reference/github-repository-visibility-settings.png)
@@ -347,12 +402,17 @@ children:
 - id: REQ-4
   name: Code and Version Control
   type: FOLDER
-  description: Core file browsing, branch, commit history and web-based file change capabilities.
+  dependencies:
+  - REQ-3-3
+  description: Core file browsing, branch, commit history and web-based file change capabilities. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
   children:
   - id: REQ-4-1
     name: Browse repository files and directories
     type: ATOMIC
+    dependencies:
+    - REQ-3-3
     description: >
+      This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
       A repository participant browses folders and files on a selected branch, opens nested directories and views file content with enough metadata to understand the current repository state.
 
       Screenshot reference: ![image](reference/github-code-file-browser.png)
@@ -370,12 +430,17 @@ children:
   - id: REQ-4-2
     name: Commit History and Code Search
     type: FOLDER
-    description: Core commit history and difference review capabilities.
+    dependencies:
+    - REQ-4-1
+    description: Core commit history and difference review capabilities. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-1 (Browse repository files and directories); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-4-2-1
       name: Review repository commit history
       type: ATOMIC
+      dependencies:
+      - REQ-4-1
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-1 (Browse repository files and directories); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository participant reviews commit history for a branch or file context to understand recent changes and the people who made them.
 
         Screenshot reference: ![image](reference/github-commit-history.png)
@@ -393,7 +458,10 @@ children:
     - id: REQ-4-2-2
       name: Inspect commit and revision differences
       type: ATOMIC
+      dependencies:
+      - REQ-4-2-1
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-2-1 (Review repository commit history); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository participant compares commits or revisions and inspects changed files so that code changes can be reviewed before further work or a pull request.
 
         Screenshot reference: ![image](reference/github-commit-diff.png)
@@ -411,7 +479,10 @@ children:
     - id: REQ-4-2-3
       name: Search code within a repository scope
       type: ATOMIC
+      dependencies:
+      - REQ-4-1
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-1 (Browse repository files and directories); it must reuse that context and remain consistent when the prerequisite state changes.
         A visitor or authenticated user uses this capability from repository code and version-control pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for search code within a repository scope. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The requested information is displayed with the relevant filters, metadata or status indicators visible to the user.
 
         Screenshot reference: ![image](reference/github-repository-code-search.png)
@@ -429,12 +500,17 @@ children:
   - id: REQ-4-3
     name: Branch and Tag Management
     type: FOLDER
-    description: Core branch listing, switching and creation capabilities.
+    dependencies:
+    - REQ-4-1
+    description: Core branch listing, switching and creation capabilities. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-1 (Browse repository files and directories); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-4-3-1
       name: List and switch repository branches
       type: ATOMIC
+      dependencies:
+      - REQ-4-1
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-1 (Browse repository files and directories); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository participant lists available branches, identifies the active branch and switches repository context to another branch for browsing or editing.
 
         Screenshot reference: ![image](reference/github-branch-selector.png)
@@ -452,7 +528,11 @@ children:
     - id: REQ-4-3-2
       name: Create a branch from an existing revision
       type: ATOMIC
+      dependencies:
+      - REQ-4-3-1
+      - REQ-1-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-3-1 (List and switch repository branches), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
         An authenticated user uses this capability from repository code and version-control pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for create a branch from an existing revision. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
 
         Screenshot reference: ![image](reference/github-create-branch.png)
@@ -470,7 +550,11 @@ children:
     - id: REQ-4-3-3
       name: Change the repository default branch
       type: ATOMIC
+      dependencies:
+      - REQ-4-3-1
+      - REQ-1-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-3-1 (List and switch repository branches), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
         An authenticated user uses this capability from repository code and version-control pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for change the repository default branch. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The updated configuration, relationship or state is saved and remains effective when the object is reopened.
 
         Screenshot reference: ![image](reference/github-default-branch-settings.png)
@@ -488,7 +572,11 @@ children:
   - id: REQ-4-4
     name: Manage repository files through the web interface
     type: ATOMIC
+    dependencies:
+    - REQ-4-1
+    - REQ-1-1-2
     description: >
+      This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-1 (Browse repository files and directories), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       A repository contributor creates, edits, uploads, renames or removes repository files from the web interface when they have permission to change the selected branch. The system validates the change and saves the resulting file updates as repository commits.
 
       Screenshot reference: ![image](reference/github-web-file-editor.png)
@@ -506,17 +594,24 @@ children:
 - id: REQ-5
   name: Work Planning and Issue Management
   type: FOLDER
-  description: Core issue discovery, discussion, metadata and lifecycle capabilities.
+  dependencies:
+  - REQ-3-3
+  description: Core issue discovery, discussion, metadata and lifecycle capabilities. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
   children:
   - id: REQ-5-1
     name: Issue Discovery and Detail
     type: FOLDER
-    description: Capabilities for listing, filtering and reading issues.
+    dependencies:
+    - REQ-3-3
+    description: Capabilities for listing, filtering and reading issues. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-5-1-1
       name: List and filter repository issues
       type: ATOMIC
+      dependencies:
+      - REQ-3-3
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository participant lists issues, filters by open or closed state, searches by issue metadata and opens the relevant work item list for triage.
 
         Screenshot reference: ![image](reference/github-issues-list.png)
@@ -534,7 +629,9 @@ children:
     - id: REQ-5-1-2
       name: View an issue and its discussion
       type: ATOMIC
-      description: A repository participant opens an issue to read its title, description, status, metadata, comments and activity timeline before deciding what action to take.
+      dependencies:
+      - REQ-5-1-1
+      description: A repository participant opens an issue to read its title, description, status, metadata, comments and activity timeline before deciding what action to take. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-1 (List and filter repository issues); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: View an issue and its discussion
         steps:
@@ -549,12 +646,18 @@ children:
   - id: REQ-5-2
     name: Issue Creation and Discussion
     type: FOLDER
-    description: Capabilities for creating, editing and discussing issues.
+    dependencies:
+    - REQ-5-1-2
+    description: Capabilities for creating, editing and discussing issues. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-5-2-1
       name: Create a repository issue
       type: ATOMIC
+      dependencies:
+      - REQ-3-3
+      - REQ-1-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
         An authenticated user uses this capability from repository planning and issue management pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for create an issue from repository, comment, code, discussion or project context. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
 
         Screenshot reference: ![image](reference/github-new-issue.png)
@@ -572,7 +675,9 @@ children:
     - id: REQ-5-2-2
       name: Edit an issue title and description
       type: ATOMIC
-      description: An authenticated user uses this capability from repository planning and issue management pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for edit an issue title and description. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
+      dependencies:
+      - REQ-5-1-2
+      description: An authenticated user uses this capability from repository planning and issue management pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for edit an issue title and description. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Edit an issue title and description
         steps:
@@ -587,7 +692,10 @@ children:
     - id: REQ-5-2-3
       name: Comment on an issue discussion
       type: ATOMIC
-      description: An authenticated user uses this capability from repository planning and issue management pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for comment on and react to an issue discussion. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
+      dependencies:
+      - REQ-5-1-2
+      - REQ-1-1-2
+      description: An authenticated user uses this capability from repository planning and issue management pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for comment on and react to an issue discussion. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Comment on and react to an issue discussion
         steps:
@@ -602,12 +710,16 @@ children:
   - id: REQ-5-3
     name: Issue Metadata and Classification
     type: FOLDER
-    description: Core issue assignment and label categorization capabilities.
+    dependencies:
+    - REQ-5-1-2
+    description: Core issue assignment and label categorization capabilities. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-5-3-1
       name: Assign or unassign issue participants
       type: ATOMIC
-      description: An authenticated user uses this capability from account access pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for assign or unassign issue participants. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The updated configuration, relationship or state is saved and remains effective when the object is reopened.
+      dependencies:
+      - REQ-5-1-2
+      description: An authenticated user uses this capability from account access pages. The capability requires that the user is authenticated and has access to the relevant account, repository or organization. The user completes the main choices or confirmation steps for assign or unassign issue participants. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The updated configuration, relationship or state is saved and remains effective when the object is reopened. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Assign or unassign issue participants
         steps:
@@ -622,7 +734,9 @@ children:
     - id: REQ-5-3-2
       name: Apply labels to issues
       type: ATOMIC
-      description: A repository participant with suitable permission applies or removes labels so that issues can be categorized with the repository's basic label set.
+      dependencies:
+      - REQ-5-1-2
+      description: A repository participant with suitable permission applies or removes labels so that issues can be categorized with the repository's basic label set. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Apply labels to issues
         steps:
@@ -637,7 +751,10 @@ children:
     - id: REQ-5-3-3
       name: Group issues and pull requests into milestones
       type: ATOMIC
+      dependencies:
+      - REQ-5-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository collaborator uses this capability from repository planning and issue management pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for group issues and pull requests into milestones. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
 
         Screenshot reference: ![image](reference/github-milestones.png)
@@ -655,7 +772,9 @@ children:
   - id: REQ-5-4
     name: Close or reopen an issue
     type: ATOMIC
-    description: A repository participant with sufficient permission closes or reopens an issue from the issue detail view. The system validates the requested state change, records the transition in the issue activity history and displays the updated issue state to later viewers.
+    dependencies:
+    - REQ-5-1-2
+    description: A repository participant with sufficient permission closes or reopens an issue from the issue detail view. The system validates the requested state change, records the transition in the issue activity history and displays the updated issue state to later viewers. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-5-1-2 (View an issue and its discussion); it must reuse that context and remain consistent when the prerequisite state changes.
     scenarios:
     - name: Close or reopen an issue
       steps:
@@ -670,12 +789,19 @@ children:
 - id: REQ-6
   name: Change Review and Merge Control
   type: FOLDER
-  description: Core pull-request listing, creation, review, merge and closure capabilities.
+  dependencies:
+  - REQ-3-3
+  - REQ-4-3
+  description: Core pull-request listing, creation, review, merge and closure capabilities. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview), REQ-4-3 (Branch and Tag Management); it must reuse that context and remain consistent when the prerequisite state changes.
   children:
   - id: REQ-6-1
     name: Protect branches with review and status-check requirements
     type: ATOMIC
+    dependencies:
+    - REQ-4-3-1
+    - REQ-1-1-2
     description: >
+      This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-3-1 (List and switch repository branches), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       A repository administrator protects important branches by requiring review or status conditions before changes can be integrated. The system saves the protection rule, prevents unauthorized changes to the protected branch and applies the rule during later pull-request merges.
 
       Screenshot reference: ![image](reference/github-branch-protection.png)
@@ -693,12 +819,17 @@ children:
   - id: REQ-6-2
     name: Pull Request Discovery and Creation
     type: FOLDER
-    description: Capabilities for finding, comparing and creating pull requests.
+    dependencies:
+    - REQ-4-3
+    description: Capabilities for finding, comparing and creating pull requests. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-3 (Branch and Tag Management); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-6-2-1
       name: List and filter repository pull requests
       type: ATOMIC
+      dependencies:
+      - REQ-3-3
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-3-3 (View a public repository overview); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository participant lists pull requests and filters the list by state or review-relevant metadata to find proposals that need attention.
 
         Screenshot reference: ![image](reference/github-pull-requests-list.png)
@@ -716,7 +847,11 @@ children:
     - id: REQ-6-2-2
       name: Compare branches before opening a pull request
       type: ATOMIC
+      dependencies:
+      - REQ-4-3-1
+      - REQ-1-1-2
       description: >
+        This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-4-3-1 (List and switch repository branches), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
         A repository collaborator uses this capability from repository pull-request pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for compare branches before opening a pull request. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
 
         Screenshot reference: ![image](reference/github-compare-branches.png)
@@ -734,7 +869,9 @@ children:
     - id: REQ-6-2-3
       name: Create a pull request from a compare result
       type: ATOMIC
-      description: A repository collaborator uses this capability from repository pull-request pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for create a pull request from a compare result. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
+      dependencies:
+      - REQ-6-2-2
+      description: A repository collaborator uses this capability from repository pull-request pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for create a pull request from a compare result. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-2-2 (Compare branches before opening a pull request); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Create a pull request from a compare result
         steps:
@@ -749,7 +886,9 @@ children:
     - id: REQ-6-2-4
       name: Create a draft pull request
       type: ATOMIC
-      description: A repository collaborator uses this capability from repository pull-request pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for create a draft pull request. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context.
+      dependencies:
+      - REQ-6-2-2
+      description: A repository collaborator uses this capability from repository pull-request pages. The capability requires that the user is authenticated and has the required repository collaboration permission. The user completes the main choices or confirmation steps for create a draft pull request. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The new object or relationship is saved and appears in the relevant GitHub context. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-2-2 (Compare branches before opening a pull request); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Create a draft pull request
         steps:
@@ -764,12 +903,16 @@ children:
   - id: REQ-6-3
     name: Pull Request Review Workspace
     type: FOLDER
-    description: Capabilities for reading, inspecting and reviewing pull requests.
+    dependencies:
+    - REQ-6-2-3
+    description: Capabilities for reading, inspecting and reviewing pull requests. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-2-3 (Create a pull request from a compare result); it must reuse that context and remain consistent when the prerequisite state changes.
     children:
     - id: REQ-6-3-1
       name: Review a pull request overview and commits
       type: ATOMIC
-      description: A reviewer opens a pull request to understand its title, branches, conversation, included commits and merge context before reviewing the proposed changes.
+      dependencies:
+      - REQ-6-2-3
+      description: A reviewer opens a pull request to understand its title, branches, conversation, included commits and merge context before reviewing the proposed changes. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-2-3 (Create a pull request from a compare result); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Review a pull request overview and commits
         steps:
@@ -784,7 +927,9 @@ children:
     - id: REQ-6-3-2
       name: Inspect changed files and the aggregate diff
       type: ATOMIC
-      description: A visitor or authenticated user uses this capability from repository code and version-control pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for inspect changed files and the aggregate diff. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The requested information is displayed with the relevant filters, metadata or status indicators visible to the user.
+      dependencies:
+      - REQ-6-3-1
+      description: A visitor or authenticated user uses this capability from repository code and version-control pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for inspect changed files and the aggregate diff. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The requested information is displayed with the relevant filters, metadata or status indicators visible to the user. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-3-1 (Review a pull request overview and commits); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Inspect changed files and the aggregate diff
         steps:
@@ -799,7 +944,10 @@ children:
     - id: REQ-6-3-3
       name: Add review comments to changed lines
       type: ATOMIC
-      description: An authenticated user uses this capability from repository pull-request pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for add review comments to changed lines. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use.
+      dependencies:
+      - REQ-6-3-2
+      - REQ-1-1-2
+      description: An authenticated user uses this capability from repository pull-request pages. The capability requires that the target public object is available or the user has permission to view it. The user completes the main choices or confirmation steps for add review comments to changed lines. The system validates eligibility, shows any required warnings or unavailable states, and prevents unauthorized changes. The system shows an observable result and preserves the changed state for later use. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-3-2 (Inspect changed files and the aggregate diff), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Add review comments to changed lines
         steps:
@@ -814,7 +962,10 @@ children:
     - id: REQ-6-3-4
       name: Submit a pull-request review
       type: ATOMIC
-      description: A reviewer requests review, comments on the proposal, approves it or requests changes. The system records the review decision so authors and maintainers can act on it.
+      dependencies:
+      - REQ-6-3-1
+      - REQ-1-1-2
+      description: A reviewer requests review, comments on the proposal, approves it or requests changes. The system records the review decision so authors and maintainers can act on it. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-3-1 (Review a pull request overview and commits), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
       scenarios:
       - name: Submit a pull-request review
         steps:
@@ -829,7 +980,10 @@ children:
   - id: REQ-6-4
     name: Request or remove pull-request reviewers
     type: ATOMIC
-    description: A pull-request author or maintainer requests reviewers or removes reviewer requests from a pull request. The system validates repository permissions, updates the review assignment state and shows the current requested reviewers on the pull request.
+    dependencies:
+    - REQ-6-2-3
+    - REQ-1-1-2
+    description: A pull-request author or maintainer requests reviewers or removes reviewer requests from a pull request. The system validates repository permissions, updates the review assignment state and shows the current requested reviewers on the pull request. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-2-3 (Create a pull request from a compare result), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
     scenarios:
     - name: Request or remove pull-request reviewers
       steps:
@@ -844,7 +998,10 @@ children:
   - id: REQ-6-5
     name: Merge an eligible pull request
     type: ATOMIC
-    description: An authorized maintainer merges a pull request after the proposal is eligible for integration. The system checks the required permissions and merge conditions, integrates the approved changes into the target branch and updates the pull request to show the merged state.
+    dependencies:
+    - REQ-6-3-4
+    - REQ-6-1
+    description: An authorized maintainer merges a pull request after the proposal is eligible for integration. The system checks the required permissions and merge conditions, integrates the approved changes into the target branch and updates the pull request to show the merged state. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-3-4 (Submit a pull-request review), REQ-6-1 (Protect branches with review and status-check requirements); it must reuse that context and remain consistent when the prerequisite state changes.
     scenarios:
     - name: Merge an eligible pull request
       steps:
@@ -859,7 +1016,10 @@ children:
   - id: REQ-6-6
     name: Close or reopen a pull request without merging
     type: ATOMIC
-    description: A pull-request author or maintainer closes a pull request without merging when the proposed changes should not proceed, or reopens it when work should continue. The system records the state transition and keeps the pull request discussion and proposed changes available according to repository permissions.
+    dependencies:
+    - REQ-6-2-3
+    - REQ-1-1-2
+    description: A pull-request author or maintainer closes a pull request without merging when the proposed changes should not proceed, or reopens it when work should continue. The system records the state transition and keeps the pull request discussion and proposed changes available according to repository permissions. This requirement is performed in the authenticated session, page, or persistent resource context established by REQ-6-2-3 (Create a pull request from a compare result), REQ-1-1-2 (Sign in with an existing account); it must reuse that context and remain consistent when the prerequisite state changes.
     scenarios:
     - name: Close or reopen a pull request without merging
       steps:
