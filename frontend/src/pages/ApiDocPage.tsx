@@ -382,9 +382,9 @@ export default function ApiDocPage() {
   const [activeSection, setActiveSection] = useState<DocSectionKey>("overview");
 
   return (
-    <div className="page bg-[var(--bg-deep)] text-[var(--text)]">
+    <div className="page landing-page api-doc-home-page bg-[var(--bg-deep)] text-[var(--text)]">
       <div className="mx-auto w-full max-w-[1180px] px-5 py-6 lg:px-8">
-        <header className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
+        <header className="landing-hero landing-card tone-amber mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
           <div className="inline-flex rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
             ArcBench Runtime API
           </div>
@@ -396,7 +396,7 @@ export default function ApiDocPage() {
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="h-fit rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)] lg:sticky lg:top-[76px]">
+          <aside className="landing-card tone-sky h-fit rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)] lg:sticky lg:top-[76px]">
             {(Object.keys(sectionLabels) as DocSectionKey[]).map((sectionKey) => (
               <button
                 key={sectionKey}

@@ -129,7 +129,7 @@ export default function PlaygroundPage() {
   const benchmarkBrowseHref = benchmarkItems[0]?.href ?? "/playground/arc-bench/web";
 
   return (
-    <div className="page bg-[var(--bg-deep)] text-[var(--text)]">
+    <div className="page landing-page playground-home-page bg-[var(--bg-deep)] text-[var(--text)]">
       <div className="mx-auto w-full max-w-[1180px] px-5 py-6 lg:px-8">
         <div className="mb-5 flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <span>Playground</span>
@@ -138,7 +138,7 @@ export default function PlaygroundPage() {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_330px]">
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.08)] sm:p-6">
+          <section className="landing-hero landing-card tone-mint rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.08)] sm:p-6">
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-semibold uppercase text-[var(--accent)]">Agent engineering workspace</div>
@@ -153,7 +153,7 @@ export default function PlaygroundPage() {
               <div className="grid gap-3 md:grid-cols-2">
                 <button
                   type="button"
-                  className="group rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[var(--accent-glow)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  className="landing-card tone-mint group rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[var(--accent-glow)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                   onClick={start}
                 >
                   <div className="flex items-start gap-3">
@@ -175,7 +175,7 @@ export default function PlaygroundPage() {
 
                 <Link
                   to="/playground/create-task"
-                  className="group rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--border-light)] hover:bg-[var(--bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  className="landing-card tone-amber group rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[var(--border-light)] hover:bg-[var(--bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                 >
                   <div className="flex items-start gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--bg)] text-lg text-[var(--text)]">
@@ -197,7 +197,7 @@ export default function PlaygroundPage() {
             </div>
           </section>
 
-          <aside className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 shadow-[0_8px_24px_rgba(0,0,0,0.06)]" aria-label="Task bank">
+          <aside className="landing-card tone-sky rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 shadow-[0_8px_24px_rgba(0,0,0,0.06)]" aria-label="Task bank">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-base font-semibold text-[var(--text)]">Task Bank</div>
               <Link className="text-sm font-medium text-[var(--text-dim)] hover:text-[var(--accent)]" to="/playground/task-bank/web">
@@ -253,7 +253,7 @@ export default function PlaygroundPage() {
           </aside>
         </div>
 
-        <section className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]" aria-label="ARC-Bench">
+        <section className="landing-card tone-amber mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]" aria-label="ARC-Bench">
           <div className="mb-4 flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--warn-glow)] text-[var(--warn)]" aria-hidden="true">

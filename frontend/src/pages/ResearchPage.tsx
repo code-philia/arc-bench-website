@@ -212,9 +212,9 @@ function ResearchEntryCard({ entry, type }: { entry: AgentEntry | BenchmarkEntry
 
 export default function ResearchPage() {
   return (
-    <div className="page bg-[var(--bg-deep)] text-[var(--text)]">
+    <div className="page landing-page research-home-page bg-[var(--bg-deep)] text-[var(--text)]">
       <div className="mx-auto w-full max-w-[1180px] px-5 py-6 lg:px-8">
-        <section className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" aria-label="Research overview">
+        <section className="landing-hero landing-card tone-sky mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" aria-label="Research overview">
           <div className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
             <ReadOutlined /> Research index
           </div>
@@ -225,7 +225,7 @@ export default function ResearchPage() {
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+          <section className="landing-card tone-mint rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
             <div className="mb-4 border-b border-[var(--border)] pb-4">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[var(--accent)]">
                 <ExperimentOutlined /> Related Agents
@@ -243,7 +243,7 @@ export default function ResearchPage() {
             </div>
           </section>
 
-          <aside className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+          <aside className="landing-card tone-amber rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
             <div className="mb-4 border-b border-[var(--border)] pb-4">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[var(--warn)]">
                 <LinkOutlined /> Related Benchmarks
