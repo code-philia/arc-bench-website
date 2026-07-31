@@ -339,6 +339,92 @@ button {
   color: var(--accent);
   border-color: var(--accent);
 }
+
+.notification-bell {
+  position: relative;
+}
+
+.notification-unread-dot,
+.notification-item-unread-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+}
+
+.notification-unread-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  border: 1.5px solid var(--bg-surface);
+}
+
+.notification-list-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.notification-list-action,
+.notification-delete-button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.notification-list-action {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notification-list-action:hover:not(:disabled),
+.notification-delete-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.notification-list-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.notification-list-action.danger:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.notification-list-item {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.notification-list-open {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.notification-delete-button {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  font-size: 13px;
+}
 .library-page,
 .submission-page,
 .profile-page {

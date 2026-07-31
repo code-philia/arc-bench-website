@@ -210,6 +210,15 @@ export const api = {
   markNotificationRead(notificationId: string) {
     return request<NotificationItem>(`/notifications/${notificationId}/read`, { method: "POST" });
   },
+  markAllNotificationsRead() {
+    return request<NotificationList>("/notifications/read-all", { method: "POST" });
+  },
+  deleteNotification(notificationId: string) {
+    return request<NotificationList>(`/notifications/${notificationId}`, { method: "DELETE" });
+  },
+  clearNotifications() {
+    return request<NotificationList>("/notifications/clear", { method: "DELETE" });
+  },
   cancelSubmission(submissionId: string) {
     return request<SubmissionDetail>(`/submissions/${submissionId}/cancel`, {
       method: "POST",

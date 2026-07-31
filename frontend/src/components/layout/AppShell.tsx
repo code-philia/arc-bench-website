@@ -7,6 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { QuickStartProvider } from "../../quickstart/QuickStartContext";
 import QuickStartOverlay from "../../quickstart/QuickStartOverlay";
 import { api } from "../../lib/api";
+import { NOTIFICATIONS_UPDATED_EVENT } from "../../lib/notificationEvents";
 
 type NavItem = {
   to: string;
@@ -73,6 +74,15 @@ export default function AppShell() {
     void api.listNotifications().then((payload) => setUnreadNotifications(payload.unread_count)).catch(() => setUnreadNotifications(0));
   }, [user]);
 
+  useEffect(() => {
+    const updateUnreadCount = (event: Event) => {
+      const unreadCount = (event as CustomEvent<number>).detail;
+      setUnreadNotifications(typeof unreadCount === "number" ? unreadCount : 0);
+    };
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, updateUnreadCount);
+    return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, updateUnreadCount);
+  }, []);
+
   const initials = useMemo(() => {
     if (!user) {
       return "";
@@ -122,8 +132,9 @@ export default function AppShell() {
             </button>
             {isLoading ? null : user ? (
               <div className="nav-auth-group">
-                <button className="theme-toggle" type="button" title="Message center" onClick={() => navigate("/notifications")}>
-                  <BellOutlined />{unreadNotifications > 0 ? <span className="ml-1 text-xs">{unreadNotifications}</span> : null}
+                <button className="theme-toggle notification-bell" type="button" title="Message center" aria-label={unreadNotifications > 0 ? "Message center: unread messages" : "Message center"} onClick={() => navigate("/notifications")}>
+                  <BellOutlined />
+                  {unreadNotifications > 0 ? <span className="notification-unread-dot" aria-hidden="true" /> : null}
                 </button>
                 <button className="nav-avatar" type="button" title={user.username} onClick={() => navigate("/profile")}>
                   {initials || <UserOutlined />}
