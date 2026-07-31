@@ -11,23 +11,23 @@ type PlaygroundTaskType = "web" | "mobile" | "kernel" | "mixed";
 
 const taskToneClasses: Record<string, { badge: string; row: string }> = {
   web: {
-    badge: "bg-[var(--accent-glow)] text-[var(--accent)]",
+    badge: "bg-[var(--tag-mint-bg)] text-[var(--tag-mint-text)]",
     row: "hover:border-[var(--accent)]",
   },
   mobile: {
-    badge: "bg-[var(--warn-glow)] text-[var(--warn)]",
+    badge: "bg-[var(--tag-amber-bg)] text-[var(--tag-amber-text)]",
     row: "hover:border-[var(--warn)]",
   },
   android: {
-    badge: "bg-[var(--warn-glow)] text-[var(--warn)]",
+    badge: "bg-[var(--tag-amber-bg)] text-[var(--tag-amber-text)]",
     row: "hover:border-[var(--warn)]",
   },
   kernel: {
-    badge: "bg-[var(--fail-glow)] text-[var(--fail)]",
+    badge: "bg-[var(--tag-sky-bg)] text-[var(--tag-sky-text)]",
     row: "hover:border-[var(--fail)]",
   },
   mixed: {
-    badge: "bg-[var(--bg-elevated)] text-[var(--text-dim)]",
+    badge: "bg-[var(--tag-slate-bg)] text-[var(--tag-slate-text)]",
     row: "hover:border-[var(--border-light)]",
   },
 };
@@ -90,6 +90,11 @@ function hasBenchmarkDownload(task: RequirementSummary): task is BenchmarkDetail
 
 function toneFor(category: string) {
   return taskToneClasses[category] ?? taskToneClasses.mixed;
+}
+
+function taskSummaryPreview(summary: string, maxLength = 180) {
+  const compact = summary.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength).trimEnd()}...` : compact;
 }
 
 export default function PlaygroundTaskListPage() {
@@ -321,7 +326,7 @@ export default function PlaygroundTaskListPage() {
                       >
                         {task.title}
                       </Link>
-                      <span className="mt-1 block text-xs leading-5 text-[var(--text-dim)]">{task.summary}</span>
+                      <span className="task-summary-clamp mt-1 block text-xs leading-5 text-[var(--text-dim)]">{taskSummaryPreview(task.summary)}</span>
                     </div>
 
                     <div className="flex items-center">

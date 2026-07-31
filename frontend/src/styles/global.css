@@ -1,4 +1,46 @@
 :root {
+  --bg-deep: #f7f7f8;
+  --bg: #ffffff;
+  --bg-elevated: #f4f5f7;
+  --bg-surface: #eef0f3;
+  --bg-hover: #f0f1f3;
+  --border: #e3e5e9;
+  --border-light: #d6d9df;
+  --text: #24272d;
+  --text-dim: #686e78;
+  --text-muted: #9297a0;
+  --accent: #24272d;
+  --accent-dim: #111318;
+  --accent-grad-end: #3b3f46;
+  --accent-glow: rgba(36, 39, 45, 0.08);
+  --accent-glow-strong: rgba(36, 39, 45, 0.16);
+  --fail: #df4658;
+  --fail-glow: rgba(223, 70, 88, 0.1);
+  --warn: #df8500;
+  --warn-glow: rgba(223, 133, 0, 0.12);
+  --pass: #1a9a70;
+  --pass-glow: rgba(26, 154, 112, 0.1);
+  --tag-mint-bg: #e8f6ed;
+  --tag-mint-text: #217653;
+  --tag-amber-bg: #fff2dc;
+  --tag-amber-text: #b96400;
+  --tag-sky-bg: #eaf2ff;
+  --tag-sky-text: #416da8;
+  --tag-slate-bg: #eff1f4;
+  --tag-slate-text: #69707a;
+  --nav-bg: rgba(255, 255, 255, 0.9);
+  --hero-badge-border: rgba(36, 39, 45, 0.18);
+  --td-border: rgba(227, 229, 233, 0.78);
+  --mono: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
+  --sans: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow: 0 8px 28px rgba(36, 39, 45, 0.08);
+}
+
+[data-theme="dark"] {
   --bg-deep: #0a0e17;
   --bg: #0f1420;
   --bg-elevated: #161c2e;
@@ -9,55 +51,29 @@
   --text: #e2e8f0;
   --text-dim: #8892a8;
   --text-muted: #5a6480;
-  --accent: #00d4aa;
-  --accent-dim: #00a886;
-  --accent-grad-end: #00f0c8;
-  --accent-glow: rgba(0, 212, 170, 0.15);
-  --accent-glow-strong: rgba(0, 212, 170, 0.25);
+  --accent: #f5a623;
+  --accent-dim: #e49312;
+  --accent-grad-end: #ffc14d;
+  --accent-glow: rgba(245, 166, 35, 0.15);
+  --accent-glow-strong: rgba(245, 166, 35, 0.25);
   --fail: #ff4d6a;
   --fail-glow: rgba(255, 77, 106, 0.15);
   --warn: #ffb347;
   --warn-glow: rgba(255, 179, 71, 0.15);
-  --pass: #00d4aa;
-  --pass-glow: rgba(0, 212, 170, 0.12);
+  --pass: #31c48d;
+  --pass-glow: rgba(49, 196, 141, 0.12);
+  --tag-mint-bg: rgba(49, 196, 141, 0.16);
+  --tag-mint-text: #73ddb0;
+  --tag-amber-bg: rgba(245, 166, 35, 0.16);
+  --tag-amber-text: #ffc766;
+  --tag-sky-bg: rgba(92, 154, 231, 0.16);
+  --tag-sky-text: #9fc5ff;
+  --tag-slate-bg: rgba(136, 146, 168, 0.18);
+  --tag-slate-text: #b6bfd0;
   --nav-bg: rgba(10, 14, 23, 0.85);
-  --hero-badge-border: rgba(0, 212, 170, 0.2);
+  --hero-badge-border: rgba(245, 166, 35, 0.2);
   --td-border: rgba(37, 46, 68, 0.5);
-  --mono: "Consolas", "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
-  --sans: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
-  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-[data-theme="light"] {
-  --bg-deep: #f5f7fb;
-  --bg: #ffffff;
-  --bg-elevated: #f1f4f9;
-  --bg-surface: #e6eaf2;
-  --bg-hover: #dce1ec;
-  --border: #cdd3e0;
-  --border-light: #b8bfce;
-  --text: #1a1e2e;
-  --text-dim: #4a5268;
-  --text-muted: #7c8498;
-  --accent: #00b894;
-  --accent-dim: #009e7e;
-  --accent-grad-end: #00d4aa;
-  --accent-glow: rgba(0, 184, 148, 0.1);
-  --accent-glow-strong: rgba(0, 184, 148, 0.18);
-  --fail: #e63950;
-  --fail-glow: rgba(230, 57, 80, 0.08);
-  --warn: #e09520;
-  --warn-glow: rgba(224, 149, 32, 0.1);
-  --pass: #00b894;
-  --pass-glow: rgba(0, 184, 148, 0.08);
-  --nav-bg: rgba(245, 247, 251, 0.88);
-  --hero-badge-border: rgba(0, 184, 148, 0.25);
-  --td-border: rgba(205, 211, 224, 0.6);
-  --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 *,
@@ -137,6 +153,13 @@ button {
 .page {
   min-height: calc(100vh - 60px);
   animation: page-in 280ms ease-out;
+}
+
+.task-summary-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 @keyframes page-in {
@@ -6349,6 +6372,15 @@ button {
 
 @tailwind utilities;
 
+/* This rule follows Tailwind utilities so `block` on list rows cannot expand a
+   task description beyond its compact preview. */
+.task-summary-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 /* Competition pages use a quiet, list-first visual language: neutral surfaces,
    graphite selection, and colour reserved for true execution outcomes. */
 .competition-home-page,
@@ -6652,18 +6684,21 @@ button {
 .competition-side-tasks > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 15px; background: var(--bg-elevated); }
 .competition-side-tasks > header h2 { margin: 0; font-size: 14px; }
 .competition-side-tasks > header span { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--bg); color: var(--text-muted); font-size: 11px; font-weight: 700; }
-.competition-side-task-list { display: grid; }
-.competition-side-task-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 10px 13px; border-top: 1px solid var(--border); color: inherit; text-decoration: none; transition: background 160ms ease; }
+.competition-task-table { display: grid; }
+.competition-task-table-header,
+.competition-side-task-row { grid-template-columns: 76px minmax(0, 1fr) 100px 56px 56px 64px; gap: 12px; align-items: center; }
+.competition-task-table-header { display: none; min-height: 42px; }
+.competition-side-task-row { display: grid; min-height: 68px; color: inherit; text-decoration: none; }
+@media (min-width: 1024px) { .competition-task-table-header { display: grid; } }
 .competition-side-task-row:hover { background: var(--bg-elevated); }
-.competition-side-task-row > div { display: flex; align-items: center; min-width: 0; gap: 7px; }
-.competition-side-task-row code { flex: 0 0 auto; color: var(--accent-dim); font-size: 10px; font-weight: 700; }
-.competition-side-task-row h3 { overflow: hidden; margin: 0; color: var(--text); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.competition-side-task-copy { min-width: 0; }
+.competition-side-task-row h3 { overflow: hidden; margin: 0; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .competition-side-task-row:hover h3 { color: var(--accent-dim); }
+.competition-task-category { overflow: hidden; color: var(--text-dim); text-overflow: ellipsis; white-space: nowrap; }
 .competition-side-task-row strong { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; background: var(--accent-glow); color: var(--accent-dim); font-size: 11px; }
 .competition-description .competition-side-tasks { max-width: none; margin-top: 40px; box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 5%, transparent); }
 .competition-description .competition-side-tasks > header { padding: 15px 17px; }
-.competition-description .competition-side-task-row { min-height: 52px; padding: 11px 15px; }
-.competition-description .competition-side-task-row h3 { font-size: 13px; }
+.competition-description .competition-side-task-row { min-height: 68px; }
 .competition-sidebar .competition-submission-panel { position: sticky; top: 20px; border-color: color-mix(in srgb, var(--text-muted) 38%, var(--border)); box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 8%, transparent); }
 
 @media (max-width: 980px) {
@@ -6721,6 +6756,9 @@ button {
   .competition-guide > ol { grid-template-columns: 1fr; }
   .competition-task-columns { grid-template-columns: 64px; gap: 10px; }
   .competition-task-row { grid-template-columns: minmax(0, 1fr) 64px 12px; gap: 10px; padding: 9px 10px; }
+  .competition-task-table-header { display: none; }
+  .competition-side-task-row { grid-template-columns: 62px minmax(0, 1fr) 54px; gap: 8px; min-height: 62px; padding: 10px 12px; }
+  .competition-side-task-row > div:nth-of-type(n + 3) { display: none; }
   .competition-leaderboard-controls { align-items: flex-start; flex-direction: column; }
 }
 

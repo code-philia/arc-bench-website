@@ -7,13 +7,10 @@ import { AuthProvider } from "./auth/AuthContext";
 import "./styles/global.css";
 
 function resolveThemeMode() {
-  if (document.documentElement.dataset.theme === "light") {
-    return "light" as const;
+  if (document.documentElement.dataset.theme === "dark" || window.localStorage.getItem("theme") === "dark") {
+    return "dark" as const;
   }
-  if (window.localStorage.getItem("theme") === "light") {
-    return "light" as const;
-  }
-  return "dark" as const;
+  return "light" as const;
 }
 
 function Root() {
@@ -43,7 +40,7 @@ function Root() {
       theme={{
         algorithm: themeMode === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
         token: {
-          colorPrimary: "#00d4aa",
+          colorPrimary: "#24272d",
           fontFamily: "'Outfit', sans-serif",
           borderRadius: 12,
         },

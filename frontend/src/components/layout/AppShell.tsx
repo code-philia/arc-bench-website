@@ -57,7 +57,7 @@ export default function AppShell() {
   const { user, logout, isLoading } = useAuth();
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = window.localStorage.getItem("theme");
-    return saved === "light" ? "light" : "dark";
+    return saved === "dark" ? "dark" : "light";
   });
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 

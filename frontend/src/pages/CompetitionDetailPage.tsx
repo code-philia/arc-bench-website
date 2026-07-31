@@ -24,6 +24,18 @@ function statusClass(status: string) {
     : "bg-[var(--bg-elevated)] text-[var(--text-dim)]";
 }
 
+function taskSummaryPreview(summary: string, maxLength = 180) {
+  const compact = summary.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength).trimEnd()}...` : compact;
+}
+
+function categoryToneClass(category: string) {
+  if (category === "web") return "bg-[var(--tag-mint-bg)] text-[var(--tag-mint-text)]";
+  if (category === "mobile" || category === "android") return "bg-[var(--tag-amber-bg)] text-[var(--tag-amber-text)]";
+  if (category === "kernel") return "bg-[var(--tag-sky-bg)] text-[var(--tag-sky-text)]";
+  return "bg-[var(--tag-slate-bg)] text-[var(--tag-slate-text)]";
+}
+
 export default function CompetitionDetailPage() {
   const { competitionId = "" } = useParams();
   const navigate = useNavigate();
@@ -152,16 +164,23 @@ export default function CompetitionDetailPage() {
               <h2>Competition notes</h2>
               <ul>{competition.rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
             </section>
-            <section className="competition-side-tasks">
+            <section className="competition-side-tasks task-list-surface">
               <header><h2>Tasks</h2><span>{competition.task_count}</span></header>
               {competition.tasks.length === 0 ? (
                 <div className="competition-empty">Tasks have not been published yet.</div>
               ) : (
-                <div className="competition-side-task-list">
+                <div className="competition-task-table bg-[var(--bg)]">
+                  <div className="competition-task-table-header hidden border-b border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs font-semibold uppercase text-[var(--text-muted)] lg:grid">
+                    <span>ID</span><span>Task</span><span>Category</span><span>REQs</span><span>Tests</span><span>Score</span>
+                  </div>
                   {competition.tasks.map((task) => (
-                    <Link key={task.id} to={`/competitions/${competition.id}/tasks/${task.id}`} className="competition-side-task-row">
-                      <div><code>{task.display_id}</code><h3>{task.title}</h3></div>
-                      <strong>{taskScores.has(task.id) ? taskScores.get(task.id)?.toFixed(1) : "--"}</strong>
+                    <Link key={task.id} to={`/competitions/${competition.id}/tasks/${task.id}`} className="competition-side-task-row group grid cursor-pointer border-b border-[var(--td-border)] bg-[var(--bg)] px-4 py-3 text-sm transition duration-200 last:border-b-0 hover:bg-[var(--bg-elevated)]">
+                      <div className="flex items-center"><code className="font-mono text-xs font-semibold text-[var(--text-muted)]">{task.display_id}</code></div>
+                      <div className="min-w-0 competition-side-task-copy"><h3 className="font-semibold text-[var(--text)]">{task.title}</h3><span className="task-summary-clamp mt-1 block text-xs leading-5 text-[var(--text-dim)]">{taskSummaryPreview(task.summary)}</span></div>
+                      <div className="flex items-center"><span className={`competition-task-category rounded-full px-2.5 py-1 text-[11px] font-semibold ${categoryToneClass(task.category)}`}>{task.category}</span></div>
+                      <div className="flex items-center text-sm font-medium text-[var(--text-dim)]">{task.module_count}</div>
+                      <div className="flex items-center text-sm font-medium text-[var(--text-dim)]">{task.total_tests}</div>
+                      <div className="flex items-center"><strong>{taskScores.has(task.id) ? taskScores.get(task.id)?.toFixed(1) : "--"}</strong></div>
                     </Link>
                   ))}
                 </div>
