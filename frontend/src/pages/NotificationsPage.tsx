@@ -1,4 +1,4 @@
-import { DeleteOutlined } from "@ant-design/icons";
+import { BellOutlined, CheckCircleOutlined, DeleteOutlined } from "@ant-design/icons";
 import { message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -75,28 +75,30 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="page bg-[var(--bg-deep)] px-6 py-7 text-[var(--text)] lg:px-8">
-      <div className="mx-auto max-w-[860px] rounded-lg border border-[var(--border)] bg-[var(--bg)] p-6 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Message center</div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Run notifications</h1>
+    <div className="page notification-page">
+      <section className="notification-center">
+        <header className="notification-center-header">
+          <div className="notification-center-tab" aria-current="page">
+            <BellOutlined />
+            <h1>Notifications</h1>
+          </div>
           {items.length > 0 ? <div className="notification-list-actions">
-            <button type="button" className="notification-list-action" onClick={() => void markAllRead()} disabled={!items.some((item) => !item.is_read)}>Mark all read</button>
+            <button type="button" className="notification-list-action" onClick={() => void markAllRead()} disabled={!items.some((item) => !item.is_read)}><CheckCircleOutlined /> Mark all read</button>
             <button type="button" className="notification-list-action danger" onClick={() => void clearNotifications()}>Clear all</button>
           </div> : null}
-        </div>
-        {loading ? <div className="mt-6 loading-state">Loading notifications...</div> : items.length === 0 ? (
-          <div className="mt-6 empty-state">No run notifications yet.</div>
+        </header>
+        {loading ? <div className="notification-list-loading">Loading notifications...</div> : items.length === 0 ? (
+          <div className="notification-list-blank" aria-label="No notifications" />
         ) : (
-          <div className="mt-6 divide-y divide-[var(--border)]">
+          <div className="notification-list">
             {items.map((item) => (
               <div key={item.id} className="notification-list-item">
                 <button type="button" className="notification-list-open" onClick={() => void openNotification(item)}>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="font-medium text-[var(--text)]">{item.title}</span>
-                    <span className="flex items-center gap-2 text-xs text-[var(--text-muted)]">{new Date(item.created_at).toLocaleString()}{!item.is_read ? <span className="notification-item-unread-dot" aria-label="Unread" /> : null}</span>
+                    <span className="notification-list-item-title">{item.title}</span>
+                    <span className="notification-list-item-time">{new Date(item.created_at).toLocaleString()}{!item.is_read ? <span className="notification-item-unread-dot" aria-label="Unread" /> : null}</span>
                   </div>
-                  <div className="mt-1 text-sm leading-6 text-[var(--text-dim)]">{item.body}</div>
+                  <div className="notification-list-item-body">{item.body}</div>
                 </button>
                 <button type="button" className="notification-delete-button" aria-label={`Delete ${item.title}`} title="Delete message" onClick={() => void deleteNotification(item.id)}>
                   <DeleteOutlined />
@@ -105,7 +107,7 @@ export default function NotificationsPage() {
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
