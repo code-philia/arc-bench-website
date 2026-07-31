@@ -164,8 +164,10 @@ function parseObject(tokens: LineToken[], startIndex: number, indent: number): [
     const rawValue = token.text.slice(separator + 1).trim();
 
     if (!rawValue) {
-      if (index + 1 < tokens.length && tokens[index + 1].indent > indent) {
-        const [nested, nextIndex] = parseBlock(tokens, index + 1, tokens[index + 1].indent);
+      const nextToken = tokens[index + 1];
+      const isIndentlessArray = nextToken?.indent === indent && nextToken.text.startsWith("- ");
+      if (nextToken && (nextToken.indent > indent || isIndentlessArray)) {
+        const [nested, nextIndex] = parseBlock(tokens, index + 1, nextToken.indent);
         result[key] = nested;
         index = nextIndex;
         continue;
