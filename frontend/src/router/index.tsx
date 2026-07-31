@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
       { path: "register", element: <RegisterPage /> },
       { path: "profile", element: <ProfilePage /> },
       { path: "notifications", element: <NotificationsPage /> },
+      { path: "competition", element: <RequirementsPage /> },
       { path: "requirements", element: <RequirementsPage /> },
       { path: "api-doc", element: <ApiDocPage /> },
       { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },

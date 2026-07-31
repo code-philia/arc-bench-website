@@ -197,7 +197,7 @@ export default function SubmissionDetailPage() {
                 Login
               </Link>
             ) : (
-              <Link className="inline-link" to="/requirements">
+              <Link className="inline-link" to="/competition">
                 Back to competitions
               </Link>
             )}

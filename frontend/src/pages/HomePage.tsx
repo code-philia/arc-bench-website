@@ -248,7 +248,7 @@ export default function HomePage() {
         description:
           "Browse active benchmark tracks, review task inventories, and move into scored submission workflows with shared evaluation rules.",
         icon: <TrophyOutlined />,
-        href: "/requirements",
+        href: "/competition",
       },
       {
         key: "research",
@@ -257,7 +257,7 @@ export default function HomePage() {
         description:
           "Aggregate benchmark outcomes, compare execution evidence, and prepare a home for papers, repos, and methodology notes.",
         icon: <ExperimentOutlined />,
-        comingSoon: true,
+        href: "/research",
       },
     ],
     [competitions.length, passedSubmissions, publicCompetitionCount, requirements.length, submissions.length, webRequirementCount],

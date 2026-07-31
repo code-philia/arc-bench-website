@@ -38,10 +38,10 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    to: "/requirements",
+    to: "/competition",
     label: "Competition",
     icon: <TrophyOutlined />,
-    matches: ["/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
+    matches: ["/competition", "/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
   },
   { to: "/research", label: "Research", icon: <ReadOutlined />, matches: ["/research"] },
   { to: "/api-doc", label: "API Doc", icon: <ApiOutlined />, matches: ["/api-doc"] },
