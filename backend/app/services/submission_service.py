@@ -1284,14 +1284,6 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
-        notification_kind = "completed" if status == SubmissionStatus.PASSED else "failed"
-        notification_title = "Run completed" if status == SubmissionStatus.PASSED else "Run failed"
-        notification_body = (
-            f"Your run completed with score {score:.1f}."
-            if status == SubmissionStatus.PASSED
-            else f"Your run failed: {failure_reason or 'See complete logs for details.'}"
-        )
-        self._create_run_notification(submission, notification_kind, notification_title, notification_body)
         SubmissionEventStream.publish(
             submission.id,
             reason="running",
@@ -1324,6 +1316,14 @@ class SubmissionService:
         self.db.add(submission)
         self.db.commit()
         self.db.refresh(submission)
+        notification_kind = "completed" if status == SubmissionStatus.PASSED else "failed"
+        notification_title = "Run completed" if status == SubmissionStatus.PASSED else "Run failed"
+        notification_body = (
+            f"Your run completed with score {score:.1f}."
+            if status == SubmissionStatus.PASSED
+            else f"Your run failed: {failure_reason or 'See complete logs for details.'}"
+        )
+        self._create_run_notification(submission, notification_kind, notification_title, notification_body)
         SubmissionEventStream.publish(
             submission.id,
             reason=f"finalized:{status.value.lower()}",
