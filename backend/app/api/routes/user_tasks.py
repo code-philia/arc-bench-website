@@ -57,6 +57,21 @@ def create_my_task_draft(
     return UserTaskService(db).create_draft(current_user)
 
 
+@router.post("/drafts/import-bundle", response_model=UserTaskDraftResponse)
+async def import_my_task_draft_bundle(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> UserTaskDraftResponse:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Requirement bundle filename is required")
+    content = await file.read()
+    try:
+        return UserTaskService(db).import_draft_bundle(current_user, file.filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.put("/drafts/{draft_id}", response_model=UserTaskDraftResponse)
 def save_my_task_draft(
     draft_id: str,

@@ -5,7 +5,7 @@ import re
 import shutil
 import zipfile
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -27,6 +27,9 @@ from app.schemas.user_task import (
 
 class UserTaskService:
     ACTIVE_DRAFT_ID = "create-task-current"
+    MAX_IMPORT_ARCHIVE_BYTES = 25 * 1024 * 1024
+    MAX_IMPORT_FILE_COUNT = 1_000
+    MAX_IMPORT_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 
     def __init__(self, db: Session):
         self.db = db
@@ -70,6 +73,93 @@ class UserTaskService:
             "title": payload.title.strip() or "My Custom Task",
             "task_type": payload.task_type,
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return self.create_draft(user)
+
+    def import_draft_bundle(self, user: User, filename: str, content: bytes) -> UserTaskDraftResponse:
+        """Replace the active draft with a validated requirement bundle.
+
+        The bundle may place its files at the ZIP root or beneath one enclosing
+        directory (for example the directory emitted by the export endpoint).
+        Only requirements.yaml, an optional requirements.md, and reference/* are
+        imported; other archive content cannot become part of the draft.
+        """
+        if not filename.lower().endswith(".zip"):
+            raise ValueError("Only .zip requirement bundles are supported")
+        if not content:
+            raise ValueError("Uploaded requirement bundle is empty")
+        if len(content) > self.MAX_IMPORT_ARCHIVE_BYTES:
+            raise ValueError("Requirement bundle exceeds the 25 MB upload limit")
+
+        try:
+            archive = zipfile.ZipFile(BytesIO(content))
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Uploaded file is not a valid ZIP archive") from exc
+
+        with archive:
+            members: list[tuple[zipfile.ZipInfo, PurePosixPath]] = []
+            uncompressed_size = 0
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                if len(members) >= self.MAX_IMPORT_FILE_COUNT:
+                    raise ValueError("Requirement bundle contains too many files")
+                member_path = self._safe_zip_member_path(info.filename)
+                uncompressed_size += info.file_size
+                if uncompressed_size > self.MAX_IMPORT_UNCOMPRESSED_BYTES:
+                    raise ValueError("Requirement bundle expands beyond the 100 MB safety limit")
+                members.append((info, member_path))
+
+            yaml_members = [(info, path) for info, path in members if path.name == "requirements.yaml"]
+            if len(yaml_members) != 1:
+                raise ValueError("Requirement bundle must contain exactly one requirements.yaml file")
+
+            yaml_info, yaml_path = yaml_members[0]
+            bundle_root = yaml_path.parent
+            reference_prefix = bundle_root / "reference"
+            markdown_info = next(
+                (info for info, path in members if path == bundle_root / "requirements.md"),
+                None,
+            )
+            reference_members = [
+                (info, path.relative_to(reference_prefix))
+                for info, path in members
+                if path != reference_prefix and reference_prefix in path.parents
+            ]
+
+            draft_dir = self._draft_dir(user, self.ACTIVE_DRAFT_ID)
+            staging_dir = draft_dir.parent / f".{self.ACTIVE_DRAFT_ID}-{uuid4().hex}.importing"
+            backup_dir = draft_dir.parent / f".{self.ACTIVE_DRAFT_ID}-{uuid4().hex}.backup"
+            try:
+                staging_dir.mkdir(parents=True, exist_ok=False)
+                reference_dir = staging_dir / "reference"
+                reference_dir.mkdir()
+                (staging_dir / "requirements.yaml").write_bytes(archive.read(yaml_info))
+                if markdown_info is not None:
+                    (staging_dir / "requirements.md").write_bytes(archive.read(markdown_info))
+                else:
+                    (staging_dir / "requirements.md").write_text("", encoding="utf-8")
+                (staging_dir / "draft.json").write_text(
+                    json.dumps({"title": "My Custom Task", "task_type": "web"}, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                for info, relative_path in reference_members:
+                    target = reference_dir / Path(*relative_path.parts)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(archive.read(info))
+
+                draft_dir.parent.mkdir(parents=True, exist_ok=True)
+                if draft_dir.exists():
+                    draft_dir.replace(backup_dir)
+                staging_dir.replace(draft_dir)
+                if backup_dir.exists():
+                    shutil.rmtree(backup_dir)
+            except Exception:
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir, ignore_errors=True)
+                if backup_dir.exists() and not draft_dir.exists():
+                    backup_dir.replace(draft_dir)
+                raise
+
         return self.create_draft(user)
 
     def save_draft_reference(self, user: User, draft_id: str, filename: str, content: bytes) -> str:
@@ -305,6 +395,14 @@ class UserTaskService:
         cleaned = Path(filename).name.strip()
         cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", cleaned)
         return cleaned.strip(".-")
+
+    @staticmethod
+    def _safe_zip_member_path(filename: str) -> PurePosixPath:
+        normalized = filename.replace("\\", "/")
+        path = PurePosixPath(normalized)
+        if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+            raise ValueError("Requirement bundle contains an unsafe file path")
+        return path
 
     @staticmethod
     def _unique_path(directory: Path, filename: str) -> Path:

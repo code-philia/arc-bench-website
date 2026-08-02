@@ -347,6 +347,22 @@ export default function CreateTaskPage() {
 
   const handleUploadFile = async (file: File) => {
     try {
+      if (file.name.toLowerCase().endsWith(".zip")) {
+        if (isEditingTask) {
+          message.warning("Requirement bundles create a new draft and cannot be imported while editing a saved task.");
+          return;
+        }
+        const draft = await api.importMyTaskDraftBundle(file);
+        const nextTree = normalizeRequirementNodeTypes(parseTaskTreeYaml(draft.yaml_content));
+        setTaskDraft(draft);
+        setCreateForm({ title: draft.title || "My Custom Task", taskType: draft.task_type });
+        setTree(nextTree);
+        setSelectedNodeId("ROOT");
+        setDetailExpanded(true);
+        setAutosaveState("saved");
+        message.success("Requirement bundle imported with its reference files.");
+        return;
+      }
       const content = await file.text();
       const nextTree = normalizeRequirementNodeTypes(parseTaskTreeYaml(content));
       setTree(nextTree);
@@ -546,7 +562,7 @@ export default function CreateTaskPage() {
               {previewCollapsed ? "Show Preview" : "Hide Preview"}
             </button>
             <button type="button" className={toolbarButtonClassName} onClick={() => uploadRef.current?.click()}>
-              <UploadOutlined /> Import YAML
+              <UploadOutlined /> Import YAML or ZIP
             </button>
             <button type="button" className={toolbarButtonClassName} onClick={handleExport}>
               <SaveOutlined /> Export Docs
@@ -558,7 +574,7 @@ export default function CreateTaskPage() {
               ref={uploadRef}
               className="visually-hidden"
               type="file"
-              accept=".yaml,.yml"
+              accept=".yaml,.yml,.zip,application/zip"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) {

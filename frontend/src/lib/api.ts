@@ -453,6 +453,14 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  async importMyTaskDraftBundle(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return request<UserTaskDraft>("/my-tasks/drafts/import-bundle", {
+      method: "POST",
+      body: form,
+    });
+  },
   async downloadMyTaskDraftBundle(draftId: string) {
     const response = await fetch(`${API_BASE}/my-tasks/drafts/${draftId}/bundle`, {
       credentials: "include",
