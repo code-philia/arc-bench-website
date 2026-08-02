@@ -194,6 +194,12 @@ class SubmissionService:
             return None
         return self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "resume.request.json"
 
+    def get_continue_request_path(self, submission: Submission) -> Path | None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return None
+        return self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "continue.request.json"
+
     def read_checkpoint(self, submission: Submission) -> dict:
         checkpoint_path = self.get_submission_checkpoint_path(submission)
         if checkpoint_path is None or not checkpoint_path.exists():
@@ -589,6 +595,68 @@ class SubmissionService:
                 path.unlink()
             except FileNotFoundError:
                 continue
+
+    def request_continue(self, submission: Submission) -> None:
+        if not self.can_continue(submission):
+            raise ValueError("Only a completed built-in ARC run with an available workspace can continue")
+        request_path = self.get_continue_request_path(submission)
+        if request_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        self._refresh_builtin_arc_agent_workspace(submission)
+        self.clear_runtime_request_files(submission)
+        request_path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_json_atomic(
+            request_path,
+            {"requested_at": datetime.utcnow().isoformat(), "submission_id": submission.id},
+        )
+        submission.status = SubmissionStatus.RUNNING.value
+        submission.started_at = datetime.utcnow()
+        submission.finished_at = None
+        submission.failure_reason = None
+        self.db.add(submission)
+        self.db.commit()
+        self.db.refresh(submission)
+        self.update_steps(
+            submission,
+            self.build_step_states(
+                active_key="deploy_agent",
+                description="Continuing built-in ARC in the existing workspace",
+            ),
+        )
+        self.append_step_event(
+            submission.id,
+            step_key="deploy_agent",
+            message="Continuation requested; generated code and ARC state are preserved",
+            status="info",
+        )
+        SubmissionEventStream.publish(
+            submission.id,
+            reason="continue_requested",
+            submission=True,
+            logs=True,
+            commit_history=True,
+            traceability_selected=True,
+            traceability_all=True,
+            preview=True,
+        )
+
+    def _refresh_builtin_arc_agent_workspace(self, submission: Submission) -> None:
+        """Apply platform fixes to the managed ARC source without touching generated code."""
+        if submission.agent_source != AgentSourceType.BUILTIN_ARC_AGENT.value:
+            return
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        submission_dir = workspace_path / "submission"
+        if not submission_dir.is_dir():
+            raise FileNotFoundError("Built-in ARC source workspace is not available")
+
+        archive_path = Path(submission.archive_path)
+        self._write_builtin_arc_agent_archive(archive_path)
+        shutil.rmtree(submission_dir)
+        submission_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive_path, "r") as archive:
+            archive.extractall(submission_dir)
 
     def rewind_to_commit(self, submission: Submission, commit_oid: str) -> dict[str, str | int | None]:
         normalized_commit_oid = commit_oid.strip()
@@ -1069,6 +1137,7 @@ class SubmissionService:
             manual_edit_dirty=bool(manual_edit_state["manual_edit_dirty"]),
             pause_available=bool(self.get_pause_request_path(submission)),
             can_cancel=self.can_cancel(submission),
+            can_continue=self.can_continue(submission),
         )
 
     def _read_submission_tests(self, submission: Submission) -> list[dict]:
@@ -1422,6 +1491,17 @@ class SubmissionService:
     @staticmethod
     def can_resume(submission: Submission) -> bool:
         return submission.status == SubmissionStatus.PAUSED.value
+
+    def can_continue(self, submission: Submission) -> bool:
+        if submission.agent_source != AgentSourceType.BUILTIN_ARC_AGENT.value:
+            return False
+        if submission.status not in {
+            SubmissionStatus.PASSED.value,
+            SubmissionStatus.FAILED.value,
+            SubmissionStatus.CANCELLED.value,
+        }:
+            return False
+        return self.get_template_repo_path(submission) is not None
 
     def can_rewind(self, submission: Submission) -> bool:
         if submission.status not in {

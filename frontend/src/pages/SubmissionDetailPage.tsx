@@ -166,6 +166,13 @@ export default function SubmissionDetailPage() {
     await refreshLogs();
   };
 
+  const continueRun = async () => {
+    if (!submission || !submission.can_continue) return;
+    if (!window.confirm("Continue this built-in ARC run from its existing code and ARC state? The agent and tests will run again without creating a new submission.")) return;
+    setSubmission(await api.continueSubmission(submissionId));
+    await refreshLogs();
+  };
+
   useEffect(() => {
     if (!submission) {
       setPreviewStatus(null);
@@ -229,6 +236,11 @@ export default function SubmissionDetailPage() {
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-3 lg:flex-col lg:items-end">
+              {submission.can_continue ? (
+                <button type="button" className="btn-primary" onClick={() => void continueRun()}>
+                  Continue run
+                </button>
+              ) : null}
               {submission.can_cancel ? (
                 <button type="button" className="btn-outline" onClick={() => void cancelRun()}>
                   Cancel run

@@ -171,6 +171,11 @@ export const api = {
       method: "POST",
     });
   },
+  continueSubmission(submissionId: string) {
+    return request<SubmissionDetail>(`/submissions/${submissionId}/continue`, {
+      method: "POST",
+    });
+  },
   getManualEditCommitPreview(submissionId: string) {
     return request<SubmissionManualEditCommitPreview>(`/submissions/${submissionId}/manual-edit/commit-preview`, {
       method: "POST",

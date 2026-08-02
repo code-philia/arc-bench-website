@@ -74,7 +74,12 @@ class ExecutionService:
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
         runner_kind = "octos" if submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value else "python"
-        start_agent_description = "Running built-in Octos CLI agent" if runner_kind == "octos" else "Running uploaded agent"
+        if runner_kind == "octos":
+            start_agent_description = "Running built-in Octos CLI agent"
+        elif submission.agent_source == AgentSourceType.BUILTIN_ARC_AGENT.value:
+            start_agent_description = "Continuing built-in ARC agent" if reuse_workspace else "Running built-in ARC agent"
+        else:
+            start_agent_description = "Running uploaded agent"
         arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
         stdout_path = arc_dir / "stdout.log"
         playwright_report_path = arc_dir / "playwright-report.json"
@@ -226,7 +231,7 @@ class ExecutionService:
                 runner_events_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "runner-events.jsonl"
                 if runner_events_path.exists():
                     processed_runner_event_count = len(runner_events_path.read_text(encoding="utf-8").splitlines())
-                emit_event("deploy_agent", "Reusing rewound workspace")
+                emit_event("deploy_agent", "Reusing existing workspace")
                 debug_log.append("backend", f"Reusing existing workspace at {workspace_path}")
                 emit_event("deploy_agent", "Existing workspace is ready", status="success")
             else:
@@ -244,7 +249,7 @@ class ExecutionService:
                 submission,
                 submission_service.build_step_states(
                     active_key="deploy_agent",
-                    description="Reusing rewound workspace" if reuse_workspace else "Preparing workspace",
+                    description="Reusing existing workspace" if reuse_workspace else "Preparing workspace",
                 ),
             )
 

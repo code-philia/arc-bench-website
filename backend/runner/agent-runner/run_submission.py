@@ -28,6 +28,7 @@ TRACEABILITY_DIR = ARC_DIR / "traceability"
 TRACEABILITY_SEED_PATH = ARC_DIR / "traceability-seed.json"
 PAUSE_REQUEST_PATH = ARC_DIR / "pause.request.json"
 RESUME_REQUEST_PATH = ARC_DIR / "resume.request.json"
+CONTINUE_REQUEST_PATH = ARC_DIR / "continue.request.json"
 CHECKPOINT_PATH = ARC_DIR / "checkpoint.json"
 PLAYWRIGHT_REPORT_PATH = ARC_DIR / "playwright-report.json"
 PIP_CACHE_DIR = Path("/tmp/arcbench/pip-cache")
@@ -450,6 +451,10 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
         )
         if app_type == "web":
             command.extend(["--port", str(WEB_APP_PORT)])
+        if CONTINUE_REQUEST_PATH.exists():
+            # ARC owns its compilation queue inside the output workspace. Its
+            # resume mode preserves generated code instead of reinitializing it.
+            command.append("--resume")
         append_debug_log(f"Launching built-in ARC compile command: {' '.join(command)}")
         return command
 
@@ -1077,14 +1082,22 @@ def main() -> int:
     ARC_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint = read_checkpoint()
     resume_from_checkpoint = int(checkpoint.get("last_completed_index", 0) or 0) > 0
+    continue_existing_workspace = CONTINUE_REQUEST_PATH.exists()
     runtime_state_restored = bool(checkpoint.get("runtime_state_restored"))
-    if not resume_from_checkpoint:
+    if not resume_from_checkpoint and not continue_existing_workspace:
         RUNNER_EVENTS_PATH.write_text("", encoding="utf-8")
     spec = read_spec()
     heartbeat_stop, heartbeat_thread = start_heartbeat()
     append_debug_log(f"Runner started with spec: {spec}")
     log_source_mirror_configuration()
-    if resume_from_checkpoint and runtime_state_restored and restore_traceability_storage_from_workspace():
+    if continue_existing_workspace:
+        restore_traceability_storage_from_workspace()
+        append_runner_event(
+            "deploy_agent",
+            "Continuing built-in ARC from the existing workspace and compilation queue",
+            status="success",
+        )
+    elif resume_from_checkpoint and runtime_state_restored and restore_traceability_storage_from_workspace():
         append_runner_event(
             "deploy_agent",
             f"Traceability restored from checkpoint at step {int(checkpoint.get('last_completed_index', 0) or 0)}",
@@ -1158,6 +1171,7 @@ def main() -> int:
             append_runner_event(error_step, str(exc), status="error")
             return 1
         finally:
+            clear_request_file(CONTINUE_REQUEST_PATH)
             heartbeat_stop.set()
             heartbeat_thread.join(timeout=1)
             for process, label in reversed(managed_processes):

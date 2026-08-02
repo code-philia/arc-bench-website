@@ -126,6 +126,7 @@ export type SubmissionDetail = SubmissionSummary & {
   manual_edit_dirty: boolean;
   pause_available: boolean;
   can_cancel: boolean;
+  can_continue: boolean;
 };
 
 export type SubmissionLogs = {

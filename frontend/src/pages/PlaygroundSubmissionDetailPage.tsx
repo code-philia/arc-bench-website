@@ -2230,6 +2230,19 @@ export default function PlaygroundSubmissionDetailPage() {
     setSubmission(await api.cancelSubmission(submissionId));
   };
 
+  const handleContinueRun = async () => {
+    if (!submissionId || !submission?.can_continue) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Continue this built-in ARC run from its existing code and ARC state? The agent and tests will run again without creating a new submission.",
+    );
+    if (!confirmed) {
+      return;
+    }
+    setSubmission(await api.continueSubmission(submissionId));
+  };
+
   const persistEditableTask = async () => {
     if (!submissionId || !editableTree || !editableTask) {
       return null;
@@ -2554,6 +2567,11 @@ export default function PlaygroundSubmissionDetailPage() {
                 {submission.can_cancel ? (
                   <button type="button" className="btn-outline" onClick={() => void handleCancelRun()}>
                     Cancel run
+                  </button>
+                ) : null}
+                {submission.can_continue ? (
+                  <button type="button" className="btn-primary" onClick={() => void handleContinueRun()}>
+                    Continue run
                   </button>
                 ) : null}
                 {submission.status === "PAUSED" ? (

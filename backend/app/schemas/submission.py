@@ -67,6 +67,7 @@ class SubmissionDetail(SubmissionSummary):
     manual_edit_dirty: bool = False
     pause_available: bool = False
     can_cancel: bool = False
+    can_continue: bool = False
 
 
 class SubmissionEditableTaskPayload(BaseModel):

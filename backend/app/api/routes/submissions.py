@@ -242,6 +242,29 @@ def resume_submission(
     return service.to_detail(submission)
 
 
+@router.post("/{submission_id}/continue", response_model=SubmissionDetail)
+def continue_submission(
+    submission_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionDetail:
+    service = SubmissionService(db)
+    try:
+        submission = service.get_submission(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        service.request_continue(submission)
+        HostDemoPreviewService.stop_backend()
+        background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return service.to_detail(service.get_submission(submission_id, current_user.id))
+
+
 @router.post("/{submission_id}/rewind", response_model=SubmissionDetail)
 def rewind_submission(
     submission_id: str,
