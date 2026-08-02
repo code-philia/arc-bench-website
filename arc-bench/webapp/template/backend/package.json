@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "db:seed": "node src/database/seed_db.js",
+    "db:prepare:e2e": "node src/database/prepare_e2e.js",
+    "test": "vitest run --config vitest.config.js",
+    "test:watch": "vitest --config vitest.config.js",
     "test:e2e": "playwright test",
     "test:all": "npm run test && npm run test:e2e"
   },
@@ -25,7 +27,6 @@
     "bcrypt": "^6.0.0",
     "nodemon": "^3.1.11",
     "playwright": "^1.28.0",
-    "playwright-chromium": "^1.28.0",
     "supertest": "^7.1.4",
     "vitest": "^4.0.16"
   }
