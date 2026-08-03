@@ -58,6 +58,29 @@ def render_images(value: Any) -> list[str]:
     return ["**Images:**", "", *[f"![{label}]({path})" for label, path in images], ""]
 
 
+def reference_links(value: Any) -> list[tuple[str, str]]:
+    """Normalise enhanced ``reference`` entries without accepting legacy scalar values."""
+    if not isinstance(value, list):
+        return []
+
+    references: list[tuple[str, str]] = []
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, dict):
+            continue
+        path = normalise_text(item.get("path"))
+        label = normalise_text(item.get("label")) or f"Reference {index}"
+        if path:
+            references.append((label, path))
+    return references
+
+
+def render_references(value: Any) -> list[str]:
+    references = reference_links(value)
+    if not references:
+        return []
+    return ["**References:**", "", *[f"- [{label}]({path})" for label, path in references], ""]
+
+
 def role_names(value: Any) -> dict[str, str]:
     """Build an ID-to-name map from the enhanced root-level ``roles`` field."""
     if not isinstance(value, list):
@@ -107,6 +130,7 @@ def render_node(node: dict[str, Any], depth: int, roles: dict[str, str]) -> list
         lines.extend([description, ""])
 
     lines.extend(render_images(node.get("images")))
+    lines.extend(render_references(node.get("reference")))
 
     dependencies = string_list(node.get("dependencies"))
     lines.extend([
@@ -158,6 +182,7 @@ def render_requirement(tree: dict[str, Any]) -> str:
         lines.extend([description, ""])
 
     lines.extend(render_images(tree.get("images")))
+    lines.extend(render_references(tree.get("reference")))
     roles = role_names(tree.get("roles"))
     lines.extend(render_roles(roles))
     if "permissions" in tree:

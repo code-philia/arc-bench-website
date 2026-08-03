@@ -15,6 +15,11 @@ export type RequirementImage = {
   path: string;
 };
 
+export type RequirementReference = {
+  label: string;
+  path: string;
+};
+
 export type RequirementRole = {
   id: string;
   name: string;
@@ -29,6 +34,7 @@ export type RequirementNode = {
   children: RequirementNode[];
   scenarios: RequirementScenario[];
   images?: RequirementImage[];
+  reference?: RequirementReference[];
   roles?: RequirementRole[];
   permissions?: "ALL" | string[];
 };
@@ -305,6 +311,18 @@ function normalizeImages(value: unknown): RequirementImage[] {
   });
 }
 
+function normalizeReferences(value: unknown): RequirementReference[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) return [];
+    const path = String(item.path ?? "").trim();
+    if (!path) return [];
+    return [{ label: String(item.label ?? `Reference ${index + 1}`).trim() || `Reference ${index + 1}`, path }];
+  });
+}
+
 function normalizeRoles(value: unknown): RequirementRole[] {
   if (!Array.isArray(value)) {
     return [];
@@ -361,6 +379,7 @@ function normalizeNode(input: unknown, fallbackId: string): RequirementNode {
     children,
     scenarios,
     images: normalizeImages(source.images),
+    reference: normalizeReferences(source.reference),
     roles: normalizeRoles(source.roles),
     permissions: normalizePermissions(source.permissions),
   };
@@ -644,6 +663,14 @@ function renderNodeYaml(node: RequirementNode, indent: number, asListItem = fals
     });
   }
 
+  if (node.reference && node.reference.length > 0) {
+    lines.push(`${fieldPad}reference:`);
+    node.reference.forEach((reference) => {
+      lines.push(`${fieldPad}  - label: ${quoteYaml(reference.label)}`);
+      lines.push(`${fieldPad}    path: ${quoteYaml(reference.path)}`);
+    });
+  }
+
   if (node.roles && node.roles.length > 0) {
     lines.push(`${fieldPad}roles:`);
     node.roles.forEach((role) => {
@@ -710,6 +737,9 @@ function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[
   if (node.images?.length) {
     body.push(...node.images.map((image) => `![${image.label}](${image.path})`));
   }
+  if (node.reference?.length) {
+    body.push("### References", ...node.reference.map((reference) => `- [${reference.label}](${reference.path})`));
+  }
   if (node.permissions) {
     body.push(`Permissions: ${node.permissions === "ALL" ? "ALL" : node.permissions.join(", ") || "None"}.`);
   }
@@ -758,6 +788,9 @@ export function taskTreeToMarkdown(root: RequirementNode): string {
   ];
   if (root.images?.length) {
     intro.push(...root.images.map((image) => `![${image.label}](${image.path})`), "");
+  }
+  if (root.reference?.length) {
+    intro.push("## References", "", ...root.reference.map((reference) => `- [${reference.label}](${reference.path})`), "");
   }
   if (root.roles?.length) {
     intro.push("## Roles", "", ...root.roles.map((role) => `- **${role.id}:** ${role.name}`), "");

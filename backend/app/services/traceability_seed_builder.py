@@ -120,6 +120,7 @@ class TraceabilitySeedBuilder:
                 "name": self._as_text(node.get("name")) or req_id,
                 "description": self._as_text(node.get("description")),
                 "visual_reference": self._extract_visual_references(node),
+                "reference": self._normalize_references(node.get("reference")),
                 "permissions": self._normalize_permissions(node.get("permissions")),
                 "scenarios": normalized_scenarios,
                 "parent_id": parent_id,
@@ -171,6 +172,20 @@ class TraceabilitySeedBuilder:
         description = self._as_text(node.get("description"))
         paths.extend(re.findall(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)", description))
         return list(dict.fromkeys(path for path in paths if path))
+
+    def _normalize_references(self, value: Any) -> list[dict[str, str]]:
+        if not isinstance(value, list):
+            return []
+        references: list[dict[str, str]] = []
+        for index, item in enumerate(value, start=1):
+            if not isinstance(item, dict):
+                continue
+            path = self._as_text(item.get("path"))
+            if not path:
+                continue
+            label = self._as_text(item.get("label")) or f"Reference {index}"
+            references.append({"label": label, "path": path})
+        return references
 
     @staticmethod
     def _normalize_permissions(value: Any) -> str | list[str]:

@@ -80,8 +80,9 @@ class UserTaskService:
 
         The bundle may place its files at the ZIP root or beneath one enclosing
         directory (for example the directory emitted by the export endpoint).
-        Only requirements.yaml, an optional requirements.md, and reference/* are
-        imported; other archive content cannot become part of the draft.
+        The requirement documents and every safe resource file beneath the
+        enclosing bundle directory are imported. This preserves enhanced
+        documents that use folders besides the legacy reference/ directory.
         """
         if not filename.lower().endswith(".zip"):
             raise ValueError("Only .zip requirement bundles are supported")
@@ -115,15 +116,15 @@ class UserTaskService:
 
             yaml_info, yaml_path = yaml_members[0]
             bundle_root = yaml_path.parent
-            reference_prefix = bundle_root / "reference"
             markdown_info = next(
                 (info for info, path in members if path == bundle_root / "requirements.md"),
                 None,
             )
-            reference_members = [
-                (info, path.relative_to(reference_prefix))
+            resource_members = [
+                (info, path.relative_to(bundle_root))
                 for info, path in members
-                if path != reference_prefix and reference_prefix in path.parents
+                if path not in {yaml_path, bundle_root / "requirements.md", bundle_root / "draft.json"}
+                and bundle_root in path.parents
             ]
 
             draft_dir = self._draft_dir(user, self.ACTIVE_DRAFT_ID)
@@ -131,8 +132,7 @@ class UserTaskService:
             backup_dir = draft_dir.parent / f".{self.ACTIVE_DRAFT_ID}-{uuid4().hex}.backup"
             try:
                 staging_dir.mkdir(parents=True, exist_ok=False)
-                reference_dir = staging_dir / "reference"
-                reference_dir.mkdir()
+                (staging_dir / "reference").mkdir()
                 (staging_dir / "requirements.yaml").write_bytes(archive.read(yaml_info))
                 if markdown_info is not None:
                     (staging_dir / "requirements.md").write_bytes(archive.read(markdown_info))
@@ -142,8 +142,8 @@ class UserTaskService:
                     json.dumps({"title": "My Custom Task", "task_type": "web"}, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8",
                 )
-                for info, relative_path in reference_members:
-                    target = reference_dir / Path(*relative_path.parts)
+                for info, relative_path in resource_members:
+                    target = staging_dir / Path(*relative_path.parts)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.read(info))
 
@@ -195,7 +195,7 @@ class UserTaskService:
 
         yaml_path.write_text(yaml_content, encoding="utf-8")
         markdown_path.write_text(markdown_content, encoding="utf-8")
-        self._copy_draft_references(user, payload.draft_id, task_dir)
+        self._copy_draft_resources(user, payload.draft_id, task_dir)
         self._ensure_task_runtime_layout(task_dir, payload.task_type, yaml_content, markdown_content)
 
         task = UserTask(
@@ -279,35 +279,25 @@ class UserTaskService:
         draft_dir = self._draft_dir(user, draft_id)
         draft_dir.mkdir(parents=True, exist_ok=True)
         payload = self._read_draft_payload(draft_dir)
-        reference_dir = draft_dir / "reference"
-        reference_dir.mkdir(parents=True, exist_ok=True)
         buffer = BytesIO()
         root_dir = "requirement"
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(f"{root_dir}/requirements.yaml", (payload["yaml_content"].strip() + "\n") if payload["yaml_content"].strip() else "")
             archive.writestr(f"{root_dir}/requirements.md", (payload["markdown_content"].strip() + "\n") if payload["markdown_content"].strip() else "")
-            archive.writestr(f"{root_dir}/reference/", "")
-            for file_path in reference_dir.rglob("*"):
-                if not file_path.is_file():
-                    continue
-                archive.write(file_path, f"{root_dir}/reference/{file_path.relative_to(reference_dir).as_posix()}")
+            for file_path in self._iter_bundle_resource_files(draft_dir):
+                archive.write(file_path, f"{root_dir}/{file_path.relative_to(draft_dir).as_posix()}")
         return buffer.getvalue(), "requirement.zip"
 
     def build_task_bundle(self, user: User, task_id: str) -> tuple[bytes, str]:
         task = self._get_owned_task(user, task_id)
         task_dir = Path(task.yaml_path).parent
-        reference_dir = task_dir / "reference"
-        reference_dir.mkdir(parents=True, exist_ok=True)
         buffer = BytesIO()
         root_dir = task.id
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(f"{root_dir}/requirements.yaml", Path(task.yaml_path).read_text(encoding="utf-8"))
             archive.writestr(f"{root_dir}/requirements.md", Path(task.markdown_path).read_text(encoding="utf-8"))
-            archive.writestr(f"{root_dir}/reference/", "")
-            for file_path in reference_dir.rglob("*"):
-                if not file_path.is_file():
-                    continue
-                archive.write(file_path, f"{root_dir}/reference/{file_path.relative_to(reference_dir).as_posix()}")
+            for file_path in self._iter_bundle_resource_files(task_dir):
+                archive.write(file_path, f"{root_dir}/{file_path.relative_to(task_dir).as_posix()}")
         return buffer.getvalue(), f"{task.id}.zip"
 
     def sync_task_requirement(self, user: User, task_id: str) -> Requirement:
@@ -418,14 +408,27 @@ class UserTaskService:
                 return alternative
             counter += 1
 
-    def _copy_draft_references(self, user: User, draft_id: str | None, task_dir: Path) -> None:
+    def _copy_draft_resources(self, user: User, draft_id: str | None, task_dir: Path) -> None:
         if not draft_id:
             return
-        source_reference_dir = self._draft_dir(user, draft_id) / "reference"
-        if not source_reference_dir.is_dir():
+        draft_dir = self._draft_dir(user, draft_id)
+        for source_path in self._iter_bundle_resource_files(draft_dir):
+            target_path = task_dir / source_path.relative_to(draft_dir)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+
+    @staticmethod
+    def _iter_bundle_resource_files(root_dir: Path):
+        excluded_root_names = {"requirements.yaml", "requirements.md", "draft.json"}
+        if not root_dir.is_dir():
             return
-        target_reference_dir = task_dir / "reference"
-        shutil.copytree(source_reference_dir, target_reference_dir, dirs_exist_ok=True)
+        for source_path in sorted(root_dir.rglob("*")):
+            if not source_path.is_file():
+                continue
+            relative_path = source_path.relative_to(root_dir)
+            if not relative_path.parts or relative_path.parts[0] in excluded_root_names:
+                continue
+            yield source_path
 
     def _ensure_task_runtime_layout(self, task_dir: Path, task_type: str, yaml_content: str, markdown_content: str) -> None:
         (task_dir / "requirements.yaml").write_text(yaml_content.strip() + "\n", encoding="utf-8")
