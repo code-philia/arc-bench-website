@@ -67,7 +67,17 @@ $env:ARCBENCH_RUNNER_IMAGE = "arcbench-runner:local"
 
 Production deployments should use a validated immutable image tag or digest. See [backend/runner/README.md](backend/runner/README.md) for runner details.
 
-### 3. Start the backend
+
+### 3. Build the frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+this will generate a `frontend/dist` folder with static assets for the backend to serve.
+
+### 4. Start the backend
 
 Choose one Python environment workflow, install dependencies, and launch the API.
 
@@ -115,25 +125,6 @@ Then start the backend server:
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 4. Start the frontend
-
-Open a second terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open **http://127.0.0.1:5173** in your browser. The Vite development server proxies API requests to the backend at port `8000`.
-
-To validate a production build instead:
-
-```bash
-cd frontend
-npm run build
-```
-
 ## Working with requirement documents
 
 Task requirements are authored in YAML. Generate a sibling Markdown document for task and competition pages with:
@@ -142,7 +133,7 @@ Task requirements are authored in YAML. Generate a sibling Markdown document for
 python scripts/render_competition_requirements.py path/to/requirements.yaml
 ```
 
-The converter supports both legacy documents and enhanced fields, including standalone `images`, `roles`, `permissions`, and scenario or step `actor` values. For relative images such as `./reference/example.png`, keep the image in the corresponding `reference/` directory and import the task as a ZIP bundle when using the Create Task page.
+The converter supports both legacy documents and enhanced fields, including standalone `images`, node-level `reference` links, `roles`, `permissions`, and scenario or step `actor` values. For relative files such as `./reference/example.png` or `./reference/standard-rule.md`, keep them in the bundle and import the task as a ZIP on the Create Task page. Additional safe directories in that ZIP are preserved for task export and execution.
 
 ## Useful commands
 
