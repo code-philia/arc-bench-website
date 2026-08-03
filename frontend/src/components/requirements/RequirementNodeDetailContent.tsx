@@ -55,7 +55,7 @@ export default function RequirementNodeDetailContent({
 }: RequirementNodeDetailContentProps) {
   const editable = mode === "editable";
   const descriptionValue = node.description || "No description available.";
-  const descriptionAttachments = collectDescriptionAttachments(node.description || "", taskAssets);
+  const descriptionAttachments = collectDescriptionAttachments(node.description || "", taskAssets, node.images);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const descriptionAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const dependencyPickerRef = useRef<HTMLDivElement | null>(null);
@@ -152,6 +152,18 @@ export default function RequirementNodeDetailContent({
     } finally {
       setDeletingAttachmentPath((current) => (current === normalizedPath ? null : current));
     }
+  };
+
+  const removeDeclaredImage = (rawPath: string) => {
+    if (!editable) {
+      return;
+    }
+    const normalizedPath = normalizeAttachmentPath(rawPath);
+    updateNode((currentNode) => ({
+      ...currentNode,
+      images: (currentNode.images ?? []).filter((image) => normalizeAttachmentPath(image.path) !== normalizedPath),
+    }));
+    message.success("Declared image removed.");
   };
 
   if (!editable) {
@@ -401,8 +413,10 @@ export default function RequirementNodeDetailContent({
               <DescriptionAttachmentPreview
                 key={`${node.id}-editable-attachment-${index}`}
                 attachment={attachment}
-                onDelete={() => void removeDescriptionAttachment(attachment.rawPath)}
-                deleting={deletingAttachmentPath === normalizeAttachmentPath(attachment.rawPath)}
+                onDelete={attachment.source === "images"
+                  ? () => removeDeclaredImage(attachment.rawPath)
+                  : () => void removeDescriptionAttachment(attachment.rawPath)}
+                deleting={attachment.source === "images" ? false : deletingAttachmentPath === normalizeAttachmentPath(attachment.rawPath)}
               />
             ))}
           </div>

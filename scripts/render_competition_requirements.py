@@ -32,7 +32,71 @@ def string_list(value: Any) -> list[str]:
     return [item for raw in value if (item := normalise_text(raw))]
 
 
-def render_node(node: dict[str, Any], depth: int) -> list[str]:
+def image_references(value: Any) -> list[tuple[str, str]]:
+    """Normalise enhanced ``images`` entries while accepting a plain path list."""
+    if not isinstance(value, list):
+        return []
+
+    images: list[tuple[str, str]] = []
+    for index, item in enumerate(value, start=1):
+        if isinstance(item, dict):
+            path = normalise_text(item.get("path"))
+            label = normalise_text(item.get("label")) or f"Reference image {index}"
+        else:
+            path = normalise_text(item)
+            label = f"Reference image {index}"
+        if path:
+            images.append((label, path))
+    return images
+
+
+def render_images(value: Any) -> list[str]:
+    """Render sibling-relative image paths without changing their URLs."""
+    images = image_references(value)
+    if not images:
+        return []
+    return ["**Images:**", "", *[f"![{label}]({path})" for label, path in images], ""]
+
+
+def role_names(value: Any) -> dict[str, str]:
+    """Build an ID-to-name map from the enhanced root-level ``roles`` field."""
+    if not isinstance(value, list):
+        return {}
+    names: dict[str, str] = {}
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        role_id = normalise_text(item.get("id"))
+        if role_id:
+            names[role_id] = normalise_text(item.get("name")) or role_id
+    return names
+
+
+def render_roles(roles: dict[str, str]) -> list[str]:
+    if not roles:
+        return []
+    lines = ["## Roles", ""]
+    for role_id, role_name in roles.items():
+        lines.append(f"- **{role_id}:** {role_name}")
+    return [*lines, ""]
+
+
+def format_permissions(value: Any) -> str:
+    if isinstance(value, str):
+        return normalise_text(value) or "None"
+    permissions = string_list(value)
+    return ", ".join(permissions) if permissions else "None"
+
+
+def format_actor(value: Any, roles: dict[str, str]) -> str:
+    actor = normalise_text(value)
+    if not actor:
+        return ""
+    role_name = roles.get(actor)
+    return f"{actor} ({role_name})" if role_name and role_name != actor else actor
+
+
+def render_node(node: dict[str, Any], depth: int, roles: dict[str, str]) -> list[str]:
     """Render one requirement node and all of its children."""
     node_id = normalise_text(node.get("id")) or "UNNAMED"
     name = normalise_text(node.get("name")) or node_id
@@ -42,12 +106,16 @@ def render_node(node: dict[str, Any], depth: int) -> list[str]:
     if description := normalise_text(node.get("description")):
         lines.extend([description, ""])
 
+    lines.extend(render_images(node.get("images")))
+
     dependencies = string_list(node.get("dependencies"))
     lines.extend([
         f"**Type:** {node_type}",
         f"**Dependencies:** {', '.join(dependencies) if dependencies else 'None'}",
         "",
     ])
+    if "permissions" in node:
+        lines.extend([f"**Permissions:** {format_permissions(node.get('permissions'))}", ""])
 
     scenarios = node.get("scenarios")
     if isinstance(scenarios, list) and scenarios:
@@ -57,6 +125,8 @@ def render_node(node: dict[str, Any], depth: int) -> list[str]:
                 continue
             scenario_name = normalise_text(scenario.get("name")) or "Unnamed scenario"
             rendered_scenarios.append(f"- {scenario_name}")
+            if actor := format_actor(scenario.get("actor"), roles):
+                rendered_scenarios.append(f"  - **Actor:** {actor}")
             steps = scenario.get("steps")
             if not isinstance(steps, list):
                 continue
@@ -65,7 +135,9 @@ def render_node(node: dict[str, Any], depth: int) -> list[str]:
                     continue
                 keyword = normalise_text(step.get("keyword")) or "STEP"
                 content = normalise_text(step.get("content"))
-                rendered_scenarios.append(f"  - **{keyword}:** {content}")
+                actor = format_actor(step.get("actor"), roles)
+                actor_suffix = f" (Actor: {actor})" if actor else ""
+                rendered_scenarios.append(f"  - **{keyword}{actor_suffix}:** {content}")
         if rendered_scenarios:
             lines.extend(["**Scenarios:**", "", *rendered_scenarios, ""])
 
@@ -73,7 +145,7 @@ def render_node(node: dict[str, Any], depth: int) -> list[str]:
     if isinstance(children, list):
         for child in children:
             if isinstance(child, dict):
-                lines.extend(render_node(child, depth + 1))
+                lines.extend(render_node(child, depth + 1, roles))
     return lines
 
 
@@ -85,14 +157,20 @@ def render_requirement(tree: dict[str, Any]) -> str:
     if description := normalise_text(tree.get("description")):
         lines.extend([description, ""])
 
+    lines.extend(render_images(tree.get("images")))
+    roles = role_names(tree.get("roles"))
+    lines.extend(render_roles(roles))
+    if "permissions" in tree:
+        lines.extend([f"**Permissions:** {format_permissions(tree.get('permissions'))}", ""])
+
     children = tree.get("children")
     if isinstance(children, list) and children:
         for child in children:
             if isinstance(child, dict):
-                lines.extend(render_node(child, depth=2))
+                lines.extend(render_node(child, depth=2, roles=roles))
     else:
         # A single-node file still deserves the node metadata and scenarios.
-        lines.extend(render_node(tree, depth=2)[2:])
+        lines.extend(render_node(tree, depth=2, roles=roles)[2:])
 
     return "\n".join(lines).rstrip() + "\n"
 

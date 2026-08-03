@@ -51,9 +51,17 @@ function normalizeRequirementNodeTypes(node: RequirementNode): RequirementNode {
   const children = node.children.map((child) => normalizeRequirementNodeTypes(child));
   return {
     ...node,
-    type: children.length > 0 ? "FOLDER" : "ATOMIC",
+    type: node.type || (children.length > 0 ? "FOLDER" : "ATOMIC"),
     children,
   };
+}
+
+function hasRelativeReferenceImages(node: RequirementNode): boolean {
+  const hasDeclaredReference = (node.images || []).some((image) =>
+    /^(?:\.\/)?reference\//i.test(image.path.trim()),
+  );
+
+  return hasDeclaredReference || node.children.some(hasRelativeReferenceImages);
 }
 
 function collectDependencyOptions(node: RequirementNode, bucket: Array<{ id: string; name: string }>) {
@@ -368,7 +376,13 @@ export default function CreateTaskPage() {
       setTree(nextTree);
       setSelectedNodeId(null);
       setDetailExpanded(false);
-      message.success("YAML imported.");
+      if (hasRelativeReferenceImages(nextTree)) {
+        message.warning(
+          "YAML imported. Upload a ZIP bundle with its reference/ folder to preview relative images.",
+        );
+      } else {
+        message.success("YAML imported.");
+      }
     } catch (error) {
       message.error(`YAML import failed: ${(error as Error).message}`);
     }

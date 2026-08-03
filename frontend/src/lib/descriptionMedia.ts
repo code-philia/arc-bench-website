@@ -18,6 +18,12 @@ export type DescriptionAttachment = {
   kind: DescriptionAttachmentKind;
   rawPath: string;
   src: string;
+  source?: "description" | "images";
+};
+
+export type DeclaredRequirementImage = {
+  label: string;
+  path: string;
 };
 
 function joinResourceUrl(baseUrl: string, relativePath: string) {
@@ -95,6 +101,7 @@ function pushAttachment(
   rawPath: string,
   taskAssets?: SubmissionTaskAssets | null,
   alt = "",
+  source: "description" | "images" = "description",
 ) {
   const src = resolveDescriptionAssetSrc(rawPath, taskAssets);
   if (!src || seen.has(src)) {
@@ -107,10 +114,15 @@ function pushAttachment(
     kind: inferAttachmentKind(rawPath),
     rawPath: normalizeResourcePath(rawPath),
     src,
+    source,
   });
 }
 
-export function collectDescriptionAttachments(description: string, taskAssets?: SubmissionTaskAssets | null) {
+export function collectDescriptionAttachments(
+  description: string,
+  taskAssets?: SubmissionTaskAssets | null,
+  declaredImages: DeclaredRequirementImage[] = [],
+) {
   const attachments: DescriptionAttachment[] = [];
   const seen = new Set<string>();
 
@@ -145,16 +157,28 @@ export function collectDescriptionAttachments(description: string, taskAssets?: 
     pushAttachment(attachments, seen, line, taskAssets, "");
   }
 
+  for (const image of declaredImages) {
+    pushAttachment(attachments, seen, image.path, taskAssets, image.label, "images");
+  }
+
   return attachments;
 }
 
-export function collectDescriptionImages(description: string, taskAssets?: SubmissionTaskAssets | null) {
-  return collectDescriptionAttachments(description, taskAssets)
+export function collectDescriptionImages(
+  description: string,
+  taskAssets?: SubmissionTaskAssets | null,
+  declaredImages: DeclaredRequirementImage[] = [],
+) {
+  return collectDescriptionAttachments(description, taskAssets, declaredImages)
     .filter((attachment) => attachment.kind === "image")
     .map((attachment) => ({ alt: attachment.alt, src: attachment.src }));
 }
 
-export function getFirstDescriptionImage(description: string, taskAssets?: SubmissionTaskAssets | null): string | null {
-  const first = collectDescriptionAttachments(description, taskAssets).find((attachment) => attachment.kind === "image");
+export function getFirstDescriptionImage(
+  description: string,
+  taskAssets?: SubmissionTaskAssets | null,
+  declaredImages: DeclaredRequirementImage[] = [],
+): string | null {
+  const first = collectDescriptionAttachments(description, taskAssets, declaredImages).find((attachment) => attachment.kind === "image");
   return first?.src ?? null;
 }

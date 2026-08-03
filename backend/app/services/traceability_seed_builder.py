@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ class TraceabilitySeedBuilder:
         self._walk_node(parsed, parent_id=None, requirements=requirements, scenarios=scenarios)
         if not requirements:
             return {
+                "roles": [],
                 "requirements": [
                     {
                         "req_id": "ROOT",
@@ -35,7 +37,7 @@ class TraceabilitySeedBuilder:
                 ],
                 "scenarios": [],
             }
-        return {"requirements": requirements, "scenarios": scenarios}
+        return {"roles": self._normalize_roles(parsed.get("roles")), "requirements": requirements, "scenarios": scenarios}
 
     def build_for_requirement(self, requirement: Requirement, requirement_yaml_path: Path | None = None) -> dict[str, list[dict[str, Any]]]:
         yaml_path = requirement_yaml_path or Path(requirement.requirements_path).with_name("requirements.yaml")
@@ -52,6 +54,7 @@ class TraceabilitySeedBuilder:
         if not requirements:
             return self._build_fallback_seed(requirement)
         return {
+            "roles": self._normalize_roles(parsed.get("roles")),
             "requirements": requirements,
             "scenarios": scenarios,
         }
@@ -66,6 +69,7 @@ class TraceabilitySeedBuilder:
 
     def _build_fallback_seed(self, requirement: Requirement) -> dict[str, list[dict[str, Any]]]:
         return {
+            "roles": [],
             "requirements": [
                 {
                     "req_id": "ROOT",
@@ -105,6 +109,7 @@ class TraceabilitySeedBuilder:
                     {
                         "id": scenario_id,
                         "name": self._as_text(scenario.get("name")) or f"Scenario {index}",
+                        "actor": self._as_optional_text(scenario.get("actor")),
                         "steps": self._normalize_steps(scenario.get("steps")),
                     }
                 )
@@ -114,7 +119,8 @@ class TraceabilitySeedBuilder:
                 "req_id": req_id,
                 "name": self._as_text(node.get("name")) or req_id,
                 "description": self._as_text(node.get("description")),
-                "visual_reference": self._as_string_list(node.get("visual_reference")),
+                "visual_reference": self._extract_visual_references(node),
+                "permissions": self._normalize_permissions(node.get("permissions")),
                 "scenarios": normalized_scenarios,
                 "parent_id": parent_id,
                 "children_ids": self._collect_child_ids(node.get("children")),
@@ -127,6 +133,7 @@ class TraceabilitySeedBuilder:
                     "scenario_id": str(scenario["id"]),
                     "name": str(scenario["name"]),
                     "req_id": req_id,
+                    "actor": scenario["actor"],
                     "steps": scenario["steps"],
                 }
             )
@@ -152,7 +159,39 @@ class TraceabilitySeedBuilder:
             return []
         return [str(item).strip() for item in value if str(item).strip()]
 
-    def _normalize_steps(self, value: Any) -> list[dict[str, str]]:
+    def _extract_visual_references(self, node: dict[str, Any]) -> list[str]:
+        """Merge legacy visual references and enhanced image declarations."""
+        paths = self._as_string_list(node.get("visual_reference"))
+        images = node.get("images")
+        if isinstance(images, list):
+            for image in images:
+                path = self._as_text(image.get("path")) if isinstance(image, dict) else self._as_text(image)
+                if path:
+                    paths.append(path)
+        description = self._as_text(node.get("description"))
+        paths.extend(re.findall(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)", description))
+        return list(dict.fromkeys(path for path in paths if path))
+
+    @staticmethod
+    def _normalize_permissions(value: Any) -> str | list[str]:
+        if isinstance(value, str):
+            return value.strip() or []
+        return TraceabilitySeedBuilder._as_string_list(value)
+
+    def _normalize_roles(self, value: Any) -> list[dict[str, str]]:
+        if not isinstance(value, list):
+            return []
+        roles: list[dict[str, str]] = []
+        for role in value:
+            if not isinstance(role, dict):
+                continue
+            role_id = self._as_text(role.get("id"))
+            if not role_id:
+                continue
+            roles.append({"id": role_id, "name": self._as_text(role.get("name")) or role_id})
+        return roles
+
+    def _normalize_steps(self, value: Any) -> list[dict[str, str | None]]:
         if not isinstance(value, list):
             return []
 
@@ -168,6 +207,7 @@ class TraceabilitySeedBuilder:
                 {
                     "keyword": keyword,
                     "content": content,
+                    "actor": self._as_optional_text(step.get("actor")),
                 }
             )
         return steps

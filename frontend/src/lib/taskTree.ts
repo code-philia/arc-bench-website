@@ -1,21 +1,36 @@
 export type RequirementStep = {
   keyword: string;
   content: string;
+  actor?: string;
 };
 
 export type RequirementScenario = {
   name: string;
+  actor?: string;
   steps: RequirementStep[];
+};
+
+export type RequirementImage = {
+  label: string;
+  path: string;
+};
+
+export type RequirementRole = {
+  id: string;
+  name: string;
 };
 
 export type RequirementNode = {
   id: string;
   name: string;
-  type: "FOLDER" | "ATOMIC";
+  type: string;
   description: string;
   dependencies: string[];
   children: RequirementNode[];
   scenarios: RequirementScenario[];
+  images?: RequirementImage[];
+  roles?: RequirementRole[];
+  permissions?: "ALL" | string[];
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -275,17 +290,54 @@ function asStringArray(value: unknown): string[] {
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
+function normalizeImages(value: unknown): RequirementImage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (isRecord(item)) {
+      const path = String(item.path ?? "").trim();
+      if (!path) return [];
+      return [{ label: String(item.label ?? `Reference image ${index + 1}`).trim() || `Reference image ${index + 1}`, path }];
+    }
+    const path = String(item ?? "").trim();
+    return path ? [{ label: `Reference image ${index + 1}`, path }] : [];
+  });
+}
+
+function normalizeRoles(value: unknown): RequirementRole[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const id = String(item.id ?? "").trim();
+    return id ? [{ id, name: String(item.name ?? id).trim() || id }] : [];
+  });
+}
+
+function normalizePermissions(value: unknown): "ALL" | string[] | undefined {
+  if (typeof value === "string") {
+    return value.trim().toUpperCase() === "ALL" ? "ALL" : asStringArray(value ? [value] : []);
+  }
+  return Array.isArray(value) ? asStringArray(value) : undefined;
+}
+
 function normalizeScenario(input: unknown): RequirementScenario {
   const source = isRecord(input) ? input : {};
   const rawSteps = Array.isArray(source.steps) ? source.steps : [];
+  const actor = String(source.actor ?? "").trim();
   return {
     name: String(source.name ?? "New scenario").trim() || "New scenario",
+    ...(actor ? { actor } : {}),
     steps: rawSteps
       .map((step) => {
         const stepSource = isRecord(step) ? step : {};
+        const stepActor = String(stepSource.actor ?? "").trim();
         return {
           keyword: String(stepSource.keyword ?? "GIVEN").trim().toUpperCase() || "GIVEN",
           content: String(stepSource.content ?? "").trim(),
+          ...(stepActor ? { actor: stepActor } : {}),
         };
       })
       .filter((step) => step.content),
@@ -294,7 +346,7 @@ function normalizeScenario(input: unknown): RequirementScenario {
 
 function normalizeNode(input: unknown, fallbackId: string): RequirementNode {
   const source = isRecord(input) ? input : {};
-  const type = String(source.type ?? "FOLDER").trim().toUpperCase();
+  const type = String(source.type ?? "FOLDER").trim().toUpperCase() || "FOLDER";
   const children = Array.isArray(source.children)
     ? source.children.map((child, index) => normalizeNode(child, `${fallbackId}-${index + 1}`))
     : [];
@@ -303,11 +355,14 @@ function normalizeNode(input: unknown, fallbackId: string): RequirementNode {
   return {
     id: String(source.id ?? fallbackId).trim() || fallbackId,
     name: String(source.name ?? fallbackId).trim() || fallbackId,
-    type: type === "ATOMIC" ? "ATOMIC" : "FOLDER",
+    type,
     description: String(source.description ?? "").trim(),
     dependencies: asStringArray(source.dependencies),
     children,
     scenarios,
+    images: normalizeImages(source.images),
+    roles: normalizeRoles(source.roles),
+    permissions: normalizePermissions(source.permissions),
   };
 }
 
@@ -552,6 +607,9 @@ function renderScenarioYaml(scenario: RequirementScenario, indent: number): stri
   const pad = " ".repeat(indent);
   const nestedPad = " ".repeat(indent + 2);
   const lines = [`${pad}- name: ${quoteYaml(scenario.name)}`];
+  if (scenario.actor) {
+    lines.push(`${nestedPad}actor: ${quoteYaml(scenario.actor)}`);
+  }
   if (scenario.steps.length === 0) {
     lines.push(`${nestedPad}steps: []`);
     return lines;
@@ -559,6 +617,9 @@ function renderScenarioYaml(scenario: RequirementScenario, indent: number): stri
   lines.push(`${nestedPad}steps:`);
   scenario.steps.forEach((step) => {
     lines.push(`${nestedPad}  - keyword: ${step.keyword}`);
+    if (step.actor) {
+      lines.push(`${nestedPad}    actor: ${quoteYaml(step.actor)}`);
+    }
     lines.push(`${nestedPad}    content: ${quoteYaml(step.content)}`);
   });
   return lines;
@@ -574,6 +635,33 @@ function renderNodeYaml(node: RequirementNode, indent: number, asListItem = fals
     `${fieldPad}type: ${node.type}`,
     `${fieldPad}description: ${quoteYaml(node.description)}`,
   ];
+
+  if (node.images && node.images.length > 0) {
+    lines.push(`${fieldPad}images:`);
+    node.images.forEach((image) => {
+      lines.push(`${fieldPad}  - label: ${quoteYaml(image.label)}`);
+      lines.push(`${fieldPad}    path: ${quoteYaml(image.path)}`);
+    });
+  }
+
+  if (node.roles && node.roles.length > 0) {
+    lines.push(`${fieldPad}roles:`);
+    node.roles.forEach((role) => {
+      lines.push(`${fieldPad}  - id: ${quoteYaml(role.id)}`);
+      lines.push(`${fieldPad}    name: ${quoteYaml(role.name)}`);
+    });
+  }
+
+  if (node.permissions) {
+    if (node.permissions === "ALL") {
+      lines.push(`${fieldPad}permissions: ALL`);
+    } else if (node.permissions.length === 0) {
+      lines.push(`${fieldPad}permissions: []`);
+    } else {
+      lines.push(`${fieldPad}permissions:`);
+      node.permissions.forEach((permission) => lines.push(`${fieldPad}  - ${quoteYaml(permission)}`));
+    }
+  }
 
   if (node.dependencies.length === 0) {
     lines.push(`${fieldPad}dependencies: []`);
@@ -619,6 +707,12 @@ function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[
   if (node.description) {
     body.push(node.description);
   }
+  if (node.images?.length) {
+    body.push(...node.images.map((image) => `![${image.label}](${image.path})`));
+  }
+  if (node.permissions) {
+    body.push(`Permissions: ${node.permissions === "ALL" ? "ALL" : node.permissions.join(", ") || "None"}.`);
+  }
   if (node.dependencies.length > 0) {
     body.push(`Depends on: ${node.dependencies.map((item) => `\`${item}\``).join(", ")}.`);
   }
@@ -630,11 +724,14 @@ function buildMarkdownSections(node: RequirementNode, sections: MarkdownSection[
     body.push("### Acceptance scenarios");
     node.scenarios.forEach((scenario) => {
       body.push(`#### ${scenario.name}`);
+      if (scenario.actor) {
+        body.push(`Actor: ${scenario.actor}.`);
+      }
       if (scenario.steps.length === 0) {
         body.push("- No steps defined yet.");
         return;
       }
-      body.push(...scenario.steps.map((step) => `- **${step.keyword}** ${step.content}`));
+      body.push(...scenario.steps.map((step) => `- **${step.keyword}${step.actor ? ` (${step.actor})` : ""}** ${step.content}`));
     });
   }
 
@@ -659,6 +756,15 @@ export function taskTreeToMarkdown(root: RequirementNode): string {
     root.description || "Task description is not available yet.",
     "",
   ];
+  if (root.images?.length) {
+    intro.push(...root.images.map((image) => `![${image.label}](${image.path})`), "");
+  }
+  if (root.roles?.length) {
+    intro.push("## Roles", "", ...root.roles.map((role) => `- **${role.id}:** ${role.name}`), "");
+  }
+  if (root.permissions) {
+    intro.push(`Permissions: ${root.permissions === "ALL" ? "ALL" : root.permissions.join(", ") || "None"}.`, "");
+  }
 
   const sectionMarkdown = sections
     .map((section) => [section.heading, "", ...section.body, ""].join("\n"))
