@@ -41,8 +41,8 @@ submodule under `templates/<template-id>/files`.
 
 ### 1. Initialize the submodule
 
-The repository includes `agentic-requirement-compiler` and `arc-template` as Git
-submodules.
+The repository includes `reference-implementations/arc` and `arc-template` as
+Git submodules.
 
 ```bash
 git submodule update --init --recursive
@@ -51,7 +51,7 @@ git submodule update --init --recursive
 To update it to the latest remote `main` branch:
 
 ```bash
-git submodule update --remote agentic-requirement-compiler arc-template
+git submodule update --remote reference-implementations/arc arc-template
 ```
 
 ### 2. Build the runner image

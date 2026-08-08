@@ -35,12 +35,22 @@ class AgentStarterService:
 
     def _add_selected_agent_template(self, archive: zipfile.ZipFile, template_kind: str) -> None:
         normalized = self._normalize_template_kind(template_kind)
-        if normalized in {"blank", "codex", "claude_code"}:
+        if normalized == "blank":
             return
         if normalized == "arc":
             self._add_source_tree(archive, self.settings.builtin_arc_agent_source_dir, "template/arc")
             return
-        self._add_source_tree(archive, self.settings.runner_context_dir / "octos", "template/octos")
+        source_roots = {
+            "octos": self.settings.agent_reference_octos_root,
+            "codex": self.settings.agent_reference_codex_root,
+            "claude_code": self.settings.agent_reference_claude_code_root,
+        }
+        archive_roots = {
+            "octos": "template/octos",
+            "codex": "template/codex",
+            "claude_code": "template/claude-code",
+        }
+        self._add_source_tree(archive, source_roots[normalized], archive_roots[normalized])
 
     def _add_source_tree(self, archive: zipfile.ZipFile, source_root: Path, archive_root: str) -> None:
         if not source_root.is_dir():
