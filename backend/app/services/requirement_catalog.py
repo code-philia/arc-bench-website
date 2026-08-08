@@ -90,25 +90,26 @@ class RequirementCatalogService:
 
     def scan_entries(self) -> list[CatalogRequirementEntry]:
         rows: list[CatalogRequirementEntry] = []
-        for category, requirements_root, tests_root, templates_root in self._iter_catalog_sources():
-            if not requirements_root.exists():
+        for category, tasks_root, tests_root, templates_root in self._iter_catalog_sources():
+            if not tasks_root.exists():
                 continue
 
-            for requirement_dir in sorted(requirements_root.iterdir()):
-                if not requirement_dir.is_dir():
+            for task_dir in sorted(tasks_root.iterdir()):
+                if not task_dir.is_dir():
                     continue
 
-                source_requirement_id = requirement_dir.name
+                source_requirement_id = task_dir.name
                 requirement_id = (
                     f"{category}--{source_requirement_id}"
                     if self.catalog_name == "competition"
                     else source_requirement_id
                 )
-                requirements_path = requirement_dir / "requirements.md"
-                prerequisites_path = requirement_dir / "prerequisites.md"
-                tests_path = tests_root / source_requirement_id
-                assets_path = requirement_dir / "assets"
-                references_path = requirement_dir / "reference"
+                requirements_dir = task_dir / "requirements"
+                requirements_path = requirements_dir / "requirements.md"
+                prerequisites_path = requirements_dir / "prerequisites.md"
+                tests_path = task_dir / "tests"
+                assets_path = requirements_dir / "assets"
+                references_path = requirements_dir / "reference"
 
                 if not requirements_path.exists():
                     continue
@@ -141,41 +142,32 @@ class RequirementCatalogService:
         if self.catalog_name == "competition":
             sources: list[tuple[str, Path, Path, Path]] = []
             for competition_root in self._competition_roots():
-                tasks_root = competition_root / "tasks"
-                if not tasks_root.is_dir():
-                    tasks_root = competition_root / "requirements"
                 sources.append(
                     (
                         self._competition_id(competition_root.name),
-                        tasks_root,
-                        competition_root / "tests",
-                        competition_root / "template",
+                        competition_root,
+                        competition_root,
+                        self.settings.web_template_files_root,
                     )
                 )
             return sources
 
-        if self.catalog_name != "benchmark":
-            return [("web", self.requirements_root, self.tests_root, self.templates_root)]
-
-        competition_root = self.requirements_root.parent.parent
-        if not competition_root.exists():
+        source_root = self.settings.arc_bench_root if self.catalog_name == "benchmark" else self.settings.playground_root
+        if not source_root.is_dir():
             return []
+        return [
+            (track_root.name, track_root, track_root, self._template_root_for_task_type(track_root.name))
+            for track_root in sorted(source_root.iterdir())
+            if track_root.is_dir()
+        ]
 
-        sources: list[tuple[str, Path, Path, Path]] = []
-        for app_root in sorted(competition_root.iterdir()):
-            if not app_root.is_dir() or not app_root.name.endswith("app"):
-                continue
-            if app_root.name != "webapp":
-                continue
-            sources.append(
-                (
-                    self._normalize_competition_category(app_root.name),
-                    app_root / "requirements",
-                    app_root / "tests",
-                    app_root / "template",
-                )
-            )
-        return sources
+    def _template_root_for_task_type(self, task_type: str) -> Path:
+        normalized = str(task_type or "").strip().lower()
+        if normalized in {"mobile", "android"}:
+            return self.settings.mobile_template_files_root
+        if normalized == "cli":
+            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
+        return self.settings.web_template_files_root
 
     def _competition_roots(self) -> list[Path]:
         root = self.settings.competition_root
@@ -404,7 +396,7 @@ class RequirementCatalogService:
             notice=(
                 "The hackathon focuses on software factory decomposition, requirements compilation, and two concrete task packs."
                 if is_hackathon
-                else "No tasks have been published yet. Add task folders under competition/<competition>/tasks/."
+                else "No tasks have been published yet. Add task folders directly to the competition directory."
                 if not tasks
                 else "Task packs are ready. Create a submission from this competition page."
             ),
@@ -476,15 +468,15 @@ class RequirementCatalogService:
         requirement = self.get_entry(requirement_id)
         archive_name = f"arcbench-public-{requirement_id}.zip"
         entries = [
-            (requirement.requirements_path, f"{requirement.id}/requirements.md"),
-            (requirement.prerequisites_path, f"{requirement.id}/prerequisites.md"),
+            (requirement.requirements_path, f"{requirement.id}/requirements/requirements.md"),
+            (requirement.prerequisites_path, f"{requirement.id}/requirements/prerequisites.md"),
             (requirement.tests_path, f"{requirement.id}/tests"),
-            (requirement.assets_path, f"{requirement.id}/demo/assets"),
-            (requirement.references_path, f"{requirement.id}/demo/reference"),
+            (requirement.assets_path, f"{requirement.id}/requirements/assets"),
+            (requirement.references_path, f"{requirement.id}/requirements/reference"),
         ]
         requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
         if requirement_yaml_path.exists():
-            entries.append((requirement_yaml_path, f"{requirement.id}/requirements.yaml"))
+            entries.append((requirement_yaml_path, f"{requirement.id}/requirements/requirements.yaml"))
         return self._build_zip(entries, archive_name)
 
     def build_public_task_document(self, requirement_id: str, kind: str) -> tuple[bytes, str]:
@@ -514,16 +506,16 @@ class RequirementCatalogService:
         for requirement in rows:
             entries.extend(
                 [
-                    (requirement.requirements_path, f"public/{requirement.id}/requirements.md"),
-                    (requirement.prerequisites_path, f"public/{requirement.id}/prerequisites.md"),
+                    (requirement.requirements_path, f"public/{requirement.id}/requirements/requirements.md"),
+                    (requirement.prerequisites_path, f"public/{requirement.id}/requirements/prerequisites.md"),
                     (requirement.tests_path, f"public/{requirement.id}/tests"),
-                    (requirement.assets_path, f"public/{requirement.id}/demo/assets"),
-                    (requirement.references_path, f"public/{requirement.id}/demo/reference"),
+                    (requirement.assets_path, f"public/{requirement.id}/requirements/assets"),
+                    (requirement.references_path, f"public/{requirement.id}/requirements/reference"),
                 ]
             )
             requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
             if requirement_yaml_path.exists():
-                entries.append((requirement_yaml_path, f"public/{requirement.id}/requirements.yaml"))
+                entries.append((requirement_yaml_path, f"public/{requirement.id}/requirements/requirements.yaml"))
         return self._build_zip(entries, "arcbench-public-competition.zip")
 
     def build_benchmark_track_bundle(self, benchmark_id: str) -> tuple[bytes, str]:

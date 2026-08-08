@@ -2,3 +2,7 @@
 	path = agentic-requirement-compiler
 	url = https://github.com/code-philia/agentic-requirement-compiler.git
 	branch = main
+[submodule "arc-template"]
+	path = arc-template
+	url = https://github.com/Weiyu-Kong/arc-template.git
+	branch = main

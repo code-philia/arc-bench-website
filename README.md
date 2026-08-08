@@ -19,8 +19,15 @@ arc-bench-website/
 ├── frontend/      React + Vite web application
 ├── packages/      Agent runtime packages for Python, JavaScript, and shared code
 ├── scripts/       Development and document-generation utilities
-└── competition/   Competition tasks and test assets
+└── data/          Unified task data sources (ARC-Bench, playground, competitions)
 ```
+
+## Task data layout
+
+All shipped task sources are under [`data/`](data/README.md): `arc-bench`,
+`playground`, and `competition`. Each task has its own `requirements/` and
+`tests/` directories. Starter project files live in the `arc-template`
+submodule under `templates/<template-id>/files`.
 
 ## Quick start
 
@@ -34,7 +41,8 @@ arc-bench-website/
 
 ### 1. Initialize the submodule
 
-The repository includes `agentic-requirement-compiler` as a Git submodule.
+The repository includes `agentic-requirement-compiler` and `arc-template` as Git
+submodules.
 
 ```bash
 git submodule update --init --recursive
@@ -43,7 +51,7 @@ git submodule update --init --recursive
 To update it to the latest remote `main` branch:
 
 ```bash
-git submodule update --remote agentic-requirement-compiler
+git submodule update --remote agentic-requirement-compiler arc-template
 ```
 
 ### 2. Build the runner image

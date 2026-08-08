@@ -1,14 +1,14 @@
 """Convert one requirement-tree YAML file into a sibling Markdown document.
 
-The rendered structure follows ``arc-bench-playground/webapp/requirements/__demo__``:
+The rendered structure follows ``data/competition/<competition>/<task>/requirements``:
 the root becomes the document title, requirement nodes become nested headings, and
 their descriptions, dependencies, and scenarios are rendered as readable Markdown.
 
 Usage:
     python scripts/render_competition_requirements.py path/to/requirements.yaml
 
-For example, ``competition/Demo/tasks/github/requirements.yaml`` produces
-``competition/Demo/tasks/github/requirements.md``.
+For example, ``data/competition/demo/github/requirements/requirements.yaml`` produces
+``data/competition/demo/github/requirements/requirements.md``.
 """
 
 from __future__ import annotations

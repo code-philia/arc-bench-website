@@ -107,7 +107,6 @@ class AgentStarterService:
         normalized = str(task_type or "").strip().lower()
         if normalized == "cli":
             return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
-        arc_bench_root = self.settings.requirements_root.parent.parent
-        if normalized == "mobile":
-            return arc_bench_root / "mobileapp" / "template"
-        return arc_bench_root / "webapp" / "template"
+        if normalized in {"mobile", "android"}:
+            return self.settings.mobile_template_files_root
+        return self.settings.web_template_files_root

@@ -448,7 +448,9 @@ class UserTaskService:
     def _resolve_template_source(self, task_type: str) -> Path | None:
         normalized = str(task_type or "").strip().lower()
         if normalized == "web":
-            return self.settings.playground_templates_root
+            return self.settings.web_template_files_root
+        if normalized in {"mobile", "android"}:
+            return self.settings.mobile_template_files_root
         if normalized == "cli":
             return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
         return None

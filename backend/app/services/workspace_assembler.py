@@ -36,13 +36,7 @@ class WorkspaceAssembler:
             archive.extractall(submission_dir)
         self._flatten_single_root(submission_dir)
         requirement_root = Path(requirement.requirements_path).resolve().parent
-        template_source_root = Path(requirement.requirements_path).resolve().parents[2] / "template"
-        if not template_source_root.is_dir():
-            fallback_template_root = requirement_root / "template"
-            if fallback_template_root.is_dir():
-                template_source_root = fallback_template_root
-        if not template_source_root.is_dir():
-            template_source_root = self.settings.templates_root
+        template_source_root = self._resolve_template_source(requirement)
         if not template_source_root.is_dir():
             raise FileNotFoundError(f"Task template directory not found: {template_source_root}")
         shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
@@ -85,6 +79,14 @@ class WorkspaceAssembler:
             encoding="utf-8",
         )
         return workspace_root
+
+    def _resolve_template_source(self, requirement: Requirement) -> Path:
+        normalized = str(requirement.category or "").strip().lower()
+        if normalized == "cli":
+            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
+        if normalized in {"mobile", "android"}:
+            return self.settings.mobile_template_files_root
+        return self.settings.web_template_files_root
 
     @staticmethod
     def _copy_optional_tree(source: Path, destination: Path) -> None:

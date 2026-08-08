@@ -23,6 +23,8 @@ requirement/
 .env
 *.whl
 __demo__
+!data/playground/web/__demo__/
+!data/playground/web/__demo__/**
 
 rebuild-arc-agent-runner.ps1
 

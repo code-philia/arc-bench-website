@@ -60,7 +60,7 @@ function typeSummary(type: PlaygroundTaskType, taskCount: number) {
 }
 
 function sourceLabel(isCompetitionRoute: boolean) {
-  return isCompetitionRoute ? "arc-bench" : "arc-bench-playground";
+  return isCompetitionRoute ? "Competition tasks" : "Playground task bank";
 }
 
 function typeSummaryForSource(type: PlaygroundTaskType, taskCount: number, isCompetitionRoute: boolean) {
@@ -256,7 +256,7 @@ export default function PlaygroundTaskListPage() {
                 <div className="flex items-center justify-between rounded-lg bg-[var(--bg)] px-4 py-3">
                   <span className="text-[var(--text-dim)]">Source</span>
                   <strong className="text-sm font-semibold text-[var(--text)]">
-                    {isBenchmarkRoute ? "arc-bench" : sourceLabel(isCompetitionRoute)}
+                    {isBenchmarkRoute ? "ARC-Bench dataset" : sourceLabel(isCompetitionRoute)}
                   </strong>
                 </div>
               </div>
