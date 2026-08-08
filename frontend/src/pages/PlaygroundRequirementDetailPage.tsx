@@ -1,14 +1,16 @@
-import { DeleteOutlined, DownloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import { message } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
+import AgentTemplateDialog from "../components/requirements/AgentTemplateDialog";
+import TestSuiteViewer from "../components/requirements/TestSuiteViewer";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
 import { parseTaskTreeYaml } from "../lib/taskTree";
-import type { RequirementDetail, SubmissionDetail, SubmissionSummary } from "../lib/types";
+import type { RequirementDetail, RequirementTestFile, SubmissionDetail, SubmissionSummary } from "../lib/types";
 import { useQuickStart } from "../quickstart/QuickStartContext";
 
 function submissionBadgeClass(status: string) {
@@ -72,8 +74,9 @@ export default function PlaygroundRequirementDetailPage() {
       ? "benchmark"
       : "playground";
   const [requirement, setRequirement] = useState<RequirementDetail | null>(null);
+  const [testFiles, setTestFiles] = useState<RequirementTestFile[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const [activeDoc, setActiveDoc] = useState("readme");
+  const [activeDoc, setActiveDoc] = useState<"readme" | "tests">("readme");
   const [runtime, setRuntime] = useState("python");
   const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent" | "builtin_octos_agent">("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -91,7 +94,7 @@ export default function PlaygroundRequirementDetailPage() {
     if (!requirement) {
       return "";
     }
-    return activeDoc === "readme" ? requirement.requirements_markdown : requirement.prerequisites_markdown;
+    return requirement.requirements_markdown;
   }, [activeDoc, requirement]);
   const tocTree = useMemo(() => {
     if (activeDoc !== "readme" || !requirement?.requirements_yaml?.trim()) {
@@ -118,10 +121,10 @@ export default function PlaygroundRequirementDetailPage() {
 
   useEffect(() => {
     setLoading(true);
-    api
-      .getRequirement(requirementId, catalog)
-      .then((detail) => {
+    Promise.all([api.getRequirement(requirementId, catalog), api.getRequirementTests(requirementId, catalog)])
+      .then(([detail, tests]) => {
         setRequirement(detail);
+        setTestFiles(tests.files);
         if (!user) {
           setSubmissions([]);
           return;
@@ -131,6 +134,7 @@ export default function PlaygroundRequirementDetailPage() {
       .catch((error: Error) => {
         message.error(error.message);
         setRequirement(null);
+        setTestFiles([]);
       })
       .finally(() => setLoading(false));
   }, [catalog, requirementId, user]);
@@ -297,26 +301,26 @@ export default function PlaygroundRequirementDetailPage() {
             </button>
             <button
               type="button"
-              className={`doc-tab${activeDoc === "prerequisites" ? " active" : ""}`}
+              className={`doc-tab${activeDoc === "tests" ? " active" : ""}`}
               onClick={() => {
                 window.history.replaceState(null, "", window.location.pathname + window.location.search);
-                setActiveDoc("prerequisites");
+                setActiveDoc("tests");
               }}
             >
-              prerequisites.md
+              tests
             </button>
           </div>
-          <MarkdownTocDocument
-            markdown={currentMarkdown}
-            assetsBaseUrl={requirement.assets_base_url}
-            referencesBaseUrl={requirement.references_base_url}
-            tocTree={tocTree}
-            bodyClassName="playground-readme-body"
-            tocClassName="playground-readme-toc"
-            scrollClassName="quickstart-document-anchor playground-readme-scroll"
-            tocDataQuickstartId="quickstart-contents"
-            scrollDataQuickstartId="quickstart-document"
-          />
+          {activeDoc === "readme" ? <MarkdownTocDocument
+              markdown={currentMarkdown}
+              assetsBaseUrl={requirement.assets_base_url}
+              referencesBaseUrl={requirement.references_base_url}
+              tocTree={tocTree}
+              bodyClassName="playground-readme-body"
+              tocClassName="playground-readme-toc"
+              scrollClassName="quickstart-document-anchor playground-readme-scroll"
+              tocDataQuickstartId="quickstart-contents"
+              scrollDataQuickstartId="quickstart-document"
+            /> : <div className="playground-readme-scroll test-suite-scroll"><TestSuiteViewer files={testFiles} /></div>}
         </section>
 
         <aside className="action-panel action-panel-locked">
@@ -394,12 +398,7 @@ export default function PlaygroundRequirementDetailPage() {
                     </div>
                   ) : null}
                   {agentSource === "upload" ? (
-                    <a
-                      className="btn-outline competition-download-btn submission-download-btn"
-                      href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}&language=${runtime}`}
-                    >
-                      <DownloadOutlined /> Download Agent Template
-                    </a>
+                    <AgentTemplateDialog href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}`} runtime={runtime} />
                   ) : null}
                   <div className="env-selector">
                     {agentRuntimeOptions().map((option) => (

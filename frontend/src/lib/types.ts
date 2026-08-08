@@ -26,7 +26,18 @@ export type CompetitionTaskDownloadLinks = {
 };
 
 export type CompetitionTaskSummary = RequirementSummary & {
+  assets_base_url: string;
+  references_base_url: string;
   public_downloads: CompetitionTaskDownloadLinks | null;
+};
+
+export type RequirementTestFile = {
+  path: string;
+  content: string;
+};
+
+export type RequirementTests = {
+  files: RequirementTestFile[];
 };
 
 export type CompetitionSummary = {
@@ -37,6 +48,8 @@ export type CompetitionSummary = {
   task_count: number;
   total_tests: number;
   is_public: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
   status: "open" | "upcoming" | string;
   notice: string;
 };

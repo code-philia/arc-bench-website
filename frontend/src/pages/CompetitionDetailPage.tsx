@@ -1,9 +1,10 @@
-import { DeleteOutlined, DownloadOutlined, FileZipOutlined, RightOutlined, TrophyOutlined } from "@ant-design/icons";
+import { BulbOutlined, CalendarOutlined, DatabaseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InfoCircleOutlined, RocketOutlined, RightOutlined, TrophyOutlined } from "@ant-design/icons";
 import { message, Modal } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import AgentTemplateDialog from "../components/requirements/AgentTemplateDialog";
 import { api } from "../lib/api";
 import type { CompetitionDetail, SubmissionSummary } from "../lib/types";
 
@@ -24,16 +25,32 @@ function statusClass(status: string) {
     : "bg-[var(--bg-elevated)] text-[var(--text-dim)]";
 }
 
-function taskSummaryPreview(summary: string, maxLength = 180) {
-  const compact = summary.replace(/\s+/g, " ").trim();
-  return compact.length > maxLength ? `${compact.slice(0, maxLength).trimEnd()}...` : compact;
+function formatCompetitionRange(start?: string | null, end?: string | null) {
+  if (!start || !end) return "Dates to be announced";
+  const formatter = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" });
+  return `${formatter.format(new Date(`${start}T00:00:00`))}\u2013${formatter.format(new Date(`${end}T00:00:00`))}`;
 }
 
-function categoryToneClass(category: string) {
-  if (category === "web") return "bg-[var(--tag-mint-bg)] text-[var(--tag-mint-text)]";
-  if (category === "mobile" || category === "android") return "bg-[var(--tag-amber-bg)] text-[var(--tag-amber-text)]";
-  if (category === "kernel") return "bg-[var(--tag-sky-bg)] text-[var(--tag-sky-text)]";
-  return "bg-[var(--tag-slate-bg)] text-[var(--tag-slate-text)]";
+function taskOverview(taskId: string) {
+  if (taskId.includes("github")) {
+    return {
+      label: "Software engineering · GitHub-style ERP",
+      copy: "A simulated GitHub-style website for software-engineering workflows and ERP-like team operations. Build the collaboration system behind a development organization.",
+      modules: "Accounts, organizations, teams, repositories, branches, issues, pull requests, permissions",
+    };
+  }
+
+  return {
+    label: "Data workspace · Google Sheets-style",
+    copy: "A simulated Google Sheets-style website for data storage, presentation, and processing. Build a persistent workspace where people can organize and analyse tabular information.",
+    modules: "Workbooks, worksheets, cells, formulas, data operations, filters, validation, pivot summaries",
+  };
+}
+
+function competitionStatusLabel(status: string) {
+  if (status === "open") return "Open for submissions";
+  if (status === "ended") return "Archived event";
+  return "Upcoming";
 }
 
 export default function CompetitionDetailPage() {
@@ -42,7 +59,6 @@ export default function CompetitionDetailPage() {
   const { user } = useAuth();
   const [competition, setCompetition] = useState<CompetitionDetail | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const [taskScores, setTaskScores] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"create" | "history">("create");
   const [runtime, setRuntime] = useState("python");
@@ -57,21 +73,11 @@ export default function CompetitionDetailPage() {
     setCompetition(detail);
     if (!user) {
       setSubmissions([]);
-      setTaskScores(new Map());
       return;
     }
     const all = await api.listSubmissions();
     const agentId = `${competitionId}--__agent__`;
     setSubmissions(all.filter((submission) => submission.requirement_id === agentId));
-    const scores = new Map<string, number>();
-    all.filter((submission) => detail.tasks.some((task) => task.id === submission.requirement_id))
-      .forEach((submission) => {
-        if (submission.score != null) scores.set(
-          submission.requirement_id,
-          Math.max(scores.get(submission.requirement_id) ?? 0, submission.score),
-        );
-      });
-    setTaskScores(scores);
   };
 
   useEffect(() => {
@@ -83,13 +89,15 @@ export default function CompetitionDetailPage() {
   }, [competitionId, user]);
 
   const canCreate = agentSource !== "upload" || Boolean(file);
-  const templateUrl = `/api/competitions/${competitionId}/starter-agent?language=${runtime}`;
-  const flow = useMemo(() => [
-    "Save an agent submission here. Its code snapshot is shared by every task in this competition.",
-    "Open a task from the board and select Run latest submission to evaluate that agent against the task.",
-    "Open a run from the task page to inspect progress, logs, test results, evidence, and live preview.",
-    "Return here to download a saved agent archive, delete an unused submission, or create a newer version.",
-  ], []);
+  const templateUrl = `/api/competitions/${competitionId}/starter-agent`;
+  const flow = useMemo(() => competition?.flow ?? [], [competition?.flow]);
+  const taskCards = useMemo(
+    () => competition?.tasks.map((task) => ({
+      task,
+      overview: taskOverview(task.id),
+    })) ?? [],
+    [competition?.tasks],
+  );
 
   const createSubmission = async () => {
     if (!user) {
@@ -102,7 +110,15 @@ export default function CompetitionDetailPage() {
     }
     try {
       setCreating(true);
-      await api.createSubmission({ competitionId, runtime, file: agentSource === "upload" ? file : null, agentSource, displayName, modelName, catalog: "competition" });
+      await api.createSubmission({
+        competitionId,
+        runtime,
+        file: agentSource === "upload" ? file : null,
+        agentSource,
+        displayName,
+        modelName,
+        catalog: "competition",
+      });
       setFile(null);
       setDisplayName("");
       setModelName("");
@@ -142,88 +158,114 @@ export default function CompetitionDetailPage() {
 
         <section className="competition-detail-heading">
           <div className="competition-meta-row">
-            <span className="competition-status"><TrophyOutlined /> {competition.status === "open" ? "Open for submissions" : "Upcoming"}</span>
+            <span className="competition-stage"><TrophyOutlined /> {competitionStatusLabel(competition.status)}</span>
             <span>{competition.id.toUpperCase()}</span>
           </div>
           <h1>{competition.title}</h1>
-          <div className="competition-stat-row"><span><strong>{competition.task_count}</strong> tasks</span><span><strong>{competition.total_tests}</strong> public tests</span></div>
+          <p className="competition-detail-date"><CalendarOutlined /> {formatCompetitionRange(competition.starts_at, competition.ends_at)}</p>
         </section>
 
-        <div className="competition-reading-layout">
-          <main className="competition-description">
-            <p className="competition-introduction">{competition.summary}</p>
-            <section>
-              <h2>About this competition</h2>
-              <p>{competition.notice}</p>
+        <div className="competition-reading-layout competition-hackathon-layout">
+          <main className="competition-description competition-description-scroll">
+            <section className="competition-story-block">
+              <div className="competition-section-label competition-section-label--idea"><BulbOutlined /><span>Hackathon idea</span></div>
+              <h2>Build a software factory for requirements.</h2>
+              <p>
+                Participants are expected to build an agent system, not a one-shot generation demo. The workflow breaks a large requirement
+                into modules, delegates work, and keeps verification visible from start to finish.
+              </p>
+              <p>{competition.summary}</p>
             </section>
-            <section>
-              <h2>How to compete</h2>
-              <ol>{flow.map((item, index) => <li key={item}><span>{index + 1}</span><p>{item}</p></li>)}</ol>
+
+            <section className="competition-task-highlights" aria-labelledby="task-highlights-title">
+              <div className="competition-section-heading">
+                <div>
+                  <div className="competition-section-label competition-section-label--tasks"><DatabaseOutlined /><span>Task introduction</span></div>
+                  <h2 id="task-highlights-title">Two software task packs</h2>
+                </div>
+                <span>GitHub-style ERP and Google Sheets-style data work</span>
+              </div>
+
+              <div className="competition-task-briefs">
+                {taskCards.map(({ task, overview }) => (
+                  <article key={task.id} className="competition-task-brief">
+                    <h3>{overview.label}</h3>
+                    <p>{overview.copy}</p>
+                    <p className="competition-task-brief-modules"><strong>Modules:</strong> {overview.modules}</p>
+                  </article>
+                ))}
+              </div>
             </section>
+
             <section>
-              <h2>Competition notes</h2>
-              <ul>{competition.rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+              <div className="competition-section-label competition-section-label--flow"><RocketOutlined /><span>How to compete</span></div>
+              <ol className="competition-flow-list">
+                {flow.map((item, index) => (
+                  <li key={item}><span>{index + 1}</span><p>{item}</p></li>
+                ))}
+              </ol>
             </section>
+
+            <section>
+              <div className="competition-section-label competition-section-label--notes"><InfoCircleOutlined /><span>Competition notes</span></div>
+              <ul className="competition-notes-list">
+                {competition.rules.map((rule) => <li key={rule}>{rule}</li>)}
+              </ul>
+            </section>
+          </main>
+
+          <aside className="competition-sidebar">
             <section className="competition-side-tasks task-list-surface">
               <header><h2>Tasks</h2><span>{competition.task_count}</span></header>
               {competition.tasks.length === 0 ? (
                 <div className="competition-empty">Tasks have not been published yet.</div>
               ) : (
-                <div className="competition-task-table bg-[var(--bg)]">
-                  <div className="competition-task-table-header hidden border-b border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs font-semibold uppercase text-[var(--text-muted)] lg:grid">
-                    <span>ID</span><span>Task</span><span>Category</span><span>REQs</span><span>Tests</span><span>Score</span>
-                  </div>
+                <div className="competition-task-list competition-task-list--compact">
                   {competition.tasks.map((task) => (
-                    <Link key={task.id} to={`/competitions/${competition.id}/tasks/${task.id}`} className="competition-side-task-row group grid cursor-pointer border-b border-[var(--td-border)] bg-[var(--bg)] px-4 py-3 text-sm transition duration-200 last:border-b-0 hover:bg-[var(--bg-elevated)]">
-                      <div className="flex items-center"><code className="font-mono text-xs font-semibold text-[var(--text-muted)]">{task.display_id}</code></div>
-                      <div className="min-w-0 competition-side-task-copy"><h3 className="font-semibold text-[var(--text)]">{task.title}</h3><span className="task-summary-clamp mt-1 block text-xs leading-5 text-[var(--text-dim)]">{taskSummaryPreview(task.summary)}</span></div>
-                      <div className="flex items-center"><span className={`competition-task-category rounded-full px-2.5 py-1 text-[11px] font-semibold ${categoryToneClass(task.category)}`}>{task.category}</span></div>
-                      <div className="flex items-center text-sm font-medium text-[var(--text-dim)]">{task.module_count}</div>
-                      <div className="flex items-center text-sm font-medium text-[var(--text-dim)]">{task.total_tests}</div>
-                      <div className="flex items-center"><strong>{taskScores.has(task.id) ? taskScores.get(task.id)?.toFixed(1) : "--"}</strong></div>
+                    <Link key={task.id} to={`/competitions/${competition.id}/tasks/${task.id}`} className="competition-side-task-row competition-side-task-row--compact group">
+                      <h3>{task.title}</h3>
+                      <RightOutlined aria-hidden="true" />
                     </Link>
                   ))}
                 </div>
               )}
             </section>
-          </main>
 
-          <aside className="competition-sidebar">
             <section className="competition-panel competition-submission-panel">
-            <div className="competition-panel-tabs">
-              <button type="button" className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>New submission</button>
-              <button type="button" className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>History ({submissions.length})</button>
-            </div>
-            {tab === "create" ? (
-              <div className="competition-submission-form">
-                <div><h2>Save an agent snapshot</h2><p>This snapshot is shared by all competition tasks. Choose a task afterwards to run it.</p></div>
-                <div><div className="competition-field-label">Agent source</div><div className="agent-source-selector">
-                  <button type="button" className={`agent-source-card${agentSource === "upload" ? " active" : ""}`} onClick={() => setAgentSource("upload")}><span className="agent-source-title">Upload .zip</span><span className="agent-source-copy">Use your own agent package.</span></button>
-                  <button type="button" className={`agent-source-card${agentSource !== "upload" ? " active" : ""}`} onClick={() => { setAgentSource("builtin_arc_agent"); setRuntime("python"); }}><span className="agent-source-title">Built-in Agent</span><span className="agent-source-copy">Use ARC Agent or Octos Agent.</span></button>
-                </div></div>
-                {agentSource !== "upload" ? <div className="builtin-agent-selector" role="group" aria-label="Built-in agent type">
-                  <button type="button" className={`builtin-agent-option${agentSource === "builtin_arc_agent" ? " active" : ""}`} onClick={() => setAgentSource("builtin_arc_agent")}><span>ARC Agent</span><small>Agentic Requirement Compiler</small></button>
-                  <button type="button" className={`builtin-agent-option${agentSource === "builtin_octos_agent" ? " active" : ""}`} onClick={() => setAgentSource("builtin_octos_agent")}><span>Octos Agent</span><small>Your Own AI Assistant</small></button>
-                </div> : <>
-                  <a className="btn-outline competition-download-btn submission-download-btn" href={templateUrl}><DownloadOutlined /> Download Agent Template</a>
-                  <label className="upload-zone"><input className="visually-hidden" type="file" accept=".zip" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /><div className="upload-icon"><FileZipOutlined /></div><div className="upload-text">{file ? file.name : "Drop your agent code here"}</div><div className="upload-hint">Keep the runtime entrypoint at the ZIP root.</div></label>
-                </>}
-                <div className="env-selector">{["python", "javascript", "typescript"].map((item) => <button key={item} disabled={agentSource !== "upload" && item !== "python"} className={`env-option${runtime === item ? " active" : ""}`} onClick={() => setRuntime(item)}>{item === "python" ? "Python" : item === "javascript" ? "JavaScript" : "TypeScript"}</button>)}</div>
-                <label className="field-stack"><span>Submission name</span><input className="text-input" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Optional" /></label>
-                <label className="field-stack"><span>Model name</span><input className="text-input" value={modelName} onChange={(event) => setModelName(event.target.value)} placeholder="Optional" /></label>
-                <button type="button" onClick={() => void createSubmission()} disabled={creating || !canCreate} className="btn-primary w-full">{creating ? "Saving..." : "Save submission"}</button>
+              <div className="competition-panel-tabs">
+                <button type="button" className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>New submission</button>
+                <button type="button" className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>History ({submissions.length})</button>
               </div>
-            ) : (
-              <div className="competition-submission-history">
-                {!user ? <div className="competition-empty">Sign in to manage your saved agent submissions.</div>
-                  : submissions.length === 0 ? <div className="competition-empty">No saved agent submissions yet.</div>
-                    : submissions.map((submission) => <div key={submission.id} className="competition-submission-row">
-                      <h3>{submission.display_name || submission.id}</h3>
-                      <div><span className={statusClass(submission.status)}>{submission.status}</span><span>{submission.model_name || "No model name"}</span><span>{submission.original_filename}</span></div>
-                      <p><button onClick={() => api.downloadSubmissionArchive(submission.id).then(download).catch((error) => message.error(error.message))}><DownloadOutlined /> Download code</button><button className="danger" onClick={() => deleteSubmission(submission)}><DeleteOutlined /> Delete</button></p>
-                    </div>)}
-              </div>
-            )}
+              {tab === "create" ? (
+                <div className="competition-submission-form">
+                  <div><h2>Save an agent snapshot</h2><p>This snapshot is shared by all competition tasks. Choose a task afterwards to run it.</p></div>
+                  <div><div className="competition-field-label">Agent source</div><div className="agent-source-selector">
+                    <button type="button" className={`agent-source-card${agentSource === "upload" ? " active" : ""}`} onClick={() => setAgentSource("upload")}><span className="agent-source-title">Upload .zip</span><span className="agent-source-copy">Use your own agent package.</span></button>
+                    <button type="button" className={`agent-source-card${agentSource !== "upload" ? " active" : ""}`} onClick={() => { setAgentSource("builtin_arc_agent"); setRuntime("python"); }}><span className="agent-source-title">Built-in Agent</span><span className="agent-source-copy">Use ARC Agent or Octos Agent.</span></button>
+                  </div></div>
+                  {agentSource !== "upload" ? <div className="builtin-agent-selector" role="group" aria-label="Built-in agent type">
+                    <button type="button" className={`builtin-agent-option${agentSource === "builtin_arc_agent" ? " active" : ""}`} onClick={() => setAgentSource("builtin_arc_agent")}><span>ARC Agent</span><small>Agentic Requirement Compiler</small></button>
+                    <button type="button" className={`builtin-agent-option${agentSource === "builtin_octos_agent" ? " active" : ""}`} onClick={() => setAgentSource("builtin_octos_agent")}><span>Octos Agent</span><small>Your Own AI Assistant</small></button>
+                  </div> : <>
+                    <AgentTemplateDialog href={templateUrl} runtime={runtime} />
+                    <label className="upload-zone"><input className="visually-hidden" type="file" accept=".zip" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /><div className="upload-icon"><FileZipOutlined /></div><div className="upload-text">{file ? file.name : "Drop your agent code here"}</div><div className="upload-hint">Keep the runtime entrypoint at the ZIP root.</div></label>
+                  </>}
+                  <div className="env-selector">{["python", "javascript", "typescript"].map((item) => <button key={item} disabled={agentSource !== "upload" && item !== "python"} className={`env-option${runtime === item ? " active" : ""}`} onClick={() => setRuntime(item)}>{item === "python" ? "Python" : item === "javascript" ? "JavaScript" : "TypeScript"}</button>)}</div>
+                  <label className="field-stack"><span>Submission name</span><input className="text-input" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Optional" /></label>
+                  <label className="field-stack"><span>Model name</span><input className="text-input" value={modelName} onChange={(event) => setModelName(event.target.value)} placeholder="Optional" /></label>
+                  <button type="button" onClick={() => void createSubmission()} disabled={creating || !canCreate} className="btn-primary w-full">{creating ? "Saving..." : "Save submission"}</button>
+                </div>
+              ) : (
+                <div className="competition-submission-history">
+                  {!user ? <div className="competition-empty">Sign in to manage your saved agent submissions.</div>
+                    : submissions.length === 0 ? <div className="competition-empty">No saved agent submissions yet.</div>
+                      : submissions.map((submission) => <div key={submission.id} className="competition-submission-row">
+                        <h3>{submission.display_name || submission.id}</h3>
+                        <div><span className={statusClass(submission.status)}>{submission.status}</span><span>{submission.model_name || "No model name"}</span><span>{submission.original_filename}</span></div>
+                        <p><button onClick={() => api.downloadSubmissionArchive(submission.id).then(download).catch((error) => message.error(error.message))}><DownloadOutlined /> Download code</button><button className="danger" onClick={() => deleteSubmission(submission)}><DeleteOutlined /> Delete</button></p>
+                      </div>)}
+                </div>
+              )}
             </section>
           </aside>
         </div>

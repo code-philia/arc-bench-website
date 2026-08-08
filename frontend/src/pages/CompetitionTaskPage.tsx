@@ -5,9 +5,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
+import TestSuiteViewer from "../components/requirements/TestSuiteViewer";
 import { api } from "../lib/api";
 import { parseTaskTreeYaml } from "../lib/taskTree";
-import type { RequirementDetail, SubmissionSummary } from "../lib/types";
+import type { RequirementDetail, RequirementTestFile, SubmissionSummary } from "../lib/types";
 
 function statusClass(status: string) {
   if (status === "PASSED") return "pass";
@@ -20,9 +21,10 @@ export default function CompetitionTaskPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [task, setTask] = useState<RequirementDetail | null>(null);
+  const [testFiles, setTestFiles] = useState<RequirementTestFile[]>([]);
   const [savedSubmissions, setSavedSubmissions] = useState<SubmissionSummary[]>([]);
   const [runs, setRuns] = useState<SubmissionSummary[]>([]);
-  const [activeDoc, setActiveDoc] = useState<"readme" | "prerequisites">("readme");
+  const [activeDoc, setActiveDoc] = useState<"readme" | "tests">("readme");
   const [panelTab, setPanelTab] = useState<"run" | "history">("run");
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -31,21 +33,21 @@ export default function CompetitionTaskPage() {
     setLoading(true);
     Promise.all([
       api.getRequirement(requirementId, "competition"),
+      api.getRequirementTests(requirementId, "competition"),
       user ? api.listSubmissions() : Promise.resolve([]),
-    ]).then(([detail, records]) => {
+    ]).then(([detail, tests, records]) => {
       setTask(detail);
+      setTestFiles(tests.files);
       setSavedSubmissions(records.filter((record) => record.requirement_id === `${competitionId}--__agent__`));
       setRuns(records.filter((record) => record.requirement_id === requirementId));
     }).catch((error) => {
       setTask(null);
+      setTestFiles([]);
       message.error((error as Error).message);
     }).finally(() => setLoading(false));
   }, [competitionId, requirementId, user]);
 
-  const currentMarkdown = useMemo(
-    () => activeDoc === "readme" ? task?.requirements_markdown ?? "" : task?.prerequisites_markdown ?? "",
-    [activeDoc, task],
-  );
+  const currentMarkdown = useMemo(() => task?.requirements_markdown ?? "", [task]);
   const tocTree = useMemo(() => {
     if (activeDoc !== "readme" || !task?.requirements_yaml?.trim()) return null;
     try {
@@ -90,9 +92,9 @@ export default function CompetitionTaskPage() {
           </div>
           <div className="doc-tabs">
             <button type="button" className={`doc-tab${activeDoc === "readme" ? " active" : ""}`} onClick={() => setActiveDoc("readme")}>README.md</button>
-            <button type="button" className={`doc-tab${activeDoc === "prerequisites" ? " active" : ""}`} onClick={() => setActiveDoc("prerequisites")}>prerequisites.md</button>
+            <button type="button" className={`doc-tab${activeDoc === "tests" ? " active" : ""}`} onClick={() => setActiveDoc("tests")}>tests</button>
           </div>
-          <MarkdownTocDocument
+          {activeDoc === "readme" ? <MarkdownTocDocument
             markdown={currentMarkdown}
             assetsBaseUrl={task.assets_base_url}
             referencesBaseUrl={task.references_base_url}
@@ -100,7 +102,7 @@ export default function CompetitionTaskPage() {
             bodyClassName="playground-readme-body"
             tocClassName="playground-readme-toc"
             scrollClassName="playground-readme-scroll"
-          />
+          /> : <div className="playground-readme-scroll test-suite-scroll"><TestSuiteViewer files={testFiles} /></div>}
         </section>
 
         <aside className="action-panel action-panel-locked">

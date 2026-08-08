@@ -6,6 +6,7 @@ import type {
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
+  RequirementTests,
   SubmissionEditableTaskPayload,
   SubmissionTaskAssets,
   SubmissionSourcePayload,
@@ -122,8 +123,16 @@ export const api = {
   listCompetitions() {
     return request<CompetitionSummary[]>("/competitions");
   },
-  getCompetitionLeaderboard(track: "all" | "web" | "mobile" | "kernel" = "all") {
-    return request<CompetitionLeaderboardEntry[]>(`/competitions/leaderboard?track=${track}`);
+  getCompetitionLeaderboard(competitionId?: string) {
+    const params = new URLSearchParams();
+    params.set("track", "all");
+    if (competitionId) {
+      params.set("competition_id", competitionId);
+    }
+    return request<CompetitionLeaderboardEntry[]>(`/competitions/leaderboard?${params.toString()}`);
+  },
+  getRequirementTests(requirementId: string, catalog: "playground" | "competition" | "benchmark") {
+    return request<RequirementTests>(`/requirements/${encodeURIComponent(requirementId)}/tests?catalog=${catalog}`);
   },
   getCompetition(competitionId: string) {
     return request<CompetitionDetail>(`/competitions/${competitionId}`);
