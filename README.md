@@ -39,7 +39,7 @@ submodule under `templates/<template-id>/files`.
 | Python | 3.11+ — backend development |
 | Docker | Builds and runs the submission runner |
 
-### 1. Initialize the submodule
+### 1. Initialize submodules
 
 The repository includes `reference-implementations/arc` and `arc-template` as
 Git submodules.
@@ -48,11 +48,39 @@ Git submodules.
 git submodule update --init --recursive
 ```
 
-To update it to the latest remote `main` branch:
+To inspect the configured submodules:
 
 ```bash
-git submodule update --remote reference-implementations/arc arc-template
+git config --file .gitmodules --get-regexp 'submodule\..*'
 ```
+
+To update every submodule to the commit recorded by the parent repository:
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+To update every submodule to the latest configured remote branch:
+
+```bash
+git submodule update --remote --recursive
+```
+
+To update only the ARC reference implementation:
+
+```bash
+git submodule update --remote reference-implementations/arc
+```
+
+To update only the shared project templates:
+
+```bash
+git submodule update --remote arc-template
+```
+
+After updating a submodule to a newer commit, stage and commit the parent
+repository's submodule pointer change.
 
 ### 2. Build the runner image
 
