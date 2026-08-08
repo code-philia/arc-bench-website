@@ -12,6 +12,7 @@ from app.schemas.requirement import (
     CompetitionLeaderboardEntry,
     CompetitionSummary,
     RequirementDetail,
+    RequirementTests,
     RequirementSummary,
 )
 from app.services.agent_starter_service import AgentStarterService
@@ -42,23 +43,25 @@ def list_competitions(db: Session = Depends(get_db)) -> list[CompetitionSummary]
 @competition_router.get("/leaderboard", response_model=list[CompetitionLeaderboardEntry])
 def get_competition_leaderboard(
     track: str = Query(default="all", pattern="^(all|web|mobile|kernel)$"),
+    competition_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[CompetitionLeaderboardEntry]:
     service = RequirementCatalogService.for_catalog(db, "competition")
-    return service.list_competition_leaderboard(track)
+    return service.list_competition_leaderboard(track, competition_id=competition_id)
 
 
 @competition_router.get("/{competition_id}/starter-agent")
 def download_competition_starter_agent(
     competition_id: str,
     language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
+    template: str = Query(default="blank", pattern="^(blank|arc|octos|codex|claude_code)$"),
     db: Session = Depends(get_db),
 ) -> Response:
     service = RequirementCatalogService.for_catalog(db, "competition")
     if not any(competition.id == competition_id for competition in service.list_competitions()):
         raise HTTPException(status_code=404, detail=f"Competition '{competition_id}' not found")
     try:
-        content, filename = AgentStarterService().build_bundle(task_type="web", language=language)
+        content, filename = AgentStarterService().build_bundle(task_type="web", language=language, template_kind=template)
     except (FileNotFoundError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(
@@ -185,13 +188,14 @@ def download_starter_agent(
     requirement_id: str,
     catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
+    template: str = Query(default="blank", pattern="^(blank|arc|octos|codex|claude_code)$"),
     db: Session = Depends(get_db),
 ) -> Response:
     service = RequirementCatalogService.for_catalog(db, catalog)
     try:
         requirement = service.get_entry(requirement_id)
         task_type = requirement.category if catalog != "competition" else "web"
-        content, filename = AgentStarterService().build_bundle(task_type=task_type, language=language)
+        content, filename = AgentStarterService().build_bundle(task_type=task_type, language=language, template_kind=template)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (FileNotFoundError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
@@ -206,6 +210,19 @@ def download_starter_agent(
             "Expires": "0",
         },
     )
+
+
+@router.get("/{requirement_id}/tests", response_model=RequirementTests)
+def get_requirement_tests(
+    requirement_id: str,
+    catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
+    db: Session = Depends(get_db),
+) -> RequirementTests:
+    service = RequirementCatalogService.for_catalog(db, catalog)
+    try:
+        return service.get_requirement_tests(requirement_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/{requirement_id}", response_model=RequirementDetail)

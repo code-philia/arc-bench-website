@@ -27,6 +27,8 @@ from app.schemas.requirement import (
     CompetitionTaskSummary,
     RequirementDetail,
     RequirementSummary,
+    RequirementTestFile,
+    RequirementTests,
 )
 
 
@@ -266,7 +268,7 @@ class RequirementCatalogService:
 
         return competitions
 
-    def list_competition_leaderboard(self, track: str = "all") -> list[CompetitionLeaderboardEntry]:
+    def list_competition_leaderboard(self, track: str = "all", competition_id: str | None = None) -> list[CompetitionLeaderboardEntry]:
         normalized_track = track.strip().lower() or "all"
         if normalized_track not in {"all", "web", "mobile", "kernel"}:
             raise ValueError(f"Unsupported leaderboard track '{track}'")
@@ -276,7 +278,10 @@ class RequirementCatalogService:
         for row in rows:
             requirement_ids_by_category.setdefault(row.category, []).append(row.id)
 
-        if normalized_track == "all":
+        normalized_competition_id = competition_id.strip().lower() if competition_id else None
+        if normalized_competition_id:
+            requirement_ids = requirement_ids_by_category.get(normalized_competition_id, [])
+        elif normalized_track == "all":
             requirement_ids = [requirement_id for ids in requirement_ids_by_category.values() for requirement_id in ids]
         else:
             requirement_ids = requirement_ids_by_category.get(normalized_track, [])
@@ -324,7 +329,7 @@ class RequirementCatalogService:
                 CompetitionLeaderboardEntry(
                     username=str(aggregate["username"]),
                     model_name=aggregate["model_name"] if isinstance(aggregate["model_name"], str) or aggregate["model_name"] is None else None,
-                    track=normalized_track,
+                    track=normalized_competition_id or normalized_track,
                     avg_pass_rate=round(float(aggregate["pass_rate_sum"]) / submission_count, 1),
                     total_token_millions=None,
                     avg_runtime_seconds=avg_runtime_seconds,
@@ -360,11 +365,16 @@ class RequirementCatalogService:
             **summary.model_dump(),
             downloads=None,
             tasks=tasks,
-            flow=["Choose a task", "Create an agent submission", "Run in the isolated evaluator", "Review evidence and improve"],
+            flow=[
+                "Upload an agent snapshot or select a built-in one.",
+                "Compile the large requirement into smaller runnable modules.",
+                "Run the GitHub-style and spreadsheet-style tasks in order.",
+                "Inspect evidence and refine the system until the output is stable.",
+            ],
             rules=[
-                "Submit only code you are authorized to use.",
-                "Each run is isolated and evaluated with the task test suite.",
-                "Keep your model and submission name accurate for reproducibility.",
+                "Treat the requirement document as the source of truth.",
+                "Keep changes small enough to verify each step.",
+                "Use the task artifacts to explain what your agent changed.",
             ],
         )
 
@@ -375,7 +385,7 @@ class RequirementCatalogService:
         tasks: list[CatalogRequirementEntry],
     ) -> CompetitionSummary:
         is_hackathon = "hackathon" in competition_id
-        title = "Hackathon" if is_hackathon else ("Demo Competition" if competition_id == "demo" else directory_name)
+        title = "OAIC Harness 2026 Hackathon" if is_hackathon else ("Demo Competition" if competition_id == "demo" else directory_name)
         return CompetitionSummary(
             id=competition_id,
             title=title,
@@ -383,16 +393,20 @@ class RequirementCatalogService:
             summary=(
                 "An empty practice competition for validating the ARC-Bench submission workflow."
                 if competition_id == "demo"
-                else "A collaborative build competition. Tasks will appear here when the event opens."
+                else "A software-factory hackathon that compiles a large requirement into a GitHub-style collaboration system and a Google Sheets-style data workspace."
                 if is_hackathon
                 else self._competition_summary(competition_id, len(tasks))
             ),
             task_count=len(tasks),
             total_tests=sum(task.total_tests for task in tasks),
             is_public=True,
-            status="upcoming" if not tasks else "open",
+            starts_at="2026-09-01" if is_hackathon else None,
+            ends_at="2026-10-17" if is_hackathon else None,
+            status="upcoming" if is_hackathon else ("upcoming" if not tasks else "open"),
             notice=(
-                "No tasks have been published yet. Add task folders under competition/<competition>/tasks/."
+                "The hackathon focuses on software factory decomposition, requirements compilation, and two concrete task packs."
+                if is_hackathon
+                else "No tasks have been published yet. Add task folders under competition/<competition>/tasks/."
                 if not tasks
                 else "Task packs are ready. Create a submission from this competition page."
             ),
@@ -558,6 +572,22 @@ class RequirementCatalogService:
                 return entry
         raise LookupError(f"Requirement '{requirement_id}' not found")
 
+    def get_requirement_tests(self, requirement_id: str) -> RequirementTests:
+        requirement = self.get_entry(requirement_id)
+        if not requirement.tests_path.is_dir():
+            return RequirementTests()
+
+        files: list[RequirementTestFile] = []
+        for path in sorted(requirement.tests_path.rglob("*")):
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            files.append(RequirementTestFile(path=path.relative_to(requirement.tests_path).as_posix(), content=content))
+        return RequirementTests(files=files)
+
     def _build_zip(self, entries: list[tuple[Path, str]], archive_name: str) -> tuple[bytes, str]:
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -650,6 +680,8 @@ class RequirementCatalogService:
             test_runner=row.test_runner,
             total_tests=row.total_tests,
             module_count=row.module_count,
+            assets_base_url=f"{base_url}/api/requirements/{row.id}/assets?catalog=competition",
+            references_base_url=f"{base_url}/api/requirements/{row.id}/references?catalog=competition",
             public_downloads=downloads,
         )
 

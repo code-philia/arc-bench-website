@@ -12,7 +12,7 @@ class AgentStarterService:
         self.settings = get_settings()
         self.template_root = self.settings.agent_starter_template_root
 
-    def build_bundle(self, *, task_type: str, language: str = "python") -> tuple[bytes, str]:
+    def build_bundle(self, *, task_type: str, language: str = "python", template_kind: str = "blank") -> tuple[bytes, str]:
         language_root, normalized_language = self._resolve_language_template_root(language)
         if not language_root.is_dir():
             raise FileNotFoundError(f"Agent starter template root not found: {language_root}")
@@ -22,7 +22,34 @@ class AgentStarterService:
         with zipfile.ZipFile(memory_file, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             self._add_starter_template_sources(archive, language_root)
             self._add_task_template(archive, task_template_root)
-        return memory_file.getvalue(), f"arcbench-agent-starter-{task_type}-{normalized_language}.zip"
+            self._add_selected_agent_template(archive, template_kind)
+        normalized_kind = self._normalize_template_kind(template_kind)
+        return memory_file.getvalue(), f"arcbench-agent-{normalized_kind}-template-{task_type}-{normalized_language}.zip"
+
+    @staticmethod
+    def _normalize_template_kind(template_kind: str) -> str:
+        normalized = str(template_kind or "blank").strip().lower()
+        if normalized not in {"blank", "arc", "octos", "codex", "claude_code"}:
+            raise ValueError(f"Unsupported agent template: {template_kind}")
+        return normalized
+
+    def _add_selected_agent_template(self, archive: zipfile.ZipFile, template_kind: str) -> None:
+        normalized = self._normalize_template_kind(template_kind)
+        if normalized in {"blank", "codex", "claude_code"}:
+            return
+        if normalized == "arc":
+            self._add_source_tree(archive, self.settings.builtin_arc_agent_source_dir, "template/arc")
+            return
+        self._add_source_tree(archive, self.settings.runner_context_dir / "octos", "template/octos")
+
+    def _add_source_tree(self, archive: zipfile.ZipFile, source_root: Path, archive_root: str) -> None:
+        if not source_root.is_dir():
+            raise FileNotFoundError(f"Agent template source directory not found: {source_root}")
+        for path in sorted(source_root.rglob("*")):
+            if path.is_dir() or self._should_exclude_starter_path(path, source_root):
+                continue
+            relative_path = path.relative_to(source_root)
+            archive.write(path, arcname=f"{archive_root}/{relative_path.as_posix()}")
 
     def _resolve_language_template_root(self, language: str) -> tuple[Path, str]:
         normalized = str(language or "").strip().lower()
@@ -57,6 +84,7 @@ class AgentStarterService:
             "build",
             "dist",
             "node_modules",
+            "target",
             "venv",
         }
         excluded_files = {".DS_Store", ".env", ".env.local", ".env.development", ".env.production"}

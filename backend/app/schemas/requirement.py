@@ -29,6 +29,17 @@ class CompetitionTaskDownloadLinks(BaseModel):
 
 
 class CompetitionTaskSummary(RequirementSummary):
+    assets_base_url: str
+    references_base_url: str
+
+
+class RequirementTestFile(BaseModel):
+    path: str
+    content: str
+
+
+class RequirementTests(BaseModel):
+    files: list[RequirementTestFile] = Field(default_factory=list)
     public_downloads: CompetitionTaskDownloadLinks | None = None
 
 
@@ -40,6 +51,8 @@ class CompetitionSummary(BaseModel):
     task_count: int
     total_tests: int
     is_public: bool
+    starts_at: str | None = None
+    ends_at: str | None = None
     status: str = "upcoming"
     notice: str = "Tasks will be published here."
 
