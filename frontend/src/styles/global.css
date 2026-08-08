@@ -4858,6 +4858,21 @@ button {
   gap: 12px;
 }
 
+.auth-form .field-hint,
+.auth-form .field-error {
+  margin: -6px 0 2px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.auth-form .field-error {
+  color: var(--fail);
+}
+
+.auth-form .text-input[aria-invalid="true"] {
+  border-color: var(--fail);
+}
+
 .auth-form .btn-primary {
   margin-top: 6px;
 }

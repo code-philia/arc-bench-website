@@ -25,6 +25,8 @@ class AuthService:
 
     def register_user(self, email: str, username: str, password: str) -> User:
         normalized_email = email.strip().lower()
+        if "@" not in normalized_email:
+            raise ValueError("Email must include @")
         normalized_username = self._normalize_username(username)
         self._validate_password(password)
 
@@ -46,9 +48,15 @@ class AuthService:
 
     def authenticate_user(self, email: str, password: str) -> User:
         normalized_email = email.strip().lower()
+        if not normalized_email:
+            raise ValueError("Email is required")
+        if not password:
+            raise ValueError("Password is required")
         user = self.db.scalar(select(User).where(User.email == normalized_email))
-        if not user or not self._verify_password(password, user.password_hash):
-            raise ValueError("Invalid email or password")
+        if not user:
+            raise ValueError("User not found")
+        if not self._verify_password(password, user.password_hash):
+            raise ValueError("Incorrect password")
         return user
 
     def update_profile(self, user: User, *, github_email: str | None, github_username: str | None) -> User:
@@ -100,6 +108,8 @@ class AuthService:
     def _validate_password(password: str) -> None:
         if len(password) < 8:
             raise ValueError("Password must be at least 8 characters")
+        if len(password) > 128:
+            raise ValueError("Password must be 128 characters or fewer")
 
     @staticmethod
     def _normalize_optional_email(email: str | None) -> str | None:

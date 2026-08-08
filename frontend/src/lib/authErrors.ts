@@ -11,6 +11,20 @@ function getErrorText(error: unknown): string {
 }
 
 export function getLoginErrorMessage(error: unknown): string {
+  const errorText = getErrorText(error);
+
+  if (errorText.includes("user not found")) {
+    return "User not found.";
+  }
+  if (errorText.includes("incorrect password")) {
+    return "Incorrect password.";
+  }
+  if (errorText.includes("email is required")) {
+    return "Email is required.";
+  }
+  if (errorText.includes("password is required")) {
+    return "Password is required.";
+  }
   if (error instanceof ApiError && error.status === 401) {
     return "Login failed. Check your email and password.";
   }
@@ -41,6 +55,9 @@ export function getRegisterErrorMessage(error: unknown): string {
   }
   if (errorText.includes("string should have at most 128 characters")) {
     return "Registration failed. Password must be 128 characters or fewer.";
+  }
+  if (errorText.includes("email must include @")) {
+    return "Registration failed. Email must include @.";
   }
   if (errorText.includes("valid email")) {
     return "Registration failed. Enter a valid email.";

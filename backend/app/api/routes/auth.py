@@ -28,7 +28,9 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     try:
         user = service.authenticate_user(payload.email, payload.password)
     except ValueError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        message = str(exc)
+        status_code = 400 if message in {"Email is required", "Password is required"} else 401
+        raise HTTPException(status_code=status_code, detail=message) from exc
     _set_session_cookie(response, service, user)
     return AuthResponse(user=UserSummary.model_validate(user, from_attributes=True))
 
