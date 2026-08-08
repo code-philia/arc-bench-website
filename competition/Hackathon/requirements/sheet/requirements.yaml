@@ -1,0 +1,843 @@
+id: ROOT
+name: Online Spreadsheet Data Workspace Core Requirements
+type: FOLDER
+dependencies: []
+description: A compact online spreadsheet application with an interface inspired by Google Sheets, focused on workbook and worksheet management, grid data editing, formula calculation, sorting and filtering, data validation, and basic pivot analysis. Users enter an editor from the workbook home page; grid, formula-bar, row/column, filter, validation, and pivot actions affect only the target worksheet in the open workbook. Refreshing or reopening restores the workbook name, worksheet tabs and order, active worksheet, each worksheet’s last selected cell, row and column structure, cell values and formulas, filtered view, validation behavior, and pivot results. A change either completes in full and remains after reopening, or shows an error while the current and reopened pages retain the last successful state; partial changes are not allowed. Shared collaboration, version history restoration, complex visual styling, charts, macro scripts, real-time collaborative cursors, and external office-suite integrations are outside the core scope.
+children:
+- id: REQ-1
+  name: Workbook Access and Lifecycle
+  type: FOLDER
+  dependencies: []
+  description: Support viewing, opening, creating, renaming, importing, and exporting workbooks. The home page is the workbook entry point; opening, creating, or importing enters the same editor, and later actions affect only the open workbook. Returning home or reopening preserves the workbook name, last-updated time, worksheet order, and last active worksheet. Worksheet tabs expose the ARIA tab role and the active tab exposes aria-selected="true". Grid cells expose the ARIA gridcell role, use their coordinate as the accessible name (for example, A1), and the current cell exposes aria-selected="true".
+  children:
+  - id: REQ-1-1
+    name: Workbook Navigation
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support viewing and opening available workbooks from the home page. After creation, renaming, or CSV import succeeds, returning to or refreshing the home page shows the updated record.
+
+
+      Screenshot reference:
+
+      ![image](reference/workbook-home.png)
+    children:
+    - id: REQ-1-1-1
+      name: View and open workbooks
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user views available workbooks on the workbook home page. Each record displays its last-updated time and provides a link whose accessible name is the workbook name. Activating the link opens an editor showing that workbook’s name, worksheet tabs and order, active worksheet, row and column structure, grid values, formula-bar content, filtered view, validation controls, and pivot results without showing data from another workbook.
+
+
+        Screenshot reference:
+
+        ![image](reference/workbook-home.png)
+      scenarios:
+      - name: Open a workbook
+        steps:
+        - keyword: GIVEN
+          content: At least one saved workbook exists.
+        - keyword: WHEN
+          content: The user clicks the workbook-name link in the workbook list on the home page.
+        - keyword: THEN
+          content: The system opens the corresponding editing page and shows the last active worksheet.
+        - keyword: THEN
+          content: The workbook name and last-updated time shown on the page match the home-page record.
+  - id: REQ-1-2
+    name: Workbook Creation and Naming
+    type: FOLDER
+    dependencies: []
+    description: Support creating blank workbooks and changing workbook names through visible home-page and editor controls. Successful changes appear in both the editor and home page and remain after refreshing or reopening.
+    children:
+    - id: REQ-1-2-1
+      name: Create a blank workbook
+      type: ATOMIC
+      dependencies: []
+      description: >
+        A user creates a blank workbook from the workbook home page. The home page provides a button named “New blank workbook”; activating it opens the creation page, whose submit button is named “Create”. Success opens the editor with one blank worksheet named Sheet1, makes Sheet1 the active tab, and selects A1; refreshing or reopening shows the same state. Failure shows an error, leaves the user able to retry, and does not add an incomplete workbook record to the home page.
+
+
+        Screenshot reference:
+
+        ![image](reference/create-workbook.png)
+      scenarios:
+      - name: Create and reopen a blank workbook
+        steps:
+        - keyword: GIVEN
+          content: The user is on the workbook home page.
+        - keyword: WHEN
+          content: The user clicks “New blank workbook” on the home page and clicks “Create” on the creation page.
+        - keyword: THEN
+          content: The system creates a workbook associated with the application and containing Sheet1.
+        - keyword: THEN
+          content: The editing page opens Sheet1 and selects A1.
+        - keyword: THEN
+          content: After refreshing or reopening, the workbook and default worksheet still exist.
+    - id: REQ-1-2-2
+      name: Rename a workbook
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: A user can change the workbook name on its editing page. A button beside the editor title is named “Rename workbook”. Activating it displays a textbox labeled “Workbook name”, prefilled with the last successful name, and a button named “Save”. After trimming leading and trailing spaces, the name must not be empty; an empty name is rejected with “Workbook name cannot be empty”. Success updates both the editor title and home-page link. Failure shows an error and both locations keep the original name. Reopening displays the last successfully saved name.
+      scenarios:
+      - name: Save a valid workbook name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook containing only Sheet1, whose A1 cell contains Existing data.
+        - keyword: WHEN
+          content: The user clicks “Rename workbook”, enters a non-empty name in “Workbook name”, then clicks “Save” or presses Enter.
+        - keyword: THEN
+          content: Both the editing page and workbook home page display the new name.
+        - keyword: THEN
+          content: After reopening the workbook, the new name is still displayed.
+      - name: Reject an empty workbook name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened the workbook, and the new name is empty after trimming leading and trailing spaces.
+        - keyword: WHEN
+          content: The user leaves “Workbook name” empty or enters only spaces, then clicks “Save”.
+        - keyword: THEN
+          content: The system rejects the change, displays that the name cannot be empty, and keeps showing the original name after refresh.
+  - id: REQ-1-3
+    name: CSV Data Exchange
+    type: FOLDER
+    dependencies: []
+    description: Support importing external CSV data as a workbook and exporting the current active worksheet as CSV. A successful import remains complete after reopening; export does not change workbook content or the current editor state.
+    children:
+    - id: REQ-1-3-1
+      name: Import CSV to create a workbook
+      type: ATOMIC
+      dependencies: []
+      description: A user starts import with the “Import CSV” button on the workbook home page. A dialog named “Import CSV” provides a file control labeled “CSV file” and a button named “Confirm import”. The system parses the original row and column order, preserves empty fields, supports UTF-8 Chinese, English, and numeric text, and handles quoted commas, doubled quotes, and newlines inside quoted fields. A quoted field without a closing quote is rejected with “Invalid CSV file format. Import failed.” Success creates a workbook named from the selected file without its final .csv extension and opens Sheet1 with every CSV row, column, empty field, and original text visible; the first row remains ordinary data. Refreshing or reopening preserves the complete grid. Failure adds no link with that name to the home page and leaves no partial import visible or reopenable.
+      scenarios:
+      - name: Import a valid CSV
+        steps:
+        - keyword: GIVEN
+          content: A readable UTF-8 CSV file exists with ordinary fields, an empty field, Chinese text, numeric text, a quoted comma, a doubled quote, and a newline inside a quoted field.
+        - keyword: WHEN
+          content: The user clicks “Import CSV” on the home page, selects the file in the file picker, then clicks “Confirm import”.
+        - keyword: THEN
+          content: The system creates a new workbook, and the cells in Sheet1 correspond to the CSV rows and columns.
+        - keyword: THEN
+          content: Empty fields and Chinese content are still preserved after reopening.
+      - name: Reject an unparseable CSV
+        steps:
+        - keyword: GIVEN
+          content: The selected CSV file contains a quoted field without a closing quote and therefore cannot be parsed.
+        - keyword: WHEN
+          content: The user selects the unparsable file in the import dialog and clicks “Confirm import”.
+        - keyword: THEN
+          content: The system displays an import failure message and does not create a partially populated workbook.
+    - id: REQ-1-3-2
+      name: Export the current worksheet as CSV
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: >
+        A user can export the current active worksheet with the editor-toolbar button named “Export CSV”. The CSV follows the grid’s row and column order, preserves empty cells in the used range, and escapes text containing commas, quotes, or newlines. Ordinary cells export displayed values; formula cells export calculated results rather than expressions. Before and after export, the active worksheet, filtered view, grid values, and formula-bar content remain unchanged and still match after refresh.
+      scenarios:
+      - name: Export a saved worksheet
+        steps:
+        - keyword: GIVEN
+          content: The workbook is open with a saved active worksheet containing the headers 地区, 说明, 数量, 空列, and 公式结果; its data includes 华东 / “含,逗号” / 2 / empty / formula result 4 and 华北 / Chinese text containing a quote and newline / 3 / empty / formula result 5.
+        - keyword: WHEN
+          content: The user clicks “Export CSV” in the toolbar of the open workbook.
+        - keyword: THEN
+          content: The system generates a CSV file consistent with the active worksheet’s row and column order.
+        - keyword: THEN
+          content: Formula cells write the current results, and the original data remains unchanged after reopening the workbook.
+- id: REQ-2
+  name: Worksheets and Grid Structure
+  type: FOLDER
+  dependencies: []
+  description: >
+    Support managing multiple worksheets in one workbook and adjusting row and column structure. Each worksheet’s name, order, grid values, formulas, validation behavior, filtered view, and pivot results remain independent. Switching worksheets or reopening the workbook must never display data from another worksheet.
+  
+    Screenshot reference:
+
+    ![image](reference/worksheet-overview.png)
+  children:
+  - id: REQ-2-1
+    name: Worksheet Lifecycle
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support creating, switching, renaming, and deleting worksheets, and ensure that each worksheet's grid, formulas, validation behavior, filtered view, and pivot field choices and results remain independent after reopening. The worksheet tab bar shows the last successful worksheet order and active state and provides a button named “Add sheet”. Each worksheet tab has a button named “Worksheet options for <worksheet name>”; activating it opens a menu whose commands use the ARIA menuitem role.
+
+
+      Screenshot reference:
+
+      ![image](reference/worksheet-lifecycle.png)
+    children:
+    - id: REQ-2-1-1
+      name: Add a worksheet
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: >
+        A user adds a worksheet with the button named “Add sheet” in the worksheet tab bar. The new tab uses the first unused SheetN name in positive-integer order; a workbook containing only Sheet1 creates Sheet2. The new worksheet is blank, inherits no filter, validation, or pivot result from another worksheet, becomes the active tab, and selects A1. Existing worksheets remain unchanged, and the new tab remains after refresh or reopen. Failure shows an error, adds no tab, and leaves existing worksheets unchanged.
+      scenarios:
+      - name: Create a worksheet that remains after refresh
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook.
+        - keyword: WHEN
+          content: The user clicks “Add sheet” in the worksheet tab bar at the bottom of the editor.
+        - keyword: THEN
+          content: The system adds and activates blank Sheet2 with A1 selected and leaves Sheet1 A1 as Existing data.
+        - keyword: THEN
+          content: After reopening the workbook, the worksheet still exists.
+    - id: REQ-2-1-2
+      name: Switch worksheets
+      type: ATOMIC
+      dependencies:
+      - REQ-2-1-1
+      description: >
+        After the user clicks another ARIA tab, the grid, row and column structure, selected cell, textbox labeled “Formula bar”, filter buttons, validation controls, and pivot results switch to the target worksheet. The formula bar displays the selected cell’s ordinary value or original formula; a worksheet without a previous selection selects A1. Switching does not modify the previous worksheet, and returning restores its last successful state. Reopening shows the last active tab and restores each worksheet’s last confirmed selected cell.
+      scenarios:
+      - name: Preserve each worksheet’s data after switching
+        steps:
+        - keyword: GIVEN
+          content: The workbook has at least two worksheets, and the current worksheet has saved data.
+        - keyword: WHEN
+          content: The user clicks another worksheet tab and then clicks the original worksheet tab.
+        - keyword: THEN
+          content: Each tab displays its own data.
+        - keyword: THEN
+          content: After returning to the original worksheet, its original data remains unchanged.
+      - name: Keep filter and validation controls isolated while switching
+        steps:
+        - keyword: GIVEN
+          content: Sheet1 has a filter whose Region header exposes “Filter Region” and C2 has a dropdown button named “Open dropdown for C2”; Sheet2 has neither control.
+        - keyword: WHEN
+          content: The user switches from Sheet1 to Sheet2, then returns to Sheet1 and switches back to Sheet2.
+        - keyword: THEN
+          content: “Filter Region” and “Open dropdown for C2” are visible only while Sheet1 is active, and each worksheet continues to show its own grid values.
+        - keyword: THEN
+          content: After refreshing with Sheet2 active, Sheet2 remains active and neither Sheet1-only control is present.
+    - id: REQ-2-1-3
+      name: Rename a worksheet
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: >
+        A user changes the name from the worksheet tab menu. The “Rename” menu item opens a dialog named “Rename worksheet” with a textbox labeled “Worksheet name”, prefilled with the current name, and a “Save” button. After trimming, the new name must be non-empty and unique within the workbook. An empty name shows “Worksheet name cannot be empty”; a duplicate shows “Worksheet name already exists”. Success updates the tab. Failure, duplicate, or empty input shows an error and keeps the original name. Refreshing or reopening shows the last successful name.
+      scenarios:
+      - name: Save a unique worksheet name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook, and the target name is not used by another worksheet.
+        - keyword: WHEN
+          content: The user opens the current worksheet tab menu, clicks “Rename”, enters the new name, and presses Enter or clicks “Save”.
+        - keyword: THEN
+          content: The system saves the name and updates the tab. After reopening the workbook, the name remains.
+      - name: Reject a duplicate worksheet name
+        steps:
+        - keyword: GIVEN
+          content: Another worksheet in the same workbook already uses the target name.
+        - keyword: WHEN
+          content: The user enters a name already used in the workbook in the worksheet rename input and clicks “Save”.
+        - keyword: THEN
+          content: The system displays “Worksheet name already exists” and keeps the original name after reopening.
+      - name: Reject an empty worksheet name
+        steps:
+        - keyword: GIVEN
+          content: The user has opened a workbook and the current worksheet has a saved non-empty name.
+        - keyword: WHEN
+          content: The user opens the current worksheet tab menu, clicks “Rename”, leaves “Worksheet name” empty or enters only spaces, and clicks “Save”.
+        - keyword: THEN
+          content: The system displays “Worksheet name cannot be empty” and keeps the original saved name after reopening.
+    - id: REQ-2-1-4
+      name: Delete a worksheet
+      type: ATOMIC
+      dependencies:
+      - REQ-2-1-1
+      description: >
+        A user deletes a worksheet through the “Delete” worksheet-menu item. When allowed, a dialog named “Delete worksheet” identifies the target and provides a “Delete worksheet” confirmation button. Success removes the target tab and its data, formulas, filters, validation controls, and pivot results, activates an adjacent worksheet, and remains deleted after refresh. Deleting a pivot-result worksheet removes that relationship so its former source is no longer blocked by the pivot. Deleting a worksheet still used as a pivot source is rejected with “Delete or rebuild dependent pivot tables first”; the dialog closes and both source data and pivot result remain unchanged. Deleting the only worksheet is rejected before confirmation with “A workbook must contain at least one worksheet”. Any other failure shows an error and leaves the target tab and grid visible immediately and after refresh.
+      scenarios:
+      - name: Delete the current worksheet from a multi-sheet workbook
+        steps:
+        - keyword: GIVEN
+          content: The workbook contains at least two worksheets.
+        - keyword: WHEN
+          content: The user opens the current worksheet tab menu, clicks “Delete”, and clicks “Delete worksheet” in the confirmation dialog.
+        - keyword: THEN
+          content: The worksheet tab and its data disappear, and another worksheet becomes active.
+        - keyword: THEN
+          content: After reopening, the deleted worksheet still does not exist.
+      - name: Reject deleting the last worksheet
+        steps:
+        - keyword: GIVEN
+          content: The workbook has only one worksheet remaining.
+        - keyword: WHEN
+          content: With only one worksheet remaining, the user opens its tab menu and clicks “Delete”.
+        - keyword: THEN
+          content: The system displays “A workbook must contain at least one worksheet”, rejects deletion, and keeps the worksheet.
+      - name: Reject deleting a pivot-table source worksheet
+        steps:
+        - keyword: GIVEN
+          content: The current workbook contains a pivot table whose source is the worksheet to be deleted.
+        - keyword: WHEN
+          content: The user clicks “Delete” in the referenced source worksheet's menu and confirms with “Delete worksheet”.
+        - keyword: THEN
+          content: The system rejects deletion with “Delete or rebuild dependent pivot tables first”, and the source worksheet, pivot field choices, and pivot result remain unchanged.
+  - id: REQ-2-2
+    name: Row and Column Structure Management
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support inserting and deleting rows and columns in the active worksheet. After an operation, grid values, formula-bar content, filtered view, validation behavior, and refreshed pivot results remain consistent; other worksheets do not change, and refresh preserves the structure. Row numbers expose the ARIA rowheader role with their decimal number as the accessible name. Column letters expose the ARIA columnheader role with their letters as the accessible name. Right-clicking either header opens a menu whose commands use the ARIA menuitem role.
+    children:
+    - id: REQ-2-2-1
+      name: Insert and delete rows
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: >
+        A user inserts a blank row above or below a target row through the row-number menu, or deletes the target row. The menu exposes “Insert 1 row above”, “Insert 1 row below”, and “Delete row”. Insertion shifts complete records, validation rules, and formula references down; deletion shifts later rows up and removes the target row’s rules. Affected formula bars show adjusted expressions and grids show correct results; references that cannot be retained show a recognizable error, while filters continue to cover the original data range. If the change overlaps a pivot source range, the existing pivot result remains unchanged until “Refresh pivot table” is clicked, then uses the adjusted source range. Failure shows an error and leaves the complete pre-operation structure visible immediately and after refresh.
+
+
+        Screenshot reference:
+
+        ![image](reference/manage-rows.png)
+      scenarios:
+      - name: Insert a row and preserve data
+        steps:
+        - keyword: GIVEN
+          content: The target worksheet is open with A1/B1 = Item/Amount, A2/B2 = Alpha/10, and A3/B3 = Beta/20.
+        - keyword: WHEN
+          content: The user right-clicks row number 3 and chooses “Insert 1 row above”.
+        - keyword: THEN
+          content: Row 3 is blank, Beta/20 moves together to A4/B4, Alpha/10 remains at A2/B2, and the same state remains after refreshing.
+      - name: Delete a row and reopen
+        steps:
+        - keyword: GIVEN
+          content: The target worksheet is open with A2 = Alpha, A3 = Remove me, and A4 = Beta.
+        - keyword: WHEN
+          content: The user right-clicks row number 3, chooses “Delete row”, then closes and reopens the workbook after the updated grid is visible.
+        - keyword: THEN
+          content: A3 displays Beta, A4 is blank, and the same order remains after reopening.
+    - id: REQ-2-2-2
+      name: Insert and delete columns
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: >
+        A user inserts a blank column to the left or right of a target column through the column-header menu, or deletes the target column. The menu exposes “Insert 1 column left”, “Insert 1 column right”, and “Delete column”. Insertion shifts complete data, validation rules, and formula references right; deletion shifts later columns left and removes the target column’s rules. Data outside the deleted column remains. Affected formula bars show adjusted expressions and grids show correct results; a direct reference that cannot be retained displays #REF!, while filters continue over the adjusted range. Moving a pivot source column leaves the old result unchanged until refresh, which uses the moved field. Deleting a selected header makes refresh or the pivot editor show a visible error requiring a new field selection while preserving the last successful result. Failure shows an error and leaves the pre-operation structure visible immediately and after refresh.
+
+
+        Screenshot reference:
+
+        ![image](reference/manage-columns.png)
+      scenarios:
+      - name: Insert a column and preserve data
+        steps:
+        - keyword: GIVEN
+          content: The target worksheet is open with A1/B1/C1 = Alpha/Beta/Gamma.
+        - keyword: WHEN
+          content: The user right-clicks column header B and chooses “Insert 1 column left”.
+        - keyword: THEN
+          content: After inserting left of B, A1 remains Alpha, B1 is blank, C1 displays Beta, D1 displays Gamma, and the same state remains after refreshing.
+      - name: Delete a column referenced by formulas
+        steps:
+        - keyword: GIVEN
+          content: The worksheet contains A1/B1/C1 = Unit price/Quantity/Total, A2/B2 = 10/2, and C2 is the saved formula =A2*B2 with result 20.
+        - keyword: WHEN
+          content: The user right-clicks column header B and chooses “Delete column”.
+        - keyword: THEN
+          content: 'Column B is deleted, Total moves to B1, the direct reference to the deleted column becomes #REF! in B2, A1/A2 remain unchanged, and the same state remains after reopening.'
+- id: REQ-3
+  name: Cell and Range Editing
+  type: FOLDER
+  dependencies: []
+  description: >
+    Support data entry in cells and contiguous ranges, bulk paste, copy and cut, and undo and redo within the active worksheet. Each action either fully updates the target grid, formula results, and related validation behavior and remains after refresh, or shows an error while this and every other worksheet retain the pre-operation state.
+  children:
+  - id: REQ-3-1
+    name: Direct Data Entry
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support entering data through the grid, the textbox labeled “Formula bar”, or the external clipboard. After an edit is committed, the grid and formula bar show the same cell content, and the result remains after refresh. Double-clicking a grid cell opens an inline textbox named “Edit <cell coordinate>”.
+    children:
+    - id: REQ-3-1-1
+      name: Edit cells through the grid or formula bar
+      type: ATOMIC
+      dependencies:
+      - REQ-1-1-1
+      description: >
+        After selecting a cell, a user can change its content in the grid or formula bar. Cells support text, numbers, boolean-like values, date text, and formulas beginning with an equals sign. Pressing Enter or clicking another cell commits the edit; pressing Escape cancels it. Formula cells display calculated results in the grid and the original formula in the formula bar, while ordinary cells display the same value in both. A committed source-cell change recalculates dependent formulas as defined by REQ-4-2-1 and remains after refresh. If the edit cannot be completed, the previous value, formula, and result remain visible and an error is shown.
+      scenarios:
+      - name: Commit a cell edit
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet is open with A1 selected and saved as 2, while B1 contains the formula =A1*2 with result 4.
+        - keyword: WHEN
+          content: The user clicks the formula bar, replaces A1 with 3, and presses Enter.
+        - keyword: THEN
+          content: A1 displays 3 in the grid and formula bar; B1 recalculates to 6 in the grid and displays =A1*2 in the formula bar when selected.
+        - keyword: THEN
+          content: After reopening the workbook, the content still exists.
+      - name: Cancel an uncommitted edit
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet is open with A1 saved as Saved value.
+        - keyword: WHEN
+          content: The user double-clicks A1, enters Unsaved value in “Edit A1”, and presses Escape before committing.
+        - keyword: THEN
+          content: A1 and the formula bar display Saved value, the inline editor closes, and refreshing does not reveal Unsaved value.
+    - id: REQ-3-1-2
+      name: Paste two-dimensional tabular data
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      description: >
+        A user pastes text containing tab-separated columns and newline-separated rows into a starting cell. The complete rectangle is applied, including empty fields, and only cells inside the target rectangle are overwritten. Overwritten formulas are replaced by the pasted content and affected formulas are recalculated. The paste either updates every cell in the rectangle and remains after refresh or shows an error without changing any target cell; values must not be silently discarded. The grid context menu exposes a “Paste” menu item, while Ctrl+V pastes the same external clipboard content.
+      scenarios:
+      - name: Paste a rectangular data range
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet is open with A1 = Outside, E4 = Keep, and the clipboard text Alpha<TAB><TAB>3<NEWLINE>Beta<TAB>二<TAB>4.
+        - keyword: WHEN
+          content: The user clicks B2 and uses Ctrl+V.
+        - keyword: THEN
+          content: B2/C2/D2 become Alpha/empty/3 and B3/C3/D3 become Beta/二/4 in one saved operation.
+        - keyword: THEN
+          content: A1 remains Outside, E4 remains Keep, and the complete pasted rectangle remains after reopening.
+  - id: REQ-3-2
+    name: Range Transfer and Operation Recovery
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support transferring data between ranges in the current active worksheet and using undo and redo for cell edits, pastes, range transfers, and row or column changes. Undo and redo restore the corresponding grid content, formulas, validation behavior, and row or column layout, and the resulting state remains after refresh.
+    children:
+    - id: REQ-3-2-1
+      name: Copy, cut, and paste cell ranges
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      description: >
+        A user selects a contiguous rectangular range by dragging between its corner cells, performs copy or cut, and then selects a target location to paste. After copying, the source range remains unchanged. For cut, the source is cleared only when the entire target range has been filled successfully. Values and formulas preserve their original two-dimensional layout. Copied formulas adjust relative references for the target offset and keep absolute references unchanged, which is visible in the target cell's formula bar. Source and target must be in the same worksheet. The action either completes in full and remains after refresh or shows an error while the source, target, and cells outside both ranges retain their previous values.
+
+
+        Screenshot reference:
+
+        ![image](reference/copy-paste-range.png)
+      scenarios:
+      - name: Copy a range and adjust formulas
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains A1/B1 = 1/2, A2 = 3, B2 is the formula =A1+$B$1 with result 3, D1:E2 is blank, and G1 = Keep.
+        - keyword: WHEN
+          content: The user drags from A1 to B2, uses Ctrl+C, clicks D1, then uses Ctrl+V.
+        - keyword: THEN
+          content: D1/E1/D2/E2 display 1/2/3/3, A1:B2 remains unchanged, and G1 remains Keep.
+        - keyword: THEN
+          content: >
+            Selecting E2 shows =D1+$B$1 in the formula bar; the relative reference moves and the absolute reference remains unchanged.
+        - keyword: THEN
+          content: After reopening the workbook, the source and target ranges still show the same values and formulas as immediately after copying.
+      - name: Cut a range and clear the source range
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains A1/B1/A2/B2 = A/B/C/D, D1:E2 is blank, and G1 = Keep.
+        - keyword: WHEN
+          content: The user drags from A1 to B2, uses Ctrl+X, clicks D1, then uses Ctrl+V.
+        - keyword: THEN
+          content: D1/E1/D2/E2 become A/B/C/D, A1:B2 is cleared, G1 remains Keep, and the same state remains after reopening.
+    - id: REQ-3-2-2
+      name: Undo and redo recent operations
+      type: ATOMIC
+      dependencies:
+      - REQ-2-2-1
+      - REQ-2-2-2
+      - REQ-3-1-1
+      - REQ-3-1-2
+      - REQ-3-2-1
+      description: >
+        A user can undo recent cell edits, bulk pastes, range moves, and row or column changes in the current workbook session. The toolbar exposes buttons named “Undo” and “Redo”; Ctrl+Z and Ctrl+Y perform the same actions. Consecutive undos restore the visible worksheet states in reverse order, including cell values and formulas, row or column layout, and affected validation behavior. Redo reapplies the operation that was just undone. Undo and redo affect only the current workbook, and the resulting state remains after refresh. The undo/redo list may start empty after reopening. When a new change is made after undo, the old redo branch is discarded and the “Redo” button is disabled.
+      scenarios:
+      - name: Undo and redo a change
+        steps:
+        - keyword: GIVEN
+          content: In a newly created workbook, the user has just committed a unique value to previously blank A1.
+        - keyword: WHEN
+          content: The user clicks “Undo” and then “Redo” in the toolbar, or uses Ctrl+Z and Ctrl+Y respectively.
+        - keyword: THEN
+          content: Undo restores blank A1.
+        - keyword: THEN
+          content: Redo restores the unique value, saves it, and preserves it after refresh.
+      - name: A new change after undo clears the redo branch
+        steps:
+        - keyword: GIVEN
+          content: In a newly created workbook, the user committed a unique old-branch value to A1 and then undid it, so A1 is blank and a redo record exists.
+        - keyword: WHEN
+          content: The user enters and commits a different unique new-branch value in A1.
+        - keyword: THEN
+          content: The new value is saved, “Redo” is disabled, Ctrl+Y cannot restore the old branch, and the new value remains after refresh.
+      - name: Undo and redo a source edit with dependent formulas
+        steps:
+        - keyword: GIVEN
+          content: A1 was changed from 2 to 3, while B1 contains =A1*2 and now displays 6.
+        - keyword: WHEN
+          content: The user clicks “Undo” and then “Redo”.
+        - keyword: THEN
+          content: Undo restores A1 to 2 and B1 to 4 while B1's formula bar remains =A1*2; Redo restores A1 to 3 and B1 to 6.
+        - keyword: THEN
+          content: After refresh, A1 remains 3 and B1 remains 6 with formula =A1*2.
+      - name: Undo and redo structure changes with validation
+        steps:
+        - keyword: GIVEN
+          content: A1 contains Keep and has a dropdown button named “Open dropdown for A1”.
+        - keyword: WHEN
+          content: The user inserts a row above row 1 and a column left of column A, then undoes both operations and redoes both operations.
+        - keyword: THEN
+          content: The value and dropdown button move together through B2, A2, A1, A2, and B2 as the two operations are undone and redone.
+        - keyword: THEN
+          content: After refresh, B2 still contains Keep and exposes “Open dropdown for B2”.
+- id: REQ-4
+  name: Formula Calculation
+  type: FOLDER
+  dependencies: []
+  description: >
+    Support basic formula calculation, relative and absolute references, dependent-formula recalculation, and error handling in the current active worksheet. The grid displays a formula's result or error while the formula bar displays the submitted expression. Copy, paste, row or column changes, and source-value edits use the same reference-adjustment and recalculation rules. Formula expressions and correct results remain visible after reopening the workbook.
+  children:
+  - id: REQ-4-1
+    name: Formula Entry and Functions
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support entering basic expressions and aggregate functions through the REQ-3-1-1 cell-editing entry and copying formulas through REQ-3-2-1. The grid shows each formula's result, the formula bar shows that cell's expression, and both remain correct after refresh.
+    children:
+    - id: REQ-4-1-1
+      name: Calculate basic expressions and aggregate functions
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      description: >
+        A user enters a formula beginning with an equals sign through the REQ-3-1-1 grid or formula bar. Formulas support numeric constants, parentheses, addition, subtraction, multiplication, division, same-worksheet A1 cell references, and SUM, AVERAGE, COUNT, MIN, and MAX over contiguous ranges; cross-worksheet references are outside this requirement. The grid displays the result calculated from current source cells and the formula bar displays the original expression. Function names are case-insensitive. Empty cells are ignored: COUNT counts numeric cells, and SUM, AVERAGE, MIN, and MAX use numeric cells without treating an empty cell as zero. The submitted expression and correct result remain after reopening.
+
+
+        Screenshot reference:
+
+        ![image](reference/basic-formulas.png)
+      scenarios:
+      - name: Calculate an arithmetic expression
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains A1 = 3, B1 = 4, and blank C1.
+        - keyword: WHEN
+          content: The user selects C1, enters =(A1+B1)*2 in the formula bar, and presses Enter.
+        - keyword: THEN
+          content: C1 displays 14, and selecting C1 shows =(A1+B1)*2 in the formula bar.
+        - keyword: THEN
+          content: After reopening the workbook, the formula bar still displays the original expression and the grid result is correct.
+      - name: Calculate aggregate range functions
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains B2 = 2, B4 = 4, B6 = 6, all other cells in B2:B10 empty, and D2:D6 blank.
+        - keyword: WHEN
+          content: The user enters =sum(B2:B10), =AVERAGE(B2:B10), =COUNT(B2:B10), =MIN(B2:B10), and =MAX(B2:B10) in D2 through D6.
+        - keyword: THEN
+          content: D2:D6 displays 12, 4, 3, 2, and 6; the lowercase SUM works and empty cells neither fail calculation nor count as numeric values.
+    - id: REQ-4-1-2
+      name: Copy formulas and adjust relative references
+      type: ATOMIC
+      dependencies:
+      - REQ-4-1-1
+      - REQ-3-2-1
+      - REQ-4-2-2
+      description: >
+        When REQ-3-2-1 copies a formula cell to another location in the same worksheet, relative row and column references change according to the target offset while absolute references remain unchanged. The target formula bar displays the adjusted expression and the target grid cell displays its result, while the source formula and result remain unchanged. Both formulas remain correct after reopening. If an offset moves a relative reference outside the worksheet, the target formula bar displays =#REF! and its grid cell displays the REQ-4-2-2 #REF! error.
+      scenarios:
+      - name: Copy a formula to the next row
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains A1 = 1, B1 = 2, A2 = 10, C1 =A1+$B$1 with result 3, and blank C2.
+        - keyword: WHEN
+          content: The user selects C1, uses Ctrl+C, selects C2, then uses Ctrl+V.
+        - keyword: THEN
+          content: C2 saves =A2+$B$1 and displays 12; the relative row changes and the absolute reference remains unchanged.
+        - keyword: THEN
+          content: The formula and result in C1 remain unchanged.
+        - keyword: THEN
+          content: After reopening the workbook, C1 and C2 still save their respective formula expressions.
+  - id: REQ-4-2
+    name: Dependency Updates and Error Handling
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support updating every directly or indirectly dependent formula after source data changes while keeping formula errors isolated. REQ-3 value edits, pastes, and moves and REQ-2 row or column changes invoke this behavior; unrelated cells and worksheets remain unchanged.
+    children:
+    - id: REQ-4-2-1
+      name: Recalculate dependent formulas after source data changes
+      type: ATOMIC
+      dependencies:
+      - REQ-2-2-1
+      - REQ-2-2-2
+      - REQ-3-1-1
+      - REQ-3-1-2
+      - REQ-3-2-1
+      - REQ-4-1-1
+      description: >
+        After a REQ-3 source edit, bulk paste, or range move, or a REQ-2 row or column change is committed, every directly and indirectly dependent formula displays its updated result or error. The formula bar continues to show each formula's expression. After reopening, the same formulas display results calculated from the current source values, while unrelated cells and formulas in other worksheets remain unchanged.
+      scenarios:
+      - name: Update chained dependent formulas
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared workbook has active Sheet1 with A1 = 10, B1 =A1*2 displaying 20, and C1 =B1+5 displaying 25; Sheet2 has A1 = Other and B1 =1+1 displaying 2.
+        - keyword: WHEN
+          content: The user edits Sheet1 A1 in the formula bar, changes the value to 20, and presses Enter.
+        - keyword: THEN
+          content: Sheet1 B1 updates to 40 and C1 updates to 45, while Sheet2 A1 remains Other and B1 remains 2 with formula =1+1.
+        - keyword: THEN
+          content: After reopening the workbook, the updated results are still displayed.
+      - name: Recalculate dependencies after moving a source value
+        steps:
+        - keyword: GIVEN
+          content: A1 is 2, B1 is 3, C1 is =B1*2 displaying 6, and D1 is =C1+1 displaying 7.
+        - keyword: WHEN
+          content: The user cuts A1 and pastes it into B1, replacing the previous B1 value.
+        - keyword: THEN
+          content: A1 is blank, B1 displays 2, C1 displays 4 with formula =B1*2, and D1 displays 5 with formula =C1+1.
+        - keyword: THEN
+          content: The same values, formulas, and results remain after refresh.
+    - id: REQ-4-2-2
+      name: Display and fix formula errors
+      type: ATOMIC
+      dependencies:
+      - REQ-4-1-1
+      description: >
+        Formula cells display stable, recognizable errors: division by zero uses #DIV/0!, an invalid reference uses #REF!, an unsupported function uses #NAME?, a malformed expression uses #ERROR!, and a direct or indirect circular reference uses #REF!. Selecting an error cell shows the submitted formula in the formula bar, and the same error remains after refresh. One error does not block unrelated cells from being viewed, edited, or recalculated. Replacing the error formula through REQ-3-1-1 with a valid expression removes the error, displays the new result, updates dependent formulas, and remains correct after reopening.
+      scenarios:
+      - name: Display formula errors
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet is editable with A1 = Keep and blank B1:B5.
+        - keyword: WHEN
+          content: The user enters =1/0, =A0, =UNSUPPORTED(1), =1+, and =B5 in B1 through B5.
+        - keyword: THEN
+          content: 'B1:B5 displays #DIV/0!, #REF!, #NAME?, #ERROR!, and #REF! respectively; selecting each cell shows its submitted formula in the formula bar, and A1 can still be changed and saved independently.'
+      - name: Fix an erroneous formula
+        steps:
+        - keyword: GIVEN
+          content: 'A fresh prepared worksheet contains A1 = 2 and B1 =1/0 displaying #DIV/0!.'
+        - keyword: WHEN
+          content: The user selects B1, replaces the formula with =A1*3, and presses Enter.
+        - keyword: THEN
+          content: B1 displays 6, its formula bar displays =A1*3, and the corrected formula/result remain after reopening.
+- id: REQ-5
+  name: Data Organization and Analysis
+  type: FOLDER
+  dependencies: []
+  description: >
+    Support sorting, filtering, validation, and pivot summaries in the current active worksheet. Sorting changes row order, filtering changes only row visibility, validation constrains later edits, and pivot tables summarize a source range without modifying it. The same sorted order, filtered view, validation behavior, and pivot configuration and results return after reopening. The editor toolbar provides a button named “Data”; activating it opens a menu whose commands use the ARIA menuitem role. Options opened from every named combobox in this requirement use the ARIA option role and their visible names.
+  children:
+  - id: REQ-5-1
+    name: Sorting and Filtering
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support sorting a selected rectangular range by a column and filtering a selected range by value or condition. Sorting and filtering apply only to the explicitly selected range, never expand implicitly into adjacent data or another worksheet, and remain in effect after reopening.
+    children:
+    - id: REQ-5-1-1
+      name: Sort a data range by a specified column
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      - REQ-4-2-1
+      description: >
+        A user selects a rectangular data range and chooses “Sort range” from the Data menu. A dialog named “Sort range” provides comboboxes labeled “Sort by” and “Order”, a checkbox named “Data has header row”, and a “Sort” button. “Sort by” options use the selected range's header text as their accessible names; “Order” provides options named “Ascending” and “Descending”. The user may declare the first row as a header, which is not sorted. Numbers, parseable dates, and text are compared with consistent type-specific rules; records with equal keys retain their previous relative order. Complete rows move together to avoid column misalignment. Formulas continue to show correct results, filters and validation continue to apply to their corresponding data, and data outside the selected range does not change. The action either completes in full and remains after reopening or shows an error while the original row order and related behavior remain unchanged.
+
+
+        Screenshot reference:
+
+        ![image](reference/sort-range.png)
+      scenarios:
+      - name: Sort by sales amount descending
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains A1:C5 as Region/Sales/Status; rows 2-5 are East/1200/Open, North/800/Closed, South/1200/Pending, and West/500/Open; E1 = Outside.
+        - keyword: WHEN
+          content: The user drags from A1 to C5, chooses “Sort range” from the Data menu, selects Sales in “Sort by”, Descending in “Order”, checks “Data has header row”, then clicks “Sort”.
+        - keyword: THEN
+          content: The header remains in row 1; rows become East/1200/Open, South/1200/Pending, North/800/Closed, and West/500/Open, preserving the original order of equal 1200 values.
+        - keyword: THEN
+          content: E1 remains Outside.
+        - keyword: THEN
+          content: After reopening the workbook, records are still ordered according to the saved order.
+      - name: Keep formulas and validation aligned after sorting
+        steps:
+        - keyword: GIVEN
+          content: A1:C4 contains Item/Score/Double with Alpha/3/=B2*2, Bravo/1/=B3*2, and Charlie/2/=B4*2; B2:B4 accepts only numbers from 0 to 10.
+        - keyword: WHEN
+          content: The user sorts A1:C4 by Score in ascending order with the header option enabled.
+        - keyword: THEN
+          content: The rows become Bravo/1/2, Charlie/2/4, and Alpha/3/6; each Double formula references the Score cell on its current row.
+        - keyword: THEN
+          content: Entering 11 in B2 shows “Enter a number from 0 to 10”, keeps B2 as 1 and C2 as 2, and the sorted state remains after refresh.
+      - name: Keep an existing filter active after sorting
+        steps:
+        - keyword: GIVEN
+          content: A1:B4 contains Item/Score with Alpha/3, Bravo/1, and Charlie/2; the Score filter is set to Greater than 1, so Bravo is hidden.
+        - keyword: WHEN
+          content: The user sorts A1:B4 by Score in ascending order with the header option enabled.
+        - keyword: THEN
+          content: “Filter Score” remains visible; hidden Bravo moves to row 2, while visible Charlie and Alpha move to rows 3 and 4.
+        - keyword: THEN
+          content: After refresh, the same filter remains active and the same rows are visible and hidden.
+    - id: REQ-5-1-2
+      name: Filter rows by value or condition
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      description: >
+        A user creates a filter for a header-containing data range with “Create filter” in the Data menu. Each header exposes a button named “Filter <header text>”. Its dialog is named the same and supports selecting specific values plus condition options named “Text contains”, “Greater than”, “Date is before”, “Is empty”, and “Is not empty”. A value dialog provides “Clear selection”, one checkbox whose accessible name is the displayed source value for each distinct value, and “Apply”; a condition dialog provides a “Condition” combobox, a “Value” textbox, and “Apply”. “Text contains”, “Greater than”, and “Date is before” use the Value textbox; empty/non-empty conditions do not require a value. Conditions across columns are combined with AND. Non-matching rows are hidden without deletion or reordering, and reopening restores the filtered view. CSV export and REQ-5-3 pivot summaries include all rows in the selected source range, including hidden rows. “Clear filter” makes all source rows visible again and remains cleared after reopening without changing source data, formulas, or validation behavior.
+      scenarios:
+      - name: Combine multiple filter conditions
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared worksheet contains A1:C6 as Region/Sales/Status; rows 2-6 are East/1200/Open, East/900/Closed, North/2000/Open, East/1500/Closed, and South/700/Open.
+        - keyword: WHEN
+          content: The user selects A1:C6, enables “Create filter”, clears Region value selection and checks only East, applies it, then selects Greater than with value 1000 in the Sales filter and applies it.
+        - keyword: THEN
+          content: The header and rows 2 and 5 are visible; rows 3, 4, and 6 are hidden, so only records satisfying both conditions are shown while all five source records remain saved.
+        - keyword: THEN
+          content: After reopening the workbook, the same filter conditions are still applied.
+        - keyword: THEN
+          content: After choosing “Clear filter”, rows 2-6 are all visible in their original order and values remain unchanged.
+  - id: REQ-5-2
+    name: Data Validation
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support dropdown or numeric validation for ranges in the current active worksheet. The same rule applies to REQ-3-1-1 direct edits, REQ-3-1-2 pastes, and REQ-3-2-1 range writes. When rows or columns move or are inserted or deleted, the rule continues to apply to the corresponding visible cells, and the behavior remains after reopening.
+    children:
+    - id: REQ-5-2-1
+      name: Set dropdown or numeric validation for a range
+      type: ATOMIC
+      dependencies:
+      - REQ-3-1-1
+      - REQ-3-1-2
+      - REQ-3-2-1
+      description: >
+        A user selects a target range and chooses “Data validation” from the Data menu. A dialog named “Data validation” provides a “Rule type” combobox. “Dropdown” uses a textbox labeled “Allowed values” whose comma-separated entries are trimmed; “Number range” uses textboxes labeled “Minimum” and “Maximum”; a “Save” button applies the inclusive rule to the selected range. A dropdown cell provides a button named “Open dropdown for <cell coordinate>”; each choice uses the ARIA option role and its trimmed allowed value as the accessible name. Numeric cells accept only numbers within the inclusive range. Grid, formula-bar, paste, or range-move input that violates a rule is rejected in full and the previous value remains. An invalid dropdown value displays “Choose one of: <comma-separated allowed values>”; an invalid number displays “Enter a number from <minimum> to <maximum>”. A batch with any invalid target changes no target cell. Reopening preserves the rule. Selecting a range with one existing rule and reopening “Data validation” prefills its rule type and parameters and shows a “Delete rule” button. Saving changed parameters changes the rule's visible behavior; “Delete rule” removes that behavior. Neither operation deletes an existing cell value or replaces it with a default.
+      scenarios:
+      - name: Save a dropdown validation rule
+        steps:
+        - keyword: GIVEN
+          content: A newly created workbook has blank editable A1:A2.
+        - keyword: WHEN
+          content: The user selects A1:A2, creates a Dropdown rule with allowed values Not Started, In Progress, and Completed, saves it, opens the dropdown for A1, and chooses In Progress.
+        - keyword: THEN
+          content: A1 saves In Progress, A2 still has its own dropdown button, and both the value and rule remain after reopening.
+      - name: Handle invalid numeric input
+        steps:
+        - keyword: GIVEN
+          content: A newly created workbook has A1 saved as 50.
+        - keyword: WHEN
+          content: The user creates an inclusive Number range rule from 0 to 100 for A1, enters 120 in the formula bar, and presses Enter.
+        - keyword: THEN
+          content: The system rejects 120, displays “Enter a number from 0 to 100”, and keeps A1 as 50; after reopening the rule still rejects 101 and accepts boundary value 100.
+      - name: Reject a value outside a dropdown rule
+        steps:
+        - keyword: GIVEN
+          content: A1 contains Open and has a dropdown rule allowing Open and Closed.
+        - keyword: WHEN
+          content: The user enters Pending in A1 through the formula bar and presses Enter.
+        - keyword: THEN
+          content: 'The page displays “Choose one of: Open, Closed”, A1 remains Open, and the formula bar still displays Open.'
+        - keyword: THEN
+          content: After refresh, entering Pending is still rejected and A1 remains Open.
+  - id: REQ-5-3
+    name: Basic Pivot Summaries
+    type: FOLDER
+    dependencies: []
+    description: >
+      Support creating a basic pivot table from a worksheet range in a dedicated worksheet created through REQ-2-1-1. The pivot result, selected source range, field choices, and aggregation return after reopening, while the source worksheet remains unchanged.
+    children:
+    - id: REQ-5-3-1
+      name: Create and refresh a basic pivot table
+      type: ATOMIC
+      dependencies:
+      - REQ-2-1-1
+      - REQ-3-1-1
+      description: >
+        A user selects a header-containing source range and chooses “Create pivot table” from the Data menu. A dialog named “Create pivot table” displays the source range, provides a “New worksheet” radio option, and a “Create” button. The first pivot result worksheet uses the first unused PivotN name, so a workbook without another pivot result creates Pivot1. A region named “Pivot table editor” provides comboboxes labeled “Rows”, “Columns”, “Values”, and “Summarize by”, plus an “Apply” button. Options in “Rows”, “Columns”, and “Values” use source header text as their accessible names; “Summarize by” provides options named SUM, COUNT, and AVERAGE. Configuration supports one row field, an optional column field, and one value field. SUM/AVERAGE aggregate parseable numbers; COUNT counts non-empty value-field records without failing on nonnumeric values.
+
+        Without a column field, A1 contains the row-field name, B1 contains “<AGGREGATION> of <value field>”, distinct row values follow their first appearance in the source, and a final Grand Total row aggregates all eligible source records. With a column field, A1 contains the row-field name, distinct column values fill B1 onward in first-appearance order, the last column is Grand Total, distinct row values fill subsequent rows in first-appearance order, and the last row is Grand Total. A COUNT intersection with no non-empty value-field record displays 0.
+
+        After a successful Apply, reopening shows the same pivot worksheet, field choices, aggregation, and result. A button named “Refresh pivot table” on the result worksheet replaces the previous summary with values from the current source range after source data or REQ-2-2 row or column changes. If a selected source header is deleted, Refresh displays “Pivot field is no longer available. Select a new field.”, preserves the last successful pivot result, and does not modify the source worksheet. Any other invalid source range or field choice also displays a visible error and preserves both worksheets. If SUM or AVERAGE is applied to a value field with no parseable numeric records, the system displays “Value field requires numeric values”, keeps the last successful result, and leaves the source worksheet unchanged.
+      scenarios:
+      - name: Summarize sales amount by region
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared Sheet1 contains A1:B6 as Region/Sales; rows 2-6 are East/1200, North/800, East/600, South/1000, and North/700.
+        - keyword: WHEN
+          content: The user selects A1:B6, chooses “Create pivot table”, selects New worksheet and Create, then selects Region in Rows, Sales in Values, SUM in Summarize by, and clicks Apply.
+        - keyword: THEN
+          content: Pivot1 contains Region/SUM of Sales headers, East/1800, North/1500, South/1000, and Grand Total/4300.
+        - keyword: THEN
+          content: Sheet1 A1:B6 remains unchanged, and Pivot1 and its result remain after reopening.
+      - name: Refresh an existing pivot table
+        steps:
+        - keyword: GIVEN
+          content: A fresh prepared workbook has Sheet1 with Region/Sales rows East/1500, North/800, and East/600; Pivot1 still shows stale East/1800, North/800, Grand Total/2600.
+        - keyword: WHEN
+          content: The user opens Pivot1 and clicks “Refresh pivot table”.
+        - keyword: THEN
+          content: Pivot1 updates to East/2100, North/800, Grand Total/2900; Sheet1 remains unchanged and the refreshed result remains after reopening.
+      - name: Refresh after inserting rows and columns in the source range
+        steps:
+        - keyword: GIVEN
+          content: Sheet1 A1:B4 contains Region/Sales with East/100, North/200, and East/300; Pivot1 summarizes SUM of Sales as East/400, North/200, and Grand Total/600.
+        - keyword: WHEN
+          content: The user inserts a row inside the source range, enters East/50, refreshes Pivot1, then inserts a column before Sales and refreshes again.
+        - keyword: THEN
+          content: Pivot1 displays East/450, North/200, and Grand Total/650 after each refresh, while Sheet1 shows the inserted row and the Sales column in its new position.
+        - keyword: THEN
+          content: The refreshed result remains after reopening.
+      - name: Preserve the last pivot result when a selected source field is deleted
+        steps:
+        - keyword: GIVEN
+          content: Sheet1 has Region and Sales source columns, and Pivot1 successfully displays East/400, North/200, and Grand Total/600 using Sales.
+        - keyword: WHEN
+          content: The user deletes the Sales column and clicks “Refresh pivot table” in Pivot1.
+        - keyword: THEN
+          content: The page displays “Pivot field is no longer available. Select a new field.” and Pivot1 keeps East/400, North/200, and Grand Total/600.
+        - keyword: THEN
+          content: Sheet1 keeps its remaining Region data, and reopening preserves the last successful pivot result.
+data:
+- category: Workbook entry and isolation seed data
+  items:
+  - The system includes at least one saved workbook visible from the home page, with a stable workbook name, visible last-updated text, a remembered active worksheet, and visible data on that active worksheet.
+  - The system includes separate fresh prepared workbook instances for mutation-oriented tests so row, column, cell, formula, filter, validation, worksheet, and pivot writes from one scenario do not affect another scenario.
+  - The system includes a prepared export workbook whose active worksheet contains a small CSV-shaped table with headers, text containing commas, quoted text, embedded line breaks, blank cells, numeric values, and formulas whose exported values are calculated results.
+- category: Worksheet lifecycle seed data
+  items:
+  - The system includes a fresh workbook with a single Sheet1 containing existing data in A1 for verifying that adding Sheet2 does not modify the original worksheet.
+  - The system includes a workbook with two different worksheets, each remembering its own selected cell, formula-bar value, and visible cell value when the user switches tabs or reloads.
+  - The system includes a workbook where a source worksheet is referenced by an existing pivot result worksheet, so deleting the source worksheet is blocked while both source data and pivot result remain visible.
+- category: Grid structure and clipboard seed data
+  items:
+  - The system includes prepared workbooks for inserting and deleting rows, with simple headers and ordered row values that make shifted blank rows, preserved rows, and deleted rows observable after reload.
+  - The system includes prepared workbooks for inserting and deleting columns, including one workbook where deleting a referenced column turns a dependent formula into a reference error while preserving remaining column data.
+  - The system includes a prepared paste workbook with data outside the paste target rectangle, so pasted tabular content can be verified without overwriting unrelated cells.
+  - The system includes prepared copy and cut workbooks with source ranges, destination space, formulas using relative and absolute references, and outside cells that must remain unchanged.
+- category: Formula and recalculation seed data
+  items:
+  - The system includes prepared workbooks with simple numeric inputs, dependent formulas, chained formulas across cells, and an independent second worksheet for verifying recalculation scope.
+  - The system includes prepared workbooks for arithmetic and aggregate formulas, including blank cells, numeric values, nonnumeric text, and boolean-like text so SUM, AVERAGE, COUNT, MIN, and MAX behavior is observable.
+  - The system includes a prepared formula-copy workbook with relative and absolute references arranged so copying a formula changes only the relative part.
+  - The system includes prepared formula-error workbooks: one with an unrelated preserved cell for creating multiple formula error types, and another with an existing divide-by-zero formula that can be repaired.
+- category: Sorting, filtering, and validation seed data
+  items:
+  - The system includes a prepared sort workbook with Region, Sales, and Status records, duplicate numeric sort values, and data outside the selected range that must remain unchanged.
+  - The system includes a prepared filter workbook with Region, Sales, and Status records that support combined value selection and numeric conditions, and whose full saved rows remain available after filters are cleared.
+  - The system includes workbooks or source data suitable for creating number-range and dropdown validation rules, including valid boundary values, invalid out-of-range values, and disallowed dropdown values.
+- category: Pivot table seed data
+  items:
+  - The system includes a prepared workbook with Sheet1 Region/Sales source rows that can create a new Pivot1 worksheet summarizing Sales by Region while leaving the source sheet unchanged.
+  - The system includes a prepared workbook with an existing Pivot1 worksheet containing stale summary values and changed Sheet1 source values, so refreshing the pivot replaces old results with current aggregates.
+  - The system includes pivot source data with repeated categories, optional column fields, blank values, nonnumeric values, and filtered rows so SUM, COUNT, AVERAGE, refresh, and hidden-row behavior are observable.
