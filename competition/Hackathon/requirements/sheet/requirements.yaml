@@ -1,5 +1,5 @@
 id: ROOT
-name: Online Spreadsheet Data Workspace Core Requirements
+name: Online Spreadsheet Data Workspace
 type: FOLDER
 dependencies: []
 description: A compact online spreadsheet application with an interface inspired by Google Sheets, focused on workbook and worksheet management, grid data editing, formula calculation, sorting and filtering, data validation, and basic pivot analysis. Users enter an editor from the workbook home page; grid, formula-bar, row/column, filter, validation, and pivot actions affect only the target worksheet in the open workbook. Refreshing or reopening restores the workbook name, worksheet tabs and order, active worksheet, each worksheet’s last selected cell, row and column structure, cell values and formulas, filtered view, validation behavior, and pivot results. A change either completes in full and remains after reopening, or shows an error while the current and reopened pages retain the last successful state; partial changes are not allowed. Shared collaboration, version history restoration, complex visual styling, charts, macro scripts, real-time collaborative cursors, and external office-suite integrations are outside the core scope.
