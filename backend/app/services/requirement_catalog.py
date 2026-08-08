@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -115,10 +116,7 @@ class RequirementCatalogService:
                 requirements_md = requirements_path.read_text(encoding="utf-8")
                 requirement_yaml_path = self._resolve_requirement_yaml_path(requirements_path)
                 leaf_requirement_count = self._count_leaf_requirements(requirement_yaml_path)
-                total_test_count = self._count_test_files(tests_path)
-                display_test_count = total_test_count
-                if self.catalog_name in {"competition", "benchmark"} and category == "web":
-                    display_test_count = leaf_requirement_count
+                display_test_count = self._count_test_cases(tests_path)
                 rows.append(
                     CatalogRequirementEntry(
                         id=requirement_id,
@@ -734,10 +732,20 @@ class RequirementCatalogService:
         return sum(self._count_leaf_nodes(child) for child in valid_children)
 
     @staticmethod
-    def _count_test_files(tests_path: Path) -> int:
+    def _count_test_cases(tests_path: Path) -> int:
         if not tests_path.exists() or not tests_path.is_dir():
             return 0
-        return sum(1 for path in tests_path.rglob("*") if path.is_file())
+        declaration = re.compile(r"\b(?:test|it)(?:\.(?:only|skip|todo|fails))?\s*\(")
+        total = 0
+        for path in tests_path.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                source = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            total += len(declaration.findall(source))
+        return total
 
     @staticmethod
     def _read_text_if_exists(path: Path) -> str:
