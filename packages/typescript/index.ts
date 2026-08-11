@@ -7,18 +7,22 @@ import { AgentRuntime } from "arcbench-agent-runtime-js";
 type AgentArgs = {
   requirementPath: string;
   outputDir: string;
+  taskType: string;
 };
 
 function parseArgs(argv: string[]): AgentArgs {
   const args: AgentArgs = {
     requirementPath: process.env.ARCBENCH_TASK_DIR || "requirements",
     outputDir: process.env.ARCBENCH_OUTPUT_DIR || ".",
+    taskType: process.env.ARCBENCH_TASK_TYPE || "web",
   };
   const positional: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--output-dir") {
       args.outputDir = argv[++index] || args.outputDir;
+    } else if (value === "--type") {
+      args.taskType = argv[++index] || args.taskType;
     } else {
       positional.push(value);
     }

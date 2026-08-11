@@ -904,7 +904,32 @@ class SubmissionService:
                 relative_path = path.relative_to(source_dir)
                 if self._should_exclude_builtin_arc_agent_path(relative_path):
                     continue
-                archive.write(path, relative_path.as_posix())
+                archive_name = "arc_main.py" if relative_path == Path("main.py") else relative_path.as_posix()
+                archive.write(path, archive_name)
+            archive.writestr("main.py", self._build_builtin_arc_entrypoint())
+
+    @staticmethod
+    def _build_builtin_arc_entrypoint() -> str:
+        """Adapt ARC's source CLI to the platform's common agent contract."""
+        return '''from __future__ import annotations
+
+import os
+import sys
+
+from arc_main import main as arc_main
+
+
+def main() -> None:
+    arguments = sys.argv[1:]
+    if "--type" not in arguments:
+        arguments.extend(["--type", os.environ.get("ARCBENCH_TASK_TYPE", "web")])
+    sys.argv = [sys.argv[0], "compile", *arguments]
+    arc_main()
+
+
+if __name__ == "__main__":
+    main()
+'''
 
     @staticmethod
     def _write_builtin_octos_agent_archive(archive_path: Path) -> None:

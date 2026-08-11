@@ -51,7 +51,7 @@ class AgentRunnerCommandTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_builtin_arc_uses_current_compile_cli_contract(self) -> None:
+    def test_builtin_arc_uses_the_common_agent_contract(self) -> None:
         self._write_spec("builtin_arc_agent")
 
         command = self.runner.build_generation_agent_command(
@@ -64,19 +64,16 @@ class AgentRunnerCommandTests(unittest.TestCase):
             [
                 "python3",
                 str(self.runner.SUBMISSION_DIR / "main.py"),
-                "compile",
                 str(self.runner.REQUIREMENT_SOURCE_DIR),
                 "--output-dir",
                 str(self.runner.PROJECT_DIR),
                 "--type",
                 "web",
-                "--port",
-                "3000",
             ],
         )
         self.assertTrue((self.runner.REQUIREMENT_SOURCE_DIR / "requirements.yaml").is_file())
 
-    def test_uploaded_python_agent_uses_requirement_and_output_only(self) -> None:
+    def test_uploaded_python_agent_uses_the_same_type_aware_contract(self) -> None:
         self._write_spec("upload")
 
         command = self.runner.build_generation_agent_command(
@@ -92,6 +89,8 @@ class AgentRunnerCommandTests(unittest.TestCase):
                 str(self.runner.REQUIREMENT_SOURCE_DIR),
                 "--output-dir",
                 str(self.runner.PROJECT_DIR),
+                "--type",
+                "web",
             ],
         )
 

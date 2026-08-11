@@ -8,12 +8,15 @@ function parseArgs(argv) {
   const args = {
     requirementPath: process.env.ARCBENCH_TASK_DIR || "requirements",
     outputDir: process.env.ARCBENCH_OUTPUT_DIR || ".",
+    taskType: process.env.ARCBENCH_TASK_TYPE || "web",
   };
   const positional = [];
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--output-dir") {
       args.outputDir = argv[++index] || args.outputDir;
+    } else if (value === "--type") {
+      args.taskType = argv[++index] || args.taskType;
     } else {
       positional.push(value);
     }

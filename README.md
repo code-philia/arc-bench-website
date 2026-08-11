@@ -39,48 +39,22 @@ submodule under `templates/<template-id>/files`.
 | Python | 3.11+ — backend development |
 | Docker | Builds and runs the submission runner |
 
-### 1. Initialize submodules
+### 1. Refresh external source modules
 
-The repository includes `reference-implementations/arc` and `arc-template` as
-Git submodules.
-
-```bash
-git submodule update --init --recursive
-```
-
-To inspect the configured submodules:
+`arc-template` and `reference-implementations/arc` are independent Git
+checkouts. ARC-Bench consumes their local working copies, but does not maintain
+or commit either repository. When their remotes have updates, pull them in
+place:
 
 ```bash
-git config --file .gitmodules --get-regexp 'submodule\..*'
+git -C arc-template pull --ff-only
+git -C reference-implementations/arc pull --ff-only
+git -C reference-implementations/arc/src/arc-template pull --ff-only
 ```
 
-To update every submodule to the commit recorded by the parent repository:
-
-```bash
-git submodule sync --recursive
-git submodule update --init --recursive
-```
-
-To update every submodule to the latest configured remote branch:
-
-```bash
-git submodule update --remote --recursive
-```
-
-To update only the ARC reference implementation:
-
-```bash
-git submodule update --remote reference-implementations/arc
-```
-
-To update only the shared project templates:
-
-```bash
-git submodule update --remote arc-template
-```
-
-After updating a submodule to a newer commit, stage and commit the parent
-repository's submodule pointer change.
+That is all that is required: do not create commits in ARC-Bench or in the
+external repositories. Newly built agent starter archives use the refreshed
+sources automatically.
 
 ### 2. Build the runner image
 

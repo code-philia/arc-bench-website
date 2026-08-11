@@ -390,15 +390,6 @@ def resolve_agent_entrypoint(runtime: str) -> Path:
         raise RuntimeError("unsupported typescript agent entrypoint: expected index.ts at the archive root")
     raise RuntimeError(f"unsupported agent runtime: {runtime}")
 
-def map_task_category_to_app_type(category: str) -> str:
-    normalized = str(category or "").strip().lower()
-    if normalized == "cli":
-        return "cli"
-    if normalized in {"android", "mobile", "mobileapp", "mobile_app"}:
-        return "android"
-    return "web"
-
-
 def prepare_agent_requirement_source() -> Path:
     source_requirements = REQUIREMENTS_DIR
     source_yaml = source_requirements / "requirements.yaml"
@@ -427,45 +418,22 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
         raise RuntimeError(f"unsupported agent runtime: {runtime}")
     requirement_source = str(prepare_agent_requirement_source())
     output_dir = str(spec.get("output_dir") or ".")
-    is_builtin_arc_agent = str(spec.get("agent_source") or "").strip().lower() == "builtin_arc_agent"
-
-    if is_builtin_arc_agent:
-        # ARC 1.1 exposes a subcommand CLI.  `main.py` is the source-distributed
-        # implementation of the `arc` console script, so invoking it directly
-        # keeps the runner self-contained while preserving the official CLI
-        # contract.  Do not apply this protocol to uploaded agents.
-        task_payload = spec.get("task") if isinstance(spec, dict) else {}
-        category = ""
-        if isinstance(task_payload, dict):
-            category = str(task_payload.get("category") or "").strip()
-        app_type = map_task_category_to_app_type(category)
-        command.extend(
-            [
-                "compile",
-                requirement_source,
-                "--output-dir",
-                output_dir,
-                "--type",
-                app_type,
-            ]
-        )
-        if app_type == "web":
-            command.extend(["--port", str(WEB_APP_PORT)])
-        if CONTINUE_REQUEST_PATH.exists():
-            # ARC owns its compilation queue inside the output workspace. Its
-            # resume mode preserves generated code instead of reinitializing it.
-            command.append("--resume")
-        append_debug_log(f"Launching built-in ARC compile command: {' '.join(command)}")
-        return command
-
+    task = spec.get("task") if isinstance(spec, dict) else {}
+    task_type = str(task.get("category") or "web").strip().lower() if isinstance(task, dict) else "web"
+    if task_type in {"mobile", "mobileapp", "mobile_app"}:
+        task_type = "android"
+    if task_type not in {"web", "cli", "android"}:
+        task_type = "web"
     command.extend(
         [
             requirement_source,
             "--output-dir",
             output_dir,
+            "--type",
+            task_type,
         ]
     )
-    append_debug_log(f"Launching uploaded generation agent with requirement and output args: {' '.join(command)}")
+    append_debug_log(f"Launching generation agent with requirement, output, and type args: {' '.join(command)}")
     return command
 
 
@@ -575,6 +543,13 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
 
 
 def build_agent_environment() -> dict[str, str]:
+    spec = read_spec()
+    task = spec.get("task") if isinstance(spec, dict) else {}
+    task_type = str(task.get("category") or "web").strip().lower() if isinstance(task, dict) else "web"
+    if task_type in {"mobile", "mobileapp", "mobile_app"}:
+        task_type = "android"
+    if task_type not in {"web", "cli", "android"}:
+        task_type = "web"
     env = {
         **os.environ,
         "ARCBENCH_PROJECT_DIR": str(PROJECT_DIR),
@@ -590,6 +565,7 @@ def build_agent_environment() -> dict[str, str]:
         "ARCBENCH_CHECKPOINT_PATH": str(CHECKPOINT_PATH),
         "ARCBENCH_PAUSE_REQUEST_PATH": str(PAUSE_REQUEST_PATH),
         "ARCBENCH_RESUME_REQUEST_PATH": str(RESUME_REQUEST_PATH),
+        "ARCBENCH_TASK_TYPE": task_type or "web",
         "PYTHONPATH": f"{SDK_DIR}:{os.environ.get('PYTHONPATH', '')}" if os.environ.get("PYTHONPATH") else str(SDK_DIR),
     }
     return env

@@ -36,6 +36,12 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("ARCBENCH_OUTPUT_DIR", "."),
         help="Target directory for the generated project.",
     )
+    parser.add_argument(
+        "--type",
+        dest="task_type",
+        default=os.environ.get("ARCBENCH_TASK_TYPE", "web"),
+        help="Task type supplied by ARC-Bench.",
+    )
     return parser.parse_args()
 
 

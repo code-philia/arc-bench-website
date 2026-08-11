@@ -5,7 +5,7 @@ Edit `index.js` and keep it at the zip root. Keep `package.json` at the zip root
 ARC-Bench runs your agent like this:
 
 ```bash
-node index.js /path/to/requirements --output-dir /path/to/output
+node index.js /path/to/requirements --output-dir /path/to/output --type web
 ```
 
 Your agent should read the task requirements, modify the project under `--output-dir`, and exit with code `0` when finished.

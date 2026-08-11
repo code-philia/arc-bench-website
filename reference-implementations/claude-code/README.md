@@ -13,7 +13,7 @@ direct child subtree of `ROOT` at a time.
 ARC-Bench runs your agent like this:
 
 ```bash
-python3 main.py /path/to/requirements --output-dir /path/to/output
+python3 main.py /path/to/requirements --output-dir /path/to/output --type web
 ```
 
 The input directory must contain `requirements.yaml` with `id: ROOT`. The agent copies the

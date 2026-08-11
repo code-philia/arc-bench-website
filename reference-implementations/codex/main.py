@@ -27,6 +27,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Implement an ARC-Bench task with Codex.")
     parser.add_argument("requirement_path", help="Directory containing requirements.yaml.")
     parser.add_argument("--output-dir", required=True, help="Target directory for the generated project.")
+    parser.add_argument(
+        "--type",
+        dest="task_type",
+        default=os.environ.get("ARCBENCH_TASK_TYPE", "web"),
+        help="Task type supplied by ARC-Bench.",
+    )
     return parser.parse_args()
 
 
