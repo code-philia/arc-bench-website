@@ -11,8 +11,11 @@ import type { TicketBookingAccount } from './support/e2e';
 
 type RegistrationOverrides = {
   confirmPassword?: string;
+  email?: string;
   omitPassportNumber?: boolean;
   omitTerms?: boolean;
+  password?: string;
+  username?: string;
 };
 
 async function fillRegistrationForm(
@@ -29,12 +32,12 @@ async function fillRegistrationForm(
   await page.getByLabel(/passport expiration date/i).fill(account.passportExpirationDate);
   await page.getByLabel(/date of birth/i).fill(account.dateOfBirth);
   await page.getByLabel(new RegExp(`^${account.gender}$`, 'i')).check();
-  await page.getByLabel(/^username$/i).fill(account.username);
-  await page.getByLabel(/^password$/i).fill(account.password);
+  await page.getByLabel(/^username$/i).fill(overrides.username ?? account.username);
+  await page.getByLabel(/^password$/i).fill(overrides.password ?? account.password);
   await page
     .getByLabel(/confirm password/i)
-    .fill(overrides.confirmPassword ?? account.password);
-  await page.getByLabel(/email address/i).fill(account.email);
+    .fill(overrides.confirmPassword ?? overrides.password ?? account.password);
+  await page.getByLabel(/email address/i).fill(overrides.email ?? account.email);
   if (!overrides.omitTerms) {
     await page.getByRole('checkbox', { name: /terms of service|privacy policy|agree/i }).check();
   }
@@ -140,6 +143,32 @@ test('REQ-1.1: reject more invalid registration combinations before creating a s
     {
       expected: /match|mismatch|invalid|required|confirm/i,
       overrides: { confirmPassword: 'mismatch-password' },
+    },
+  ];
+
+  for (const currentCase of cases) {
+    const account = uniqueTicketBookingAccount();
+    await fillRegistrationForm(page, account, currentCase.overrides);
+    await page.getByRole('button', { name: /next step/i }).click();
+
+    await expect(page.getByText(currentCase.expected)).toBeVisible();
+    await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
+  }
+});
+
+test('REQ-1.1: reject malformed username, email, or password without signing in', async ({ page }) => {
+  const cases: Array<{ expected: RegExp; overrides: RegistrationOverrides }> = [
+    {
+      expected: /username|required|invalid|format/i,
+      overrides: { username: 'bad username!' },
+    },
+    {
+      expected: /email|required|invalid|format/i,
+      overrides: { email: 'not-an-email' },
+    },
+    {
+      expected: /password|required|invalid|at least|weak/i,
+      overrides: { password: 'short' },
     },
   ];
 

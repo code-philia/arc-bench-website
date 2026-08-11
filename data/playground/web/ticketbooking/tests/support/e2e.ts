@@ -87,8 +87,8 @@ export async function registerAccount(page: Page, account: TicketBookingAccount)
 
 export async function signIn(page: Page, usernameOrEmail: string, password: string): Promise<void> {
   await openLogin(page);
-  await page.getByPlaceholder(/email\/username\/mobile number|username or email/i).fill(usernameOrEmail);
-  await page.getByPlaceholder(/^password$/i).fill(password);
+  await page.getByLabel(/username or email|email\/username\/mobile number/i).fill(usernameOrEmail);
+  await page.getByLabel(/^password$/i).fill(password);
   await page.getByRole('button', { name: /login|sign in/i }).click();
 }
 

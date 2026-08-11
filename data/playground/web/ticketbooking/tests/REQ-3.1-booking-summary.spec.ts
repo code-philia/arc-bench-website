@@ -5,6 +5,7 @@ import {
   openFirstBookableTrain,
   registerAccount,
   searchTrains,
+  signOut,
   uniqueTicketBookingAccount,
 } from './support/e2e';
 
@@ -51,5 +52,22 @@ test('REQ-3.1: display booking summaries for multiple selected trains', async ({
     await expect(page.getByText(currentCase.train)).toBeVisible();
     await expect(page.getByText(currentCase.criteria.from, { exact: false })).toBeVisible();
     await expect(page.getByText(currentCase.criteria.to, { exact: false })).toBeVisible();
+  }
+});
+
+test('REQ-3.1: a signed-out visitor cannot use a selected journey to submit a booking', async ({ page }) => {
+  const account = uniqueTicketBookingAccount();
+  const criteria = { from: 'Shanghai', to: 'Beijing', date: 'Sun, May 31' };
+
+  await registerAccount(page, account);
+  await expectSignedIn(page, account.username);
+  await signOut(page);
+  await searchTrains(page, criteria);
+  await openFirstBookableTrain(page);
+
+  await expect(page.getByText(/sign in|login|required|unauthorized/i)).toBeVisible();
+  const submitBooking = page.getByRole('button', { name: /place order|submit booking/i });
+  if (await submitBooking.count()) {
+    await expect(submitBooking).toBeDisabled();
   }
 });

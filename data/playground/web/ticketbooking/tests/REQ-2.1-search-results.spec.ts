@@ -101,3 +101,14 @@ test('REQ-2.1: block incomplete search input across multiple missing-field combi
     await expect(page.getByRole('button', { name: /search/i })).toBeVisible();
   }
 });
+
+test('REQ-2.1: reject a same-city search without opening a result list', async ({ page }) => {
+  await page.goto(baseUrl());
+  await page.getByLabel(/^from$/i).fill('Shanghai');
+  await page.getByLabel(/^to$/i).fill(' shanghai ');
+  await page.getByLabel(/^date$/i).fill('Sun, May 31');
+  await page.getByRole('button', { name: /search/i }).click();
+
+  await expect(page.getByText(/same|different|required|invalid/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^book$/i })).toHaveCount(0);
+});

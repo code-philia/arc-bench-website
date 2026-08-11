@@ -36,3 +36,5 @@ frontend/public/assets
 ai-video
 pilot
 data/competition/hackathon/*/tests/
+data/playground/web/github/tests/
+data/playground/web/sheet/tests/

@@ -78,6 +78,10 @@ test('REQ-3.2: submit valid passenger information and create a booking record', 
   await page.getByRole('button', { name: /confirm/i }).click();
   await expect(page.getByText(/booking number|order number|success|confirmed/i)).toBeVisible();
   await expect(page.getByText(passenger.name, { exact: false })).toBeVisible();
+  const bookingNumber = await page.getByText(/booking number|order number/i).innerText();
+  await expect(page.getByRole('button', { name: /^confirm$/i })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText(bookingNumber, { exact: true })).toBeVisible();
 });
 
 test('REQ-3.2: create bookings across supported route and seat combinations', async ({ page }) => {
