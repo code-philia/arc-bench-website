@@ -3,7 +3,6 @@ import json
 import zipfile
 from pathlib import Path
 
-from app.core.config import get_settings
 from app.models.requirement import Requirement
 from app.models.submission import Submission
 from app.models.user import User
@@ -13,7 +12,6 @@ from app.services.traceability_seed_builder import TraceabilitySeedBuilder
 
 class WorkspaceAssembler:
     def __init__(self) -> None:
-        self.settings = get_settings()
         self.runtime_paths = RuntimePathService()
         self.traceability_seed_builder = TraceabilitySeedBuilder()
 
@@ -36,10 +34,9 @@ class WorkspaceAssembler:
             archive.extractall(submission_dir)
         self._flatten_single_root(submission_dir)
         requirement_root = Path(requirement.requirements_path).resolve().parent
-        template_source_root = self._resolve_template_source(requirement)
-        if not template_source_root.is_dir():
-            raise FileNotFoundError(f"Task template directory not found: {template_source_root}")
-        shutil.copytree(template_source_root, template_dir, dirs_exist_ok=True)
+        # The output workspace intentionally starts empty. An uploaded agent owns
+        # any starter-template selection and initialization before it writes to
+        # this directory; ARC-Bench only prepares the execution environment.
         self._copy_requirement_workspace(requirement, requirement_root, requirements_dir)
         self._copy_optional_tree(Path(requirement.tests_path), tests_dir)
         self.traceability_seed_builder.write_seed_file(
@@ -55,11 +52,11 @@ class WorkspaceAssembler:
                     "runtime": submission.runtime,
                     "submission_dir": "/workspace/submission",
                     "template_dir": "/workspace/template",
+                    "project_dir": "/workspace/template",
                     "tests_dir": "/workspace/tests",
                     "arc_dir": ".arc",
-                    "project_dir": "/workspace/template",
                     "requirement_dir": "requirements",
-                    "output_dir": ".",
+                    "output_dir": "/workspace/template",
                     "runner_events_path": ".arc/runner-events.jsonl",
                     "traceability_dir": ".arc/traceability",
                     "task": {
@@ -79,14 +76,6 @@ class WorkspaceAssembler:
             encoding="utf-8",
         )
         return workspace_root
-
-    def _resolve_template_source(self, requirement: Requirement) -> Path:
-        normalized = str(requirement.category or "").strip().lower()
-        if normalized == "cli":
-            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
-        if normalized in {"mobile", "android"}:
-            return self.settings.mobile_template_files_root
-        return self.settings.web_template_files_root
 
     @staticmethod
     def _copy_optional_tree(source: Path, destination: Path) -> None:

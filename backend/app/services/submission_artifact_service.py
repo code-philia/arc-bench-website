@@ -222,8 +222,8 @@ class SubmissionArtifactService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             return None
-        template_root = workspace_path / "template"
-        return template_root if template_root.is_dir() else None
+        project_root = workspace_path / "template"
+        return project_root if project_root.is_dir() else None
 
     def _read_traceability_snapshot(self, submission: Submission) -> dict[str, object] | None:
         traceability_dir = self._get_traceability_dir(submission)

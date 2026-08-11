@@ -547,14 +547,14 @@ def get_submission_preview_status(
         submission = service.get_submission(submission_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    template_path = runtime_paths.resolve_existing_path(submission.workspace_path)
-    debug_log = DebugLogService(template_path) if template_path is not None else None
+    workspace_path = runtime_paths.resolve_existing_path(submission.workspace_path)
+    debug_log = DebugLogService(workspace_path) if workspace_path is not None else None
     workspace_head_oid = None
     error = None
-    if template_path is None:
+    if workspace_path is None:
         error = "Submission workspace is not available"
     else:
-        project_root = Path(template_path) / "template"
+        project_root = Path(workspace_path) / "template"
         if not project_root.is_dir():
             error = f"Preview workspace is not available: {project_root}"
         elif not (project_root / ".git").exists():
@@ -606,19 +606,19 @@ def refresh_submission_preview(
         )
     debug_log = DebugLogService(workspace_path)
     debug_log.append("preview", f"HTTP refresh requested for submission {submission.id}")
-    template_path = workspace_path / "template"
-    if not template_path.is_dir():
-        debug_log.append("preview", f"Refresh rejected: preview workspace is not available: {template_path}")
+    project_path = workspace_path / "template"
+    if not project_path.is_dir():
+        debug_log.append("preview", f"Refresh rejected: preview workspace is not available: {project_path}")
         return SubmissionPreviewStatus(
             available=False,
             stale=False,
             preview_url=HostDemoPreviewService.preview_url(),
             workspace_head_oid=None,
             preview_head_oid=None,
-            error=f"Preview workspace is not available: {template_path}",
+            error=f"Preview workspace is not available: {project_path}",
         )
     try:
-        workspace_head_oid = service._run_git(template_path, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
+        workspace_head_oid = service._run_git(project_path, ["rev-parse", "HEAD"]).strip()  # noqa: SLF001
     except RuntimeError as exc:
         error = _normalize_preview_git_error(str(exc))
         debug_log.append("preview", f"Refresh rejected: failed to resolve workspace HEAD: {error}")
@@ -632,7 +632,7 @@ def refresh_submission_preview(
         )
     response_payload = HostDemoPreviewService.refresh(
             submission_id=submission.id,
-            source_template_dir=template_path,
+            source_template_dir=project_path,
             workspace_head_oid=workspace_head_oid,
             debug_log=debug_log,
         )
@@ -693,7 +693,7 @@ def download_workspace_template_bundle(
     service = SubmissionService(db)
     try:
         submission = service.get_submission(submission_id, current_user.id)
-        bundle_path = service.create_template_bundle(submission)
+        bundle_path = service.create_project_bundle(submission)
         return FileResponse(
             bundle_path,
             media_type="application/zip",

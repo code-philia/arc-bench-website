@@ -47,7 +47,6 @@ class CatalogRequirementEntry:
     tests_path: Path
     assets_path: Path
     references_path: Path
-    templates_root: Path
 
 
 class RequirementCatalogService:
@@ -58,14 +57,12 @@ class RequirementCatalogService:
         catalog_name: str,
         requirements_root: Path,
         tests_root: Path,
-        templates_root: Path,
     ):
         self.db = db
         self.settings = get_settings()
         self.catalog_name = catalog_name
         self.requirements_root = requirements_root
         self.tests_root = tests_root
-        self.templates_root = templates_root
 
     @classmethod
     def for_catalog(cls, db: Session, catalog: str) -> "RequirementCatalogService":
@@ -76,7 +73,6 @@ class RequirementCatalogService:
                 catalog_name=catalog,
                 requirements_root=settings.requirements_root,
                 tests_root=settings.tests_root,
-                templates_root=settings.templates_root,
             )
         if catalog == "playground":
             return cls(
@@ -84,13 +80,12 @@ class RequirementCatalogService:
                 catalog_name="playground",
                 requirements_root=settings.playground_requirements_root,
                 tests_root=settings.playground_tests_root,
-                templates_root=settings.playground_templates_root,
             )
         raise ValueError(f"Unknown catalog '{catalog}'")
 
     def scan_entries(self) -> list[CatalogRequirementEntry]:
         rows: list[CatalogRequirementEntry] = []
-        for category, tasks_root, tests_root, templates_root in self._iter_catalog_sources():
+        for category, tasks_root, tests_root in self._iter_catalog_sources():
             if not tasks_root.exists():
                 continue
 
@@ -132,22 +127,20 @@ class RequirementCatalogService:
                         tests_path=tests_path,
                         assets_path=assets_path,
                         references_path=references_path,
-                        templates_root=templates_root,
                     )
                 )
 
         return rows
 
-    def _iter_catalog_sources(self) -> list[tuple[str, Path, Path, Path]]:
+    def _iter_catalog_sources(self) -> list[tuple[str, Path, Path]]:
         if self.catalog_name == "competition":
-            sources: list[tuple[str, Path, Path, Path]] = []
+            sources: list[tuple[str, Path, Path]] = []
             for competition_root in self._competition_roots():
                 sources.append(
                     (
                         self._competition_id(competition_root.name),
                         competition_root,
                         competition_root,
-                        self.settings.web_template_files_root,
                     )
                 )
             return sources
@@ -156,18 +149,10 @@ class RequirementCatalogService:
         if not source_root.is_dir():
             return []
         return [
-            (track_root.name, track_root, track_root, self._template_root_for_task_type(track_root.name))
+            (track_root.name, track_root, track_root)
             for track_root in sorted(source_root.iterdir())
             if track_root.is_dir()
         ]
-
-    def _template_root_for_task_type(self, task_type: str) -> Path:
-        normalized = str(task_type or "").strip().lower()
-        if normalized in {"mobile", "android"}:
-            return self.settings.mobile_template_files_root
-        if normalized == "cli":
-            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
-        return self.settings.web_template_files_root
 
     def _competition_roots(self) -> list[Path]:
         root = self.settings.competition_root

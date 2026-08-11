@@ -666,7 +666,7 @@ class SubmissionService:
             raise ValueError("Submission must be paused or completed before rewinding")
 
         workspace_path, _replay_paths, steps = self._load_demo_replay_steps(submission)
-        project_root = self.get_template_repo_path(submission)
+        project_root = self.get_project_repo_path(submission)
         if project_root is None:
             raise FileNotFoundError("Submission workspace is not available")
         git_dir = project_root / ".git"
@@ -1623,10 +1623,10 @@ class SubmissionService:
         if not self.can_manual_edit(submission):
             raise ValueError("Submission is not in paused manual edit mode")
         manual_edit_state = self.get_manual_edit_state(submission)
-        template_dir = self.get_template_repo_path(submission)
+        project_dir = self.get_template_repo_path(submission)
         dirty_files: list[str] = []
-        if template_dir is not None and (template_dir / ".git").exists():
-            dirty_files = self._parse_git_status_paths(self._run_git(template_dir, ["status", "--porcelain"],))
+        if project_dir is not None and (project_dir / ".git").exists():
+            dirty_files = self._parse_git_status_paths(self._run_git(project_dir, ["status", "--porcelain"],))
         return {
             "message": self._build_manual_edit_commit_message(
                 manual_edit_state["manual_edit_node_id"],
@@ -1640,14 +1640,14 @@ class SubmissionService:
 
     def commit_manual_edit_session(self, submission: Submission) -> dict[str, object]:
         preview = self.build_manual_edit_commit_preview(submission)
-        template_dir = self.get_template_repo_path(submission)
-        if template_dir is None:
+        project_dir = self.get_template_repo_path(submission)
+        if project_dir is None:
             raise FileNotFoundError("Submission workspace is not available")
         dirty_files = list(preview["dirty_files"]) if isinstance(preview.get("dirty_files"), list) else []
         committed = False
         if dirty_files:
-            self._run_git(template_dir, ["add", "."])
-            commit_output = self._run_git(template_dir, ["commit", "-m", str(preview["message"])])
+            self._run_git(project_dir, ["add", "."])
+            commit_output = self._run_git(project_dir, ["commit", "-m", str(preview["message"])])
             committed = bool(commit_output is not None)
             self._append_runner_event(
                 submission,
@@ -2084,9 +2084,9 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")
-        template_dir = workspace_path / "template"
-        if not template_dir.is_dir():
-            raise FileNotFoundError("Template directory is not available")
+        project_dir = workspace_path / "template"
+        if not project_dir.is_dir():
+            raise FileNotFoundError("Project directory is not available")
 
         def walk_dir(path: Path, base_path: Path) -> dict:
             relative_path = path.relative_to(base_path)
@@ -2111,26 +2111,26 @@ class SubmissionService:
 
         try:
             children = []
-            for child in template_dir.iterdir():
+            for child in project_dir.iterdir():
                 if child.name.startswith(".arc"):
                     continue
                 if child.name.startswith(".git"):
                     continue
                 try:
-                    children.append(walk_dir(child, template_dir))
+                    children.append(walk_dir(child, project_dir))
                 except Exception:
                     continue
             return sorted(children, key=lambda x: (not x["is_directory"], x["name"]))
         except Exception as e:
             raise RuntimeError(f"Failed to list workspace files: {e}")
 
-    def create_template_bundle(self, submission: Submission) -> Path:
+    def create_project_bundle(self, submission: Submission) -> Path:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")
-        template_dir = workspace_path / "template"
-        if not template_dir.is_dir():
-            raise FileNotFoundError("Template directory is not available")
+        project_dir = workspace_path / "template"
+        if not project_dir.is_dir():
+            raise FileNotFoundError("Project directory is not available")
 
         bundle_dir = workspace_path / ".arcbench-downloads"
         bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -2140,31 +2140,31 @@ class SubmissionService:
 
         try:
             with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
-                for root, dirnames, filenames in os.walk(template_dir):
+                for root, dirnames, filenames in os.walk(project_dir):
                     root_path = Path(root)
                     dirnames[:] = sorted(
                         dirname
                         for dirname in dirnames
-                        if not self._should_exclude_template_bundle_path(root_path / dirname, template_dir)
+                        if not self._should_exclude_project_bundle_path(root_path / dirname, project_dir)
                     )
                     for filename in sorted(filenames):
                         path = root_path / filename
-                        if self._should_exclude_template_bundle_path(path, template_dir):
+                        if self._should_exclude_project_bundle_path(path, project_dir):
                             continue
                         if not path.is_file():
                             continue
-                        relative_path = path.relative_to(template_dir)
+                        relative_path = path.relative_to(project_dir)
                         archive_name = (PurePosixPath("template") / PurePosixPath(relative_path.as_posix())).as_posix()
                         archive.write(path, archive_name)
         except Exception as exc:
             if bundle_path.exists():
                 bundle_path.unlink()
-            raise RuntimeError(f"Failed to package template directory: {exc}") from exc
+            raise RuntimeError(f"Failed to package project directory: {exc}") from exc
 
         return bundle_path
 
     @staticmethod
-    def _should_exclude_template_bundle_path(path: Path, template_dir: Path) -> bool:
+    def _should_exclude_project_bundle_path(path: Path, project_dir: Path) -> bool:
         excluded_parts = {
             ".arc",
             ".cache",
@@ -2200,7 +2200,7 @@ class SubmissionService:
             "yarn-error.log",
         }
         try:
-            relative_path = path.relative_to(template_dir)
+            relative_path = path.relative_to(project_dir)
         except ValueError:
             return True
         if relative_path.name in excluded_files or relative_path.suffix in {".pyc", ".pyo"}:
@@ -2218,18 +2218,18 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")
-        template_dir = workspace_path / "template"
-        if not template_dir.is_dir():
-            raise FileNotFoundError("Template directory is not available")
+        project_dir = workspace_path / "template"
+        if not project_dir.is_dir():
+            raise FileNotFoundError("Project directory is not available")
 
         normalized_path = self._normalize_relative_path(file_path)
-        target_path = (template_dir / normalized_path).resolve()
-        template_dir_resolved = template_dir.resolve()
+        target_path = (project_dir / normalized_path).resolve()
+        project_dir_resolved = project_dir.resolve()
 
         try:
-            target_path.relative_to(template_dir_resolved)
+            target_path.relative_to(project_dir_resolved)
         except ValueError:
-            raise FileNotFoundError(f"File path outside template directory: {file_path}")
+            raise FileNotFoundError(f"File path outside project directory: {file_path}")
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
         self._write_text_atomic(target_path, content)
@@ -2254,21 +2254,21 @@ class SubmissionService:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")
-        template_dir = workspace_path / "template"
-        if not template_dir.is_dir():
-            raise FileNotFoundError("Template directory is not available")
+        project_dir = workspace_path / "template"
+        if not project_dir.is_dir():
+            raise FileNotFoundError("Project directory is not available")
 
         if not file_path:
             file_path = f"tests/{test_id}.spec.ts"
 
         normalized_path = self._normalize_relative_path(file_path)
-        target_path = (template_dir / normalized_path).resolve()
-        template_dir_resolved = template_dir.resolve()
+        target_path = (project_dir / normalized_path).resolve()
+        project_dir_resolved = project_dir.resolve()
 
         try:
-            target_path.relative_to(template_dir_resolved)
+            target_path.relative_to(project_dir_resolved)
         except ValueError:
-            raise FileNotFoundError(f"File path outside template directory: {file_path}")
+            raise FileNotFoundError(f"File path outside project directory: {file_path}")
 
         test_template = f"""// Test for {req_id}
 // Test ID: {test_id}

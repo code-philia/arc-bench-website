@@ -196,7 +196,7 @@ class UserTaskService:
         yaml_path.write_text(yaml_content, encoding="utf-8")
         markdown_path.write_text(markdown_content, encoding="utf-8")
         self._copy_draft_resources(user, payload.draft_id, task_dir)
-        self._ensure_task_runtime_layout(task_dir, payload.task_type, yaml_content, markdown_content)
+        self._ensure_task_runtime_layout(task_dir, yaml_content, markdown_content)
 
         task = UserTask(
             id=task_id,
@@ -224,7 +224,7 @@ class UserTaskService:
         task_dir = Path(task.yaml_path).parent
         Path(task.yaml_path).write_text(yaml_content, encoding="utf-8")
         Path(task.markdown_path).write_text(markdown_content, encoding="utf-8")
-        self._ensure_task_runtime_layout(task_dir, payload.task_type, yaml_content, markdown_content)
+        self._ensure_task_runtime_layout(task_dir, yaml_content, markdown_content)
 
         task.title = payload.title.strip()
         task.task_type = payload.task_type
@@ -305,7 +305,6 @@ class UserTaskService:
         task_dir = Path(task.yaml_path).parent
         self._ensure_task_runtime_layout(
             task_dir,
-            task.task_type,
             Path(task.yaml_path).read_text(encoding="utf-8"),
             Path(task.markdown_path).read_text(encoding="utf-8"),
         )
@@ -430,27 +429,10 @@ class UserTaskService:
                 continue
             yield source_path
 
-    def _ensure_task_runtime_layout(self, task_dir: Path, task_type: str, yaml_content: str, markdown_content: str) -> None:
+    def _ensure_task_runtime_layout(self, task_dir: Path, yaml_content: str, markdown_content: str) -> None:
         (task_dir / "requirements.yaml").write_text(yaml_content.strip() + "\n", encoding="utf-8")
         (task_dir / "requirements.md").write_text(markdown_content.strip() + "\n", encoding="utf-8")
         (task_dir / "prerequisites.md").write_text("", encoding="utf-8")
         (task_dir / "assets").mkdir(parents=True, exist_ok=True)
         (task_dir / "reference").mkdir(parents=True, exist_ok=True)
         (task_dir / "tests").mkdir(parents=True, exist_ok=True)
-
-        template_dir = task_dir / "template"
-        template_source = self._resolve_template_source(task_type)
-        if template_source is not None and template_source.is_dir():
-            shutil.copytree(template_source, template_dir, dirs_exist_ok=True)
-        else:
-            template_dir.mkdir(parents=True, exist_ok=True)
-
-    def _resolve_template_source(self, task_type: str) -> Path | None:
-        normalized = str(task_type or "").strip().lower()
-        if normalized == "web":
-            return self.settings.web_template_files_root
-        if normalized in {"mobile", "android"}:
-            return self.settings.mobile_template_files_root
-        if normalized == "cli":
-            return self.settings.builtin_arc_agent_source_dir / "templates" / "cli"
-        return None

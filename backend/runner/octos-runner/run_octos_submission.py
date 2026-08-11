@@ -14,11 +14,11 @@ from urllib.request import urlopen
 
 
 WORKSPACE_ROOT = Path("/workspace")
-TEMPLATE_DIR = WORKSPACE_ROOT / "template"
-REQUIREMENTS_DIR = TEMPLATE_DIR / "requirements"
+PROJECT_DIR = WORKSPACE_ROOT / "template"
+REQUIREMENTS_DIR = PROJECT_DIR / "requirements"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
 SPEC_PATH = WORKSPACE_ROOT / "runner-spec.json"
-ARC_DIR = TEMPLATE_DIR / ".arc"
+ARC_DIR = PROJECT_DIR / ".arc"
 STDOUT_PATH = ARC_DIR / "stdout.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 OCTOS_IMAGE_HOME = Path("/opt/arcbench/.octos")
@@ -317,20 +317,20 @@ def build_npm_environment() -> dict[str, str]:
 
 
 def ensure_git_repo(stdout_file, stderr_file) -> None:
-    run_command(["git", "init"], TEMPLATE_DIR, stdout_file, stderr_file, label="git-init")
-    run_command(["git", "config", "user.email", os.environ.get("ARC_GIT_USER_EMAIL", "arcbench@example.local")], TEMPLATE_DIR, stdout_file, stderr_file, label="git-config-email")
-    run_command(["git", "config", "user.name", os.environ.get("ARC_GIT_USER_NAME", "ARC-Bench Octos Runner")], TEMPLATE_DIR, stdout_file, stderr_file, label="git-config-name")
-    run_command(["git", "add", "-A"], TEMPLATE_DIR, stdout_file, stderr_file, label="git-add-initial")
-    run_command(["git", "commit", "-m", "ARC-Bench template baseline"], TEMPLATE_DIR, stdout_file, stderr_file, check=False, label="git-commit-initial")
+    run_command(["git", "init"], PROJECT_DIR, stdout_file, stderr_file, label="git-init")
+    run_command(["git", "config", "user.email", os.environ.get("ARC_GIT_USER_EMAIL", "arcbench@example.local")], PROJECT_DIR, stdout_file, stderr_file, label="git-config-email")
+    run_command(["git", "config", "user.name", os.environ.get("ARC_GIT_USER_NAME", "ARC-Bench Octos Runner")], PROJECT_DIR, stdout_file, stderr_file, label="git-config-name")
+    run_command(["git", "add", "-A"], PROJECT_DIR, stdout_file, stderr_file, label="git-add-initial")
+    run_command(["git", "commit", "-m", "ARC-Bench project baseline"], PROJECT_DIR, stdout_file, stderr_file, check=False, label="git-commit-initial")
 
 
 def commit_octos_changes(stdout_file, stderr_file) -> None:
-    run_command(["git", "add", "-A"], TEMPLATE_DIR, stdout_file, stderr_file, label="git-add-octos")
-    diff = run_command(["git", "diff", "--cached", "--quiet"], TEMPLATE_DIR, stdout_file, stderr_file, check=False, label="git-diff-cached")
+    run_command(["git", "add", "-A"], PROJECT_DIR, stdout_file, stderr_file, label="git-add-octos")
+    diff = run_command(["git", "diff", "--cached", "--quiet"], PROJECT_DIR, stdout_file, stderr_file, check=False, label="git-diff-cached")
     if diff.returncode == 0:
         append_runner_event("start_agent", "Octos completed without staged source changes", status="warning")
         return
-    run_command(["git", "commit", "-m", "Octos: implement ARC-Bench requirements"], TEMPLATE_DIR, stdout_file, stderr_file, label="git-commit-octos")
+    run_command(["git", "commit", "-m", "Octos: implement ARC-Bench requirements"], PROJECT_DIR, stdout_file, stderr_file, label="git-commit-octos")
     append_signal("octos_commit", logs=True, commit_history=True, preview=True)
 
 
@@ -353,8 +353,8 @@ Goal:
 Implement all requirements for {requirement_id} in the existing {category} starter project.
 
 Workspace contract:
-- The current project root is {TEMPLATE_DIR}.
-- Modify only the project under {TEMPLATE_DIR}.
+- The current project root is {PROJECT_DIR}.
+- Modify only the project under {PROJECT_DIR}.
 - Read the requirement tree directly from the relative path `requirements/requirements.yaml`.
 - Inspect any referenced assets under `requirements/` when needed.
 - {verification}
@@ -378,7 +378,7 @@ def build_octos_command(prompt: str) -> list[str]:
         "--sandbox",
         "danger-full-access",
         "--cwd",
-        str(TEMPLATE_DIR),
+        str(PROJECT_DIR),
         "--message",
         prompt,
         "--json",
@@ -394,7 +394,7 @@ def run_octos_agent(stdout_file, stderr_file, spec: dict) -> None:
     append_runner_event("start_agent", "Launching Octos CLI")
     exit_code = run_streaming_command(
         build_octos_command(prompt),
-        TEMPLATE_DIR,
+        PROJECT_DIR,
         stdout_file,
         stderr_file,
         label="octos-chat",
@@ -588,8 +588,8 @@ def run_playwright_tests(stdout_file, stderr_file) -> subprocess.CompletedProces
 
 
 def run_web_template(stdout_file, stderr_file):
-    frontend_dir = TEMPLATE_DIR / "frontend"
-    backend_dir = TEMPLATE_DIR / "backend"
+    frontend_dir = PROJECT_DIR / "frontend"
+    backend_dir = PROJECT_DIR / "backend"
     if not frontend_dir.exists() or not backend_dir.exists():
         raise RuntimeError("web template is incomplete: expected frontend/ and backend/ directories")
     install_node_dependencies(frontend_dir, stdout_file, stderr_file, "frontend")
@@ -637,15 +637,15 @@ def write_synthetic_playwright_report(tests: list[dict]) -> None:
 
 
 def run_cli_template(stdout_file, stderr_file) -> dict:
-    app_dir = TEMPLATE_DIR / "app"
-    tests_dir = TEMPLATE_DIR / "tests"
+    app_dir = PROJECT_DIR / "app"
+    tests_dir = PROJECT_DIR / "tests"
     if not app_dir.exists():
         raise RuntimeError("CLI template is incomplete: expected app/ directory")
 
     cli_env = {
         **os.environ,
         "PYTHONIOENCODING": "utf-8",
-        "PYTHONPATH": str(TEMPLATE_DIR),
+        "PYTHONPATH": str(PROJECT_DIR),
     }
     compile_targets = ["app"]
     if tests_dir.exists():
@@ -654,7 +654,7 @@ def run_cli_template(stdout_file, stderr_file) -> dict:
     append_runner_event("run_tests", "Running CLI compile check")
     compile_result = run_command(
         ["python3", "-m", "compileall", *compile_targets],
-        TEMPLATE_DIR,
+        PROJECT_DIR,
         stdout_file,
         stderr_file,
         check=False,
@@ -674,7 +674,7 @@ def run_cli_template(stdout_file, stderr_file) -> dict:
         append_runner_event("run_tests", "Running CLI unittest suite")
         unittest_result = run_command(
             ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
-            TEMPLATE_DIR,
+            PROJECT_DIR,
             stdout_file,
             stderr_file,
             check=False,

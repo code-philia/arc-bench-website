@@ -24,8 +24,8 @@ class AgentRunnerCommandTests(unittest.TestCase):
         self.runner = load_runner_module()
         self.runner.WORKSPACE_ROOT = self.root
         self.runner.SUBMISSION_DIR = self.root / "submission"
-        self.runner.TEMPLATE_DIR = self.root / "template"
-        self.runner.REQUIREMENTS_DIR = self.runner.TEMPLATE_DIR / "requirements"
+        self.runner.PROJECT_DIR = self.root / "template"
+        self.runner.REQUIREMENTS_DIR = self.runner.PROJECT_DIR / "requirements"
         self.runner.REQUIREMENT_SOURCE_DIR = self.root / "requirements-source"
         self.runner.SPEC_PATH = self.root / "runner-spec.json"
         self.runner.DEBUG_LOG_PATH = self.root / "execution.debug.log"
@@ -44,7 +44,7 @@ class AgentRunnerCommandTests(unittest.TestCase):
                 {
                     "agent_source": agent_source,
                     "runtime": "python",
-                    "output_dir": ".",
+                    "output_dir": str(self.runner.PROJECT_DIR),
                     "task": {"category": "web"},
                 }
             ),
@@ -67,7 +67,7 @@ class AgentRunnerCommandTests(unittest.TestCase):
                 "compile",
                 str(self.runner.REQUIREMENT_SOURCE_DIR),
                 "--output-dir",
-                ".",
+                str(self.runner.PROJECT_DIR),
                 "--type",
                 "web",
                 "--port",
@@ -91,7 +91,7 @@ class AgentRunnerCommandTests(unittest.TestCase):
                 str(self.runner.SUBMISSION_DIR / "main.py"),
                 str(self.runner.REQUIREMENT_SOURCE_DIR),
                 "--output-dir",
-                ".",
+                str(self.runner.PROJECT_DIR),
             ],
         )
 

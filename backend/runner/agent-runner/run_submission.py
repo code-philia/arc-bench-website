@@ -15,12 +15,12 @@ from urllib.request import urlopen
 
 WORKSPACE_ROOT = Path("/workspace")
 SUBMISSION_DIR = WORKSPACE_ROOT / "submission"
-TEMPLATE_DIR = WORKSPACE_ROOT / "template"
-REQUIREMENTS_DIR = TEMPLATE_DIR / "requirements"
+PROJECT_DIR = WORKSPACE_ROOT / "template"
+REQUIREMENTS_DIR = PROJECT_DIR / "requirements"
 TESTS_DIR = WORKSPACE_ROOT / "tests"
 SDK_DIR = WORKSPACE_ROOT / "sdk"
 SPEC_PATH = WORKSPACE_ROOT / "runner-spec.json"
-ARC_DIR = TEMPLATE_DIR / ".arc"
+ARC_DIR = PROJECT_DIR / ".arc"
 STDOUT_PATH = ARC_DIR / "stdout.log"
 DEBUG_LOG_PATH = WORKSPACE_ROOT / "execution.debug.log"
 RUNNER_EVENTS_PATH = ARC_DIR / "runner-events.jsonl"
@@ -56,12 +56,12 @@ TRACEABILITY_TABLES = (
 )
 
 
-def resolve_template_path(path_value: str | None, default_path: Path) -> Path:
+def resolve_project_path(path_value: str | None, default_path: Path) -> Path:
     value = str(path_value or "").strip()
     if not value:
         return default_path
     path = Path(value)
-    return path if path.is_absolute() else TEMPLATE_DIR / path
+    return path if path.is_absolute() else PROJECT_DIR / path
 
 
 def resolve_traceability_dir() -> Path:
@@ -71,7 +71,7 @@ def resolve_traceability_dir() -> Path:
             payload = json.loads(spec_path.read_text(encoding="utf-8"))
             configured = str(payload.get("traceability_dir") or "").strip()
             if configured:
-                return resolve_template_path(configured, TRACEABILITY_DIR)
+                return resolve_project_path(configured, TRACEABILITY_DIR)
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
     return TRACEABILITY_DIR
@@ -403,7 +403,7 @@ def prepare_agent_requirement_source() -> Path:
     source_requirements = REQUIREMENTS_DIR
     source_yaml = source_requirements / "requirements.yaml"
     if not source_yaml.is_file():
-        raise FileNotFoundError(f"Template requirement workspace is missing requirements.yaml: {source_yaml}")
+        raise FileNotFoundError(f"Project requirement workspace is missing requirements.yaml: {source_yaml}")
     if REQUIREMENT_SOURCE_DIR.exists():
         shutil.rmtree(REQUIREMENT_SOURCE_DIR)
     shutil.copytree(source_requirements, REQUIREMENT_SOURCE_DIR)
@@ -577,12 +577,11 @@ def install_agent_dependencies(stdout_file, stderr_file) -> None:
 def build_agent_environment() -> dict[str, str]:
     env = {
         **os.environ,
-        "ARCBENCH_TEMPLATE_DIR": str(TEMPLATE_DIR),
-        "ARCBENCH_PROJECT_DIR": str(TEMPLATE_DIR),
+        "ARCBENCH_PROJECT_DIR": str(PROJECT_DIR),
         "ARCBENCH_REQUIREMENT_DIR": "requirements",
         "ARCBENCH_TASK_DIR": "requirements",
         "ARCBENCH_SUBMISSION_DIR": str(SUBMISSION_DIR),
-        "ARCBENCH_OUTPUT_DIR": str(TEMPLATE_DIR),
+        "ARCBENCH_OUTPUT_DIR": str(PROJECT_DIR),
         "ARCBENCH_ARC_DIR": str(ARC_DIR),
         "ARCBENCH_RUNNER_EVENTS_PATH": str(RUNNER_EVENTS_PATH),
         "ARCBENCH_TRACEABILITY_DIR": str(TRACEABILITY_DIR),
@@ -621,7 +620,7 @@ def run_generation_agent(stdout_file, stderr_file) -> subprocess.CompletedProces
     append_runner_event("start_agent", "Launching generation agent")
     return run_command(
         command,
-        cwd=TEMPLATE_DIR,
+        cwd=PROJECT_DIR,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
         check=False,
@@ -945,15 +944,15 @@ def parse_playwright_results() -> dict:
 
 
 def run_cli_template(stdout_file, stderr_file) -> dict:
-    app_dir = TEMPLATE_DIR / "app"
-    tests_dir = TEMPLATE_DIR / "tests"
+    app_dir = PROJECT_DIR / "app"
+    tests_dir = PROJECT_DIR / "tests"
     if not app_dir.exists():
         raise RuntimeError("CLI template is incomplete: expected app/ directory")
 
     cli_env = {
         **os.environ,
         "PYTHONIOENCODING": "utf-8",
-        "PYTHONPATH": str(TEMPLATE_DIR),
+        "PYTHONPATH": str(PROJECT_DIR),
     }
     compile_targets = ["app"]
     if tests_dir.exists():
@@ -962,7 +961,7 @@ def run_cli_template(stdout_file, stderr_file) -> dict:
     append_runner_event("run_tests", "Running CLI compile check")
     compile_result = run_command(
         ["python3", "-m", "compileall", *compile_targets],
-        cwd=TEMPLATE_DIR,
+        cwd=PROJECT_DIR,
         stdout_file=stdout_file,
         stderr_file=stderr_file,
         check=False,
@@ -983,7 +982,7 @@ def run_cli_template(stdout_file, stderr_file) -> dict:
         append_runner_event("run_tests", "Running CLI unittest suite")
         unittest_result = run_command(
             ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
-            cwd=TEMPLATE_DIR,
+            cwd=PROJECT_DIR,
             stdout_file=stdout_file,
             stderr_file=stderr_file,
             check=False,
@@ -1031,8 +1030,8 @@ def join_thread(thread: threading.Thread | None) -> None:
 
 
 def run_web_template(stdout_file, stderr_file) -> dict:
-    frontend_dir = TEMPLATE_DIR / "frontend"
-    backend_dir = TEMPLATE_DIR / "backend"
+    frontend_dir = PROJECT_DIR / "frontend"
+    backend_dir = PROJECT_DIR / "backend"
     if not frontend_dir.exists() or not backend_dir.exists():
         raise RuntimeError("web template is incomplete: expected frontend/ and backend/ directories")
 
