@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import io
 import re
 import zipfile
@@ -106,6 +107,12 @@ class RequirementCatalogService:
                 assets_path = requirements_dir / "assets"
                 references_path = requirements_dir / "reference"
 
+                if self.catalog_name == "competition":
+                    resolved_paths = self._resolve_competition_requirement_paths(task_dir)
+                    if resolved_paths is None:
+                        continue
+                    requirements_path, prerequisites_path, assets_path, references_path = resolved_paths
+
                 if not requirements_path.exists():
                     continue
 
@@ -131,6 +138,51 @@ class RequirementCatalogService:
                 )
 
         return rows
+
+    def _resolve_competition_requirement_paths(self, task_dir: Path) -> tuple[Path, Path, Path, Path] | None:
+        """Resolve a competition task from its YAML source and render Markdown on demand.
+
+        ``requirements.yaml`` is the source of truth.  The nested layout is the
+        preferred convention, while the root-level layout remains supported for
+        existing competition packs.
+        """
+        candidates = (
+            task_dir / "requirements" / "requirements.yaml",
+            task_dir / "requirements" / "requirements.yml",
+            task_dir / "requirements.yaml",
+            task_dir / "requirements.yml",
+        )
+        requirement_yaml_path = next((path for path in candidates if path.is_file()), None)
+        if requirement_yaml_path is None:
+            return None
+
+        requirements_path = requirement_yaml_path.with_suffix(".md")
+        if not requirements_path.exists():
+            self._render_competition_requirements(requirement_yaml_path)
+
+        source_dir = requirement_yaml_path.parent
+        references_path = source_dir / "reference"
+        assets_path = source_dir / "assets"
+        if source_dir == task_dir:
+            # Existing task packs keep references beside requirements.yaml.
+            references_path = task_dir / "reference"
+            assets_path = task_dir / "assets"
+        return (
+            requirements_path,
+            source_dir / "prerequisites.md",
+            assets_path,
+            references_path,
+        )
+
+    @staticmethod
+    def _render_competition_requirements(requirement_yaml_path: Path) -> None:
+        script_path = Path(__file__).resolve().parents[3] / "scripts" / "render_competition_requirements.py"
+        spec = importlib.util.spec_from_file_location("arcbench_competition_requirement_renderer", script_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Unable to load competition requirement renderer: {script_path}")
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        renderer.convert_file(requirement_yaml_path)
 
     def _iter_catalog_sources(self) -> list[tuple[str, Path, Path]]:
         if self.catalog_name == "competition":
