@@ -18,11 +18,13 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
-from app.models.submission import Submission
+from app.models.run import Run as Submission
+from app.models.submission import Submission as AgentSubmission
 from app.models.user import User
 from app.schemas.submission import (
     StepState,
     SubmissionDetail,
+    RunSummary,
     SubmissionRunnerEvent,
     SubmissionSummary,
     SubmissionVisualEvent,
@@ -78,7 +80,7 @@ DEFAULT_STEPS = [
 DEMO_BASE_TREE_SENTINEL = "__arcbench_base_tree__"
 
 
-class SubmissionService:
+class RunService:
     def __init__(self, db: Session):
         self.db = db
         self.settings = get_settings()
@@ -92,7 +94,7 @@ class SubmissionService:
             raise LookupError(f"User '{user_id}' not found")
         return user
 
-    def create_submission(
+    def _legacy_create_mixed_submission(
         self,
         requirement_id: str | None,
         runtime: RuntimeType,
@@ -108,7 +110,7 @@ class SubmissionService:
         user = self._get_submission_user(user_id)
         normalized_competition_id = (competition_id or "").strip().lower()
         if catalog == "competition" and normalized_competition_id and not requirement_id:
-            return self.create_competition_submission(
+            return self._legacy_create_mixed_competition_submission(
                 competition_id=normalized_competition_id,
                 runtime=runtime,
                 user=user,
@@ -477,8 +479,14 @@ class SubmissionService:
         submission.started_at = None
         submission.finished_at = None
         submission.score = None
+        submission.test_pass_rate = None
         submission.passed_count = 0
         submission.failed_count = 0
+        submission.run_duration_seconds = None
+        submission.token_cost_usd = None
+        submission.feature_implemented_count = 0
+        submission.feature_total_count = 0
+        submission.feature_implementation_rate = None
         submission.stdout_path = None
         submission.stderr_path = None
         submission.result_path = None
@@ -569,6 +577,11 @@ class SubmissionService:
         self.update_steps(submission, self.build_cancelled_step_states(active_step, completed))
         submission.status = SubmissionStatus.CANCELLED.value
         submission.finished_at = datetime.utcnow()
+        submission.run_duration_seconds = (
+            max(0, int((submission.finished_at - submission.started_at).total_seconds()))
+            if submission.started_at is not None
+            else None
+        )
         submission.failure_reason = "Run cancelled by user"
         self.db.add(submission)
         self.db.commit()
@@ -652,7 +665,7 @@ class SubmissionService:
         if not submission_dir.is_dir():
             raise FileNotFoundError("Built-in ARC source workspace is not available")
 
-        archive_path = Path(submission.archive_path)
+        archive_path = Path(submission.agent_archive_path)
         self._write_builtin_arc_agent_archive(archive_path)
         shutil.rmtree(submission_dir)
         submission_dir.mkdir(parents=True, exist_ok=True)
@@ -864,7 +877,7 @@ class SubmissionService:
             candidate_paths = normalized_members
 
         root_files = {path.as_posix() for path in candidate_paths if len(path.parts) == 1}
-        required_files = SubmissionService._required_agent_root_files(runtime)
+        required_files = RunService._required_agent_root_files(runtime)
         missing = [name for name in required_files if name not in root_files]
         if missing:
             raise ValueError(f"Uploaded zip must include {', '.join(missing)} at the archive root")
@@ -953,12 +966,39 @@ if __name__ == "__main__":
         parts = set(relative_path.parts)
         return bool(parts & excluded_parts) or relative_path.name in excluded_files or relative_path.suffix == ".pyc"
 
-    def list_submissions(self, user_id: str, requirement_id: str | None = None) -> list[SubmissionSummary]:
+    def list_submissions(self, user_id: str, requirement_id: str | None = None) -> list[RunSummary]:
         query = select(Submission).where(Submission.user_id == user_id).order_by(desc(Submission.created_at))
         if requirement_id:
             query = query.where(Submission.requirement_id == requirement_id)
         rows = self.db.scalars(query).all()
-        return [SubmissionSummary.model_validate(row, from_attributes=True) for row in rows]
+        return [self.to_summary(row) for row in rows]
+
+    def to_summary(self, run: Submission) -> RunSummary:
+        source = self.db.get(AgentSubmission, run.submission_id)
+        return RunSummary(
+            id=run.id,
+            submission_id=run.submission_id,
+            display_name=source.display_name if source else run.submission_display_name,
+            model_name=source.model_name if source else run.model_name,
+            original_filename=source.original_filename if source else (run.original_filename or "agent.zip"),
+            requirement_id=run.requirement_id,
+            runtime=run.runtime,
+            agent_source=run.agent_source,
+            status=run.status,
+            score=run.score,
+            test_pass_rate=run.test_pass_rate,
+            passed_count=run.passed_count,
+            failed_count=run.failed_count,
+            run_duration_seconds=run.run_duration_seconds,
+            token_cost_usd=run.token_cost_usd,
+            feature_implemented_count=run.feature_implemented_count,
+            feature_total_count=run.feature_total_count,
+            feature_implementation_rate=run.feature_implementation_rate,
+            created_at=run.created_at,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+            failure_reason=run.failure_reason,
+        )
 
     def get_submission(self, submission_id: str, user_id: str | None = None) -> Submission:
         submission = self.db.get(Submission, submission_id)
@@ -1004,7 +1044,7 @@ if __name__ == "__main__":
     def _remove_submission_runtime_directory(submission_root: Path) -> None:
         for attempt in range(3):
             try:
-                shutil.rmtree(submission_root, onexc=SubmissionService._clear_readonly_for_removal)
+                shutil.rmtree(submission_root, onexc=RunService._clear_readonly_for_removal)
                 return
             except FileNotFoundError:
                 return
@@ -1020,7 +1060,7 @@ if __name__ == "__main__":
         os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
         remove_func(path)
 
-    def create_competition_submission(
+    def _legacy_create_mixed_competition_submission(
         self,
         *,
         competition_id: str,
@@ -1077,12 +1117,21 @@ if __name__ == "__main__":
         self.db.refresh(submission)
         return submission
 
-    def clone_submission_for_rerun(self, submission_id: str, user_id: str, *, requirement_id: str) -> Submission:
+    def _legacy_clone_mixed_submission_for_rerun(self, submission_id: str, user_id: str, *, requirement_id: str) -> Submission:
         source = self.get_submission(submission_id, user_id)
         user = self._get_submission_user(user_id)
         source_competition_id = source.requirement_id.removesuffix("--__agent__")
         if source.status != SubmissionStatus.READY.value or source_competition_id == source.requirement_id:
             raise ValueError("Only a saved competition submission can be used to start a task run")
+        latest_snapshot_id = self.db.scalar(
+            select(Submission.id)
+            .where(Submission.user_id == user_id)
+            .where(Submission.requirement_id == f"{source_competition_id}--__agent__")
+            .order_by(desc(Submission.created_at))
+            .limit(1)
+        )
+        if latest_snapshot_id != source.id:
+            raise ValueError("Runs must use the latest saved agent submission for this competition")
         if not requirement_id.startswith(f"{source_competition_id}--") or requirement_id.endswith("--__agent__"):
             raise ValueError("The selected submission does not belong to this competition task")
         RequirementCatalogService.for_catalog(self.db, "competition").sync_to_db(requirement_id)
@@ -1102,6 +1151,7 @@ if __name__ == "__main__":
             user_id=user_id,
             display_name=source.display_name,
             model_name=source.model_name,
+            competition_submission_id=source.id,
             requirement_id=requirement_id,
             runtime=source.runtime,
             agent_source=source.agent_source,
@@ -1116,6 +1166,7 @@ if __name__ == "__main__":
         return rerun
 
     def to_detail(self, submission: Submission) -> SubmissionDetail:
+        source = self.db.get(AgentSubmission, submission.submission_id)
         events = self.read_events(submission)
         steps = [StepState.model_validate(step) for step in json.loads(submission.steps_json or "[]")]
         steps = self.attach_step_logs(steps, events)
@@ -1126,16 +1177,23 @@ if __name__ == "__main__":
         manual_edit_state = self.get_manual_edit_state(submission)
         return SubmissionDetail(
             id=submission.id,
-            display_name=submission.display_name,
-            model_name=submission.model_name,
+            submission_id=submission.submission_id,
+            display_name=source.display_name if source else submission.submission_display_name,
+            model_name=source.model_name if source else submission.model_name,
+            original_filename=source.original_filename if source else (submission.original_filename or "agent.zip"),
             requirement_id=submission.requirement_id,
             runtime=submission.runtime,
             agent_source=submission.agent_source,
-            original_filename=submission.original_filename,
             status=submission.status,
             score=submission.score,
+            test_pass_rate=submission.test_pass_rate,
             passed_count=submission.passed_count,
             failed_count=submission.failed_count,
+            run_duration_seconds=submission.run_duration_seconds,
+            token_cost_usd=submission.token_cost_usd,
+            feature_implemented_count=submission.feature_implemented_count,
+            feature_total_count=submission.feature_total_count,
+            feature_implementation_rate=submission.feature_implementation_rate,
             created_at=submission.created_at,
             started_at=submission.started_at,
             finished_at=submission.finished_at,
@@ -1448,12 +1506,28 @@ if __name__ == "__main__":
         stderr_path: Path | None,
         result_path: Path | None,
         failure_reason: str | None = None,
+        test_pass_rate: float | None = None,
+        feature_implemented_count: int = 0,
+        feature_total_count: int = 0,
+        feature_implementation_rate: float | None = None,
     ) -> None:
         submission.status = status.value
         submission.finished_at = datetime.utcnow()
         submission.passed_count = passed_count
         submission.failed_count = failed_count
         submission.score = score
+        submission.test_pass_rate = test_pass_rate if test_pass_rate is not None else score
+        submission.run_duration_seconds = (
+            max(0, int((submission.finished_at - submission.started_at).total_seconds()))
+            if submission.started_at is not None
+            else None
+        )
+        # score remains the backwards-compatible test pass-rate field.
+        submission.feature_implemented_count = max(0, feature_implemented_count)
+        submission.feature_total_count = max(0, feature_total_count)
+        submission.feature_implementation_rate = (
+            feature_implementation_rate if feature_implementation_rate is not None else 0.0
+        )
         submission.stdout_path = str(stdout_path) if stdout_path else None
         submission.stderr_path = str(stderr_path) if stderr_path else None
         submission.result_path = str(result_path) if result_path else None
@@ -1482,7 +1556,7 @@ if __name__ == "__main__":
     def _create_run_notification(self, submission: Submission, kind: str, title: str, body: str) -> None:
         NotificationService(self.db).create_once(
             user_id=submission.user_id,
-            submission_id=submission.id,
+            run_id=submission.id,
             kind=kind,
             title=title,
             body=body,
@@ -1901,8 +1975,14 @@ if __name__ == "__main__":
         submission.started_at = None
         submission.finished_at = None
         submission.score = None
+        submission.test_pass_rate = None
         submission.passed_count = 0
         submission.failed_count = 0
+        submission.run_duration_seconds = None
+        submission.token_cost_usd = None
+        submission.feature_implemented_count = 0
+        submission.feature_total_count = 0
+        submission.feature_implementation_rate = None
         submission.stdout_path = None
         submission.stderr_path = None
         submission.result_path = None
@@ -1954,11 +2034,11 @@ if __name__ == "__main__":
 
     @staticmethod
     def _write_text_atomic(path: Path, content: str) -> None:
-        SubmissionService._write_atomic_bytes(path, content.encode("utf-8"))
+        RunService._write_atomic_bytes(path, content.encode("utf-8"))
 
     @staticmethod
     def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
-        SubmissionService._write_atomic_bytes(
+        RunService._write_atomic_bytes(
             path,
             (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
         )
@@ -1977,7 +2057,7 @@ if __name__ == "__main__":
 
     @staticmethod
     def _write_json_table(path: Path, rows: dict[str, dict]) -> None:
-        SubmissionService._write_json_atomic(path, dict(sorted(rows.items())))
+        RunService._write_json_atomic(path, dict(sorted(rows.items())))
 
     def _write_traceability_tables_from_seed(self, traceability_dir: Path, seed: dict[str, list[dict]]) -> None:
         requirements = {
@@ -2090,7 +2170,7 @@ if __name__ == "__main__":
         for step in steps:
             existing_logs = list(step.logs or [])
             new_logs = [
-                SubmissionService.format_runner_event_log_line(event)
+                RunService.format_runner_event_log_line(event)
                 for event in events
                 if event.get("step_key") == step.key
             ]

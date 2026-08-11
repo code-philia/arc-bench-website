@@ -4,12 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
+from app.api.deps import require_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.requirement import (
     BenchmarkDetail,
     BenchmarkSummary,
     CompetitionDetail,
     CompetitionLeaderboardEntry,
+    CompetitionSubmissionHistoryEntry,
     CompetitionSummary,
     RequirementDetail,
     RequirementTests,
@@ -48,6 +51,19 @@ def get_competition_leaderboard(
 ) -> list[CompetitionLeaderboardEntry]:
     service = RequirementCatalogService.for_catalog(db, "competition")
     return service.list_competition_leaderboard(track, competition_id=competition_id)
+
+
+@competition_router.get("/{competition_id}/submissions", response_model=list[CompetitionSubmissionHistoryEntry])
+def get_competition_submission_history(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> list[CompetitionSubmissionHistoryEntry]:
+    service = RequirementCatalogService.for_catalog(db, "competition")
+    try:
+        return service.list_competition_submission_history(competition_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @competition_router.get("/{competition_id}/starter-agent")

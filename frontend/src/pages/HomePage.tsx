@@ -222,7 +222,7 @@ export default function HomePage() {
   useEffect(() => {
     api.listRequirements().then(setRequirements).catch(() => setRequirements([]));
     api.listCompetitions().then(setCompetitions).catch(() => setCompetitions([]));
-    api.listSubmissions().then((items) => setSubmissions(items.slice(0, 4))).catch(() => setSubmissions([]));
+    api.listRuns().then((items) => setSubmissions(items.slice(0, 4))).catch(() => setSubmissions([]));
   }, []);
 
   const webRequirementCount = requirements.filter((item) => item.category === "web").length;

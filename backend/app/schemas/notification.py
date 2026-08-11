@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class NotificationItem(BaseModel):
     id: str
-    submission_id: str | None
+    run_id: str | None
     kind: str
     title: str
     body: str

@@ -38,8 +38,8 @@ export default function NotificationsPage() {
         return nextItems;
       });
     }
-    if (item.submission_id) {
-      navigate(`/runs/${item.submission_id}`);
+    if (item.run_id) {
+      navigate(`/runs/${item.run_id}`);
     }
   };
 

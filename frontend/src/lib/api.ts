@@ -1,8 +1,10 @@
 import type {
   AuthResponse,
+  AgentSubmissionSummary,
   BenchmarkDetail,
   BenchmarkSummary,
   CompetitionLeaderboardEntry,
+  CompetitionSubmissionHistoryEntry,
   CompetitionDetail,
   CompetitionSummary,
   RequirementDetail,
@@ -165,50 +167,60 @@ export const api = {
   },
   listSubmissions(requirementId?: string) {
     const query = requirementId ? `?requirement_id=${encodeURIComponent(requirementId)}` : "";
-    return request<SubmissionSummary[]>(`/submissions${query}`);
+    return request<AgentSubmissionSummary[]>(`/submissions${query}`);
+  },
+  listRuns(requirementId?: string, submissionId?: string) {
+    const params = new URLSearchParams();
+    if (requirementId) params.set("requirement_id", requirementId);
+    if (submissionId) params.set("submission_id", submissionId);
+    const query = params.toString();
+    return request<SubmissionSummary[]>(`/runs${query ? `?${query}` : ""}`);
+  },
+  getCompetitionSubmissionHistory(competitionId: string) {
+    return request<CompetitionSubmissionHistoryEntry[]>(`/competitions/${competitionId}/submissions`);
   },
   getSubmission(submissionId: string) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}`);
+    return request<SubmissionDetail>(`/runs/${submissionId}`);
   },
   pauseSubmission(submissionId: string) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}/pause`, {
+    return request<SubmissionDetail>(`/runs/${submissionId}/pause`, {
       method: "POST",
     });
   },
   resumeSubmission(submissionId: string) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}/resume`, {
+    return request<SubmissionDetail>(`/runs/${submissionId}/resume`, {
       method: "POST",
     });
   },
   continueSubmission(submissionId: string) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}/continue`, {
+    return request<SubmissionDetail>(`/runs/${submissionId}/continue`, {
       method: "POST",
     });
   },
   getManualEditCommitPreview(submissionId: string) {
-    return request<SubmissionManualEditCommitPreview>(`/submissions/${submissionId}/manual-edit/commit-preview`, {
+    return request<SubmissionManualEditCommitPreview>(`/runs/${submissionId}/manual-edit/commit-preview`, {
       method: "POST",
     });
   },
   rewindSubmission(submissionId: string, payload: { commit_oid: string }) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}/rewind`, {
+    return request<SubmissionDetail>(`/runs/${submissionId}/rewind`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
   getSubmissionEditableTask(submissionId: string) {
-    return request<SubmissionEditableTaskPayload>(`/submissions/${submissionId}/editable-task`);
+    return request<SubmissionEditableTaskPayload>(`/runs/${submissionId}/editable-task`);
   },
   updateSubmissionEditableTask(submissionId: string, payload: SubmissionEditableTaskPayload) {
-    return request<{ detail: string }>(`/submissions/${submissionId}/editable-task`, {
+    return request<{ detail: string }>(`/runs/${submissionId}/editable-task`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
   getSubmissionTaskAssets(submissionId: string): SubmissionTaskAssets {
     return {
-      assets_base_url: `${API_BASE}/submissions/${submissionId}/requirements-assets/assets/`,
-      references_base_url: `${API_BASE}/submissions/${submissionId}/requirements-assets/references/`,
+      assets_base_url: `${API_BASE}/runs/${submissionId}/requirements-assets/assets/`,
+      references_base_url: `${API_BASE}/runs/${submissionId}/requirements-assets/references/`,
     };
   },
   getSubmissionLogs(submissionId: string, cursor?: { logOffset?: number; afterEventId?: string | null }) {
@@ -216,7 +228,7 @@ export const api = {
     if (cursor?.logOffset !== undefined) params.set("log_offset", String(cursor.logOffset));
     if (cursor?.afterEventId) params.set("after_event_id", cursor.afterEventId);
     const query = params.toString();
-    return request<SubmissionLogs>(`/submissions/${submissionId}/logs${query ? `?${query}` : ""}`);
+    return request<SubmissionLogs>(`/runs/${submissionId}/logs${query ? `?${query}` : ""}`);
   },
   listNotifications() {
     return request<NotificationList>("/notifications");
@@ -234,22 +246,22 @@ export const api = {
     return request<NotificationList>("/notifications/clear", { method: "DELETE" });
   },
   cancelSubmission(submissionId: string) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}/cancel`, {
+    return request<SubmissionDetail>(`/runs/${submissionId}/cancel`, {
       method: "POST",
     });
   },
   getSubmissionTraceability(submissionId: string, nodeId: string) {
     return request<SubmissionTraceabilityPayload>(
-      `/submissions/${submissionId}/traceability?node_id=${encodeURIComponent(nodeId)}`,
+      `/runs/${submissionId}/traceability?node_id=${encodeURIComponent(nodeId)}`,
     );
   },
   getSubmissionAllTraceability(submissionId: string) {
     return request<SubmissionTraceabilityPayload>(
-      `/submissions/${submissionId}/traceability?node_id=__all__`,
+      `/runs/${submissionId}/traceability?node_id=__all__`,
     );
   },
   getSubmissionCommitHistory(submissionId: string) {
-    return request<SubmissionCommitHistoryPayload>(`/submissions/${submissionId}/commit-history`);
+    return request<SubmissionCommitHistoryPayload>(`/runs/${submissionId}/commit-history`);
   },
   getSubmissionSource(
     submissionId: string,
@@ -268,10 +280,10 @@ export const api = {
     if (payload.commitOid && payload.commitOid.trim()) {
       params.set("commit_oid", payload.commitOid.trim());
     }
-    return request<SubmissionSourcePayload>(`/submissions/${submissionId}/source?${params.toString()}`);
+    return request<SubmissionSourcePayload>(`/runs/${submissionId}/source?${params.toString()}`);
   },
   getSubmissionPreviewStatus(submissionId: string) {
-    return request<SubmissionPreviewStatus>(`/submissions/${submissionId}/preview/status`);
+    return request<SubmissionPreviewStatus>(`/runs/${submissionId}/preview/status`);
   },
   connectSubmissionEvents(
     submissionId: string,
@@ -287,7 +299,7 @@ export const api = {
     }
     const query = params.toString();
     const source = new EventSource(
-      `${API_BASE}/submissions/${submissionId}/events${query ? `?${query}` : ""}`,
+      `${API_BASE}/runs/${submissionId}/events${query ? `?${query}` : ""}`,
       { withCredentials: true },
     );
     source.addEventListener("submission-update", (rawEvent) => {
@@ -304,7 +316,7 @@ export const api = {
     return source;
   },
   refreshSubmissionPreview(submissionId: string) {
-    return request<SubmissionPreviewStatus>(`/submissions/${submissionId}/preview/refresh`, {
+    return request<SubmissionPreviewStatus>(`/runs/${submissionId}/preview/refresh`, {
       method: "POST",
     });
   },
@@ -341,26 +353,35 @@ export const api = {
     if (payload.file) {
       form.append("file", payload.file);
     }
-    return request<{ submission: SubmissionSummary }>("/submissions", {
+    return request<{ submission: AgentSubmissionSummary }>("/submissions", {
       method: "POST",
       body: form,
     });
   },
+  createRun(submissionId: string, requirementId?: string) {
+    const form = new FormData();
+    form.append("submission_id", submissionId);
+    if (requirementId) form.append("requirement_id", requirementId);
+    return request<{ run: SubmissionSummary }>("/runs", { method: "POST", body: form });
+  },
   startSubmission(submissionId: string) {
-    return request<SubmissionDetail>(`/submissions/${submissionId}/start`, {
+    return request<SubmissionDetail>(`/runs/${submissionId}/start`, {
       method: "POST",
     });
   },
   rerunSubmission(submissionId: string, requirementId: string) {
     const form = new FormData();
     form.append("requirement_id", requirementId);
-    return request<{ submission: SubmissionSummary }>(`/submissions/${submissionId}/rerun`, {
+    return request<{ run: SubmissionSummary }>(`/runs/${submissionId}/rerun`, {
       method: "POST",
       body: form,
     });
   },
   deleteSubmission(submissionId: string) {
     return request<void>(`/submissions/${submissionId}`, { method: "DELETE" });
+  },
+  deleteRun(runId: string) {
+    return request<void>(`/runs/${runId}`, { method: "DELETE" });
   },
   async downloadSubmissionArchive(submissionId: string) {
     const response = await fetch(`${API_BASE}/submissions/${submissionId}/archive`, { credentials: "include" });
@@ -378,11 +399,11 @@ export const api = {
   },
 
   getWorkspaceFiles(submissionId: string) {
-    return request<WorkspaceFileListPayload>(`/submissions/${submissionId}/workspace/files`);
+    return request<WorkspaceFileListPayload>(`/runs/${submissionId}/workspace/files`);
   },
 
   async downloadSubmissionTemplateBundle(submissionId: string) {
-    const response = await fetch(`${API_BASE}/submissions/${submissionId}/workspace/template-bundle`, {
+    const response = await fetch(`${API_BASE}/runs/${submissionId}/workspace/template-bundle`, {
       credentials: "include",
     });
     if (!response.ok) {
@@ -397,14 +418,14 @@ export const api = {
   },
 
   updateWorkspaceFile(submissionId: string, payload: FileUpdatePayload) {
-    return request<{ detail: string }>(`/submissions/${submissionId}/workspace/files`, {
+    return request<{ detail: string }>(`/runs/${submissionId}/workspace/files`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
   createTest(submissionId: string, payload: TestCreatePayload) {
-    return request<{ detail: string; file_path: string }>(`/submissions/${submissionId}/workspace/tests`, {
+    return request<{ detail: string; file_path: string }>(`/runs/${submissionId}/workspace/tests`, {
       method: "POST",
       body: JSON.stringify(payload),
     });

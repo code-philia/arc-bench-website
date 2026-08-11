@@ -158,7 +158,8 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
         displayName: QUICK_START_DISPLAY_NAME,
         modelName: QUICK_START_MODEL_NAME,
       });
-      const started = await api.startSubmission(created.submission.id);
+      const createdRun = await api.createRun(created.submission.id, QUICK_START_REQUIREMENT_ID);
+      const started = await api.startSubmission(createdRun.run.id);
       setDemoSubmissionId(started.id);
       setCanvasDemo({
         active: true,

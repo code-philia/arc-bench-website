@@ -23,6 +23,7 @@ from app.schemas.submission import (
     SubmissionTraceabilityPayload,
     SubmissionManualEditCommitPreview,
     SubmissionRerunResponse,
+    RunSummary,
     WorkspaceFileListPayload,
     FileUpdatePayload,
     TestCreatePayload,
@@ -36,25 +37,31 @@ from app.services.runtime_path_service import RuntimePathService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
-from app.services.submission_service import SubmissionService
+from app.services.submission_service import RunService
+from app.services.agent_submission_service import AgentSubmissionService
 
 
-router = APIRouter(prefix="/submissions", tags=["submissions"])
+submission_router = APIRouter(prefix="/submissions", tags=["submissions"])
+run_router = APIRouter(prefix="/runs", tags=["runs"])
+# Remaining detail, logs, workspace, and lifecycle endpoints are all Run
+# endpoints. Keep this local alias while their function names are migrated.
+router = run_router
+SubmissionService = RunService
 executor = ThreadPoolExecutor(max_workers=2)
 runtime_paths = RuntimePathService()
 artifact_service = SubmissionArtifactService()
 
 
-@router.get("", response_model=list[SubmissionSummary])
+@submission_router.get("", response_model=list[SubmissionSummary])
 def list_submissions(
     requirement_id: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> list[SubmissionSummary]:
-    return SubmissionService(db).list_submissions(current_user.id, requirement_id=requirement_id)
+    return [SubmissionSummary.model_validate(item, from_attributes=True) for item in AgentSubmissionService(db).list(current_user.id, requirement_id=requirement_id)]
 
 
-@router.post("", response_model=SubmissionCreateResponse)
+@submission_router.post("", response_model=SubmissionCreateResponse)
 def create_submission(
     requirement_id: str | None = Form(None),
     competition_id: str | None = Form(None),
@@ -69,17 +76,17 @@ def create_submission(
     current_user: User = Depends(require_current_user),
 ) -> SubmissionCreateResponse:
     try:
-        submission = SubmissionService(db).create_submission(
-            requirement_id,
-            runtime,
+        submission = AgentSubmissionService(db).create(
             user_id=current_user.id,
+            requirement_id=requirement_id,
+            competition_id=competition_id,
+            runtime=runtime,
             upload=file,
             catalog=catalog,
             display_name=display_name,
             model_name=model_name,
             task_type=task_type,
             agent_source=agent_source,
-            competition_id=competition_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -90,14 +97,73 @@ def create_submission(
     return SubmissionCreateResponse(submission=SubmissionSummary.model_validate(submission, from_attributes=True))
 
 
-@router.post("/{submission_id}/start", response_model=SubmissionDetail)
+@submission_router.delete("/{submission_id}", status_code=204)
+def delete_submission_snapshot(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> None:
+    try:
+        AgentSubmissionService(db).delete(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@submission_router.get("/{submission_id}/archive")
+def download_submission_snapshot_archive(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> FileResponse:
+    try:
+        submission = AgentSubmissionService(db).get(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    archive_path = Path(submission.archive_path)
+    if not archive_path.is_file():
+        raise HTTPException(status_code=404, detail="Submission archive is not available")
+    return FileResponse(archive_path, media_type="application/zip", filename=submission.original_filename or "agent.zip")
+
+
+@run_router.post("", response_model=SubmissionRerunResponse)
+def create_run(
+    submission_id: str = Form(...),
+    requirement_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> SubmissionRerunResponse:
+    try:
+        run = AgentSubmissionService(db).create_run(submission_id, current_user.id, requirement_id=requirement_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return SubmissionRerunResponse(run=RunService(db).to_summary(run))
+
+
+@run_router.get("", response_model=list[RunSummary])
+def list_runs(
+    requirement_id: str | None = None,
+    submission_id: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> list[RunSummary]:
+    runs = RunService(db).list_submissions(current_user.id, requirement_id=requirement_id)
+    if submission_id:
+        runs = [run for run in runs if run.submission_id == submission_id]
+    return runs
+
+
+@run_router.post("/{submission_id}/start", response_model=SubmissionDetail)
 def start_submission(
     submission_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionDetail:
-    service = SubmissionService(db)
+    service = RunService(db)
     try:
         submission = service.get_submission(submission_id, current_user.id)
     except LookupError as exc:
@@ -110,23 +176,27 @@ def start_submission(
     return service.to_detail(submission)
 
 
-@router.post("/{submission_id}/rerun", response_model=SubmissionRerunResponse)
+@run_router.post("/{submission_id}/rerun", response_model=SubmissionRerunResponse)
 def rerun_submission(
     submission_id: str,
     requirement_id: str = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionRerunResponse:
-    service = SubmissionService(db)
     try:
-        submission = service.clone_submission_for_rerun(submission_id, current_user.id, requirement_id=requirement_id)
+        source_run = RunService(db).get_submission(submission_id, current_user.id)
+        submission = AgentSubmissionService(db).create_run(
+            source_run.submission_id,
+            current_user.id,
+            requirement_id=requirement_id,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return SubmissionRerunResponse(submission=SubmissionSummary.model_validate(submission, from_attributes=True))
+    return SubmissionRerunResponse(run=RunService(db).to_summary(submission))
 
 
 @router.delete("/{submission_id}", status_code=204)
@@ -157,10 +227,10 @@ def download_submission_archive(
         submission = service.get_submission(submission_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    archive_path = Path(submission.archive_path)
+    archive_path = Path(submission.agent_archive_path)
     if not archive_path.is_file():
         raise HTTPException(status_code=404, detail="The uploaded agent archive is no longer available")
-    return FileResponse(archive_path, media_type="application/zip", filename=submission.original_filename)
+    return FileResponse(archive_path, media_type="application/zip", filename=submission.original_filename or "agent.zip")
 
 
 @router.post("/{submission_id}/pause", response_model=SubmissionDetail)

@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 
 from app.models.requirement import Requirement
+from app.models.run import Run
 from app.models.submission import Submission
 from app.models.user import User
 from app.services.runtime_path_service import RuntimePathService
@@ -15,8 +16,8 @@ class WorkspaceAssembler:
         self.runtime_paths = RuntimePathService()
         self.traceability_seed_builder = TraceabilitySeedBuilder()
 
-    def assemble(self, submission: Submission, requirement: Requirement, user: User) -> Path:
-        workspace_root = self.runtime_paths.get_workspace_root(submission, username=user.username)
+    def assemble(self, run: Run, submission: Submission, requirement: Requirement, user: User) -> Path:
+        workspace_root = self.runtime_paths.get_workspace_root(run, username=user.username)
         if workspace_root.exists():
             shutil.rmtree(workspace_root)
         submission_dir = workspace_root / "submission"
@@ -30,7 +31,7 @@ class WorkspaceAssembler:
         tests_dir.mkdir(parents=True, exist_ok=True)
         arc_dir.mkdir(parents=True, exist_ok=True)
 
-        with zipfile.ZipFile(submission.archive_path, "r") as archive:
+        with zipfile.ZipFile(run.agent_archive_path, "r") as archive:
             archive.extractall(submission_dir)
         self._flatten_single_root(submission_dir)
         requirement_root = Path(requirement.requirements_path).resolve().parent

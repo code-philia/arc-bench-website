@@ -8,19 +8,19 @@ class NotificationService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_once(self, *, user_id: str | None, submission_id: str, kind: str, title: str, body: str) -> None:
+    def create_once(self, *, user_id: str | None, run_id: str, kind: str, title: str, body: str) -> None:
         if not user_id:
             return
         existing = self.db.scalar(
             select(Notification.id).where(
                 Notification.user_id == user_id,
-                Notification.submission_id == submission_id,
+                Notification.run_id == run_id,
                 Notification.kind == kind,
             )
         )
         if existing:
             return
-        self.db.add(Notification(user_id=user_id, submission_id=submission_id, kind=kind, title=title, body=body))
+        self.db.add(Notification(user_id=user_id, run_id=run_id, kind=kind, title=title, body=body))
         self.db.commit()
 
     def list_for_user(self, user_id: str) -> tuple[list[Notification], int]:

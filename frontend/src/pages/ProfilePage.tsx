@@ -5,7 +5,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
-import type { SubmissionSummary } from "../lib/types";
+import type { AgentSubmissionSummary, SubmissionSummary } from "../lib/types";
 
 function formatDuration(startedAt: string | null, finishedAt: string | null) {
   if (!startedAt) return "-";
@@ -14,18 +14,19 @@ function formatDuration(startedAt: string | null, finishedAt: string | null) {
   return minutes > 0 ? `${minutes}m ${elapsed % 60}s` : `${elapsed}s`;
 }
 
-function submissionTaskLabel(requirementId: string) {
+function submissionTaskLabel(requirementId: string | null) {
+  if (!requirementId) return "No task selected";
   return requirementId.endsWith("--__agent__")
     ? `${requirementId.slice(0, -"--__agent__".length)} · Agent snapshot`
     : requirementId;
 }
 
-function isCompetitionSnapshot(submission: SubmissionSummary) {
-  return submission.requirement_id.endsWith("--__agent__");
+function isCompetitionSnapshot(submission: AgentSubmissionSummary) {
+  return submission.catalog === "competition";
 }
 
-function competitionLabel(submission: SubmissionSummary) {
-  return submission.requirement_id.slice(0, -"--__agent__".length);
+function competitionLabel(submission: AgentSubmissionSummary) {
+  return submission.competition_id || "competition";
 }
 
 function recordStatusTone(status: string) {
@@ -41,7 +42,8 @@ export default function ProfilePage() {
   const [githubEmail, setGithubEmail] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
+  const [submissions, setSubmissions] = useState<AgentSubmissionSummary[]>([]);
+  const [runs, setRuns] = useState<SubmissionSummary[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [activeRecordView, setActiveRecordView] = useState<"submissions" | "competitions">("submissions");
   const [editingProfile, setEditingProfile] = useState(false);
@@ -59,7 +61,9 @@ export default function ProfilePage() {
     }
     setSubmissionsLoading(true);
     try {
-      setSubmissions(await api.listSubmissions());
+      const [savedSubmissions, runRecords] = await Promise.all([api.listSubmissions(), api.listRuns()]);
+      setSubmissions(savedSubmissions);
+      setRuns(runRecords);
     } catch (error) {
       message.error((error as Error).message);
     } finally {
@@ -100,7 +104,7 @@ export default function ProfilePage() {
     }
   };
 
-  const deleteSubmission = (submission: SubmissionSummary) => {
+  const deleteSubmission = (submission: AgentSubmissionSummary) => {
     Modal.confirm({
       title: "Delete this submission?",
       content: "This permanently removes the submission record and its runtime directory. Competition task runs created from a saved agent remain available.",
@@ -117,7 +121,15 @@ export default function ProfilePage() {
   const runRecords = submissions.filter((submission) => !isCompetitionSnapshot(submission));
   const competitionEntries = submissions.filter(isCompetitionSnapshot);
   const visibleRecords = activeRecordView === "submissions" ? runRecords : competitionEntries;
-  const passedRuns = runRecords.filter((submission) => submission.status === "PASSED").length;
+  const passedRuns = runs.filter((run) => run.status === "PASSED").length;
+  const openLatestRun = (submission: AgentSubmissionSummary) => {
+    const latestRun = runs.find((run) => run.submission_id === submission.id);
+    if (!latestRun) {
+      message.info("This submission has not been run yet.");
+      return;
+    }
+    navigate(`/runs/${latestRun.id}`);
+  };
 
   return (
     <div className="page profile-page">
@@ -160,12 +172,12 @@ export default function ProfilePage() {
             </header>
             {submissionsLoading ? <div className="profile-records-empty">Loading activity records...</div>
               : visibleRecords.length === 0 ? <div className="profile-records-empty">{activeRecordView === "submissions" ? "No submission runs yet." : "No competition entries yet."}</div>
-                : <div className="profile-record-list">{visibleRecords.map((submission) => <article key={submission.id} className="profile-record-row" onClick={() => navigate(`/runs/${submission.id}`)}>
+                : <div className="profile-record-list">{visibleRecords.map((submission) => <article key={submission.id} className="profile-record-row" onClick={() => openLatestRun(submission)}>
                   <div className="profile-record-main"><strong>{submission.display_name || (isCompetitionSnapshot(submission) ? `${competitionLabel(submission)} agent snapshot` : submission.id)}</strong><span>{isCompetitionSnapshot(submission) ? `Competition: ${competitionLabel(submission)}` : submissionTaskLabel(submission.requirement_id)} · {submission.runtime}</span></div>
-                  <span className={`test-badge ${recordStatusTone(submission.status)}`}>{submission.status}</span>
+                  <span className="test-badge pending">SAVED</span>
                   <time>{new Date(submission.created_at).toLocaleString()}</time>
-                  <span className="profile-record-duration">{formatDuration(submission.started_at, submission.finished_at)}</span>
-                  <div className="profile-submission-actions"><button type="button" className="profile-submission-open" onClick={(event) => { event.stopPropagation(); navigate(`/runs/${submission.id}`); }}>Open <RightOutlined /></button><button type="button" className="profile-submission-delete" aria-label={`Delete ${submission.display_name || submission.id}`} title="Delete record" onClick={(event) => { event.stopPropagation(); deleteSubmission(submission); }}><DeleteOutlined /></button></div>
+                  <span className="profile-record-duration">{runs.filter((run) => run.submission_id === submission.id).length} runs</span>
+                  <div className="profile-submission-actions"><button type="button" className="profile-submission-open" onClick={(event) => { event.stopPropagation(); openLatestRun(submission); }}>Open run <RightOutlined /></button><button type="button" className="profile-submission-delete" aria-label={`Delete ${submission.display_name || submission.id}`} title="Delete record" onClick={(event) => { event.stopPropagation(); deleteSubmission(submission); }}><DeleteOutlined /></button></div>
                 </article>)}</div>}
           </section>
         </main>

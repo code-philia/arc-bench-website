@@ -35,21 +35,41 @@ class SubmissionSummary(BaseModel):
     id: str
     display_name: str | None
     model_name: str | None
-    requirement_id: str
+    catalog: str
+    competition_id: str | None
+    requirement_id: str | None
     runtime: str
     agent_source: str
     original_filename: str
+    created_at: datetime
+
+
+class RunSummary(BaseModel):
+    id: str
+    submission_id: str
+    display_name: str | None = None
+    model_name: str | None = None
+    original_filename: str | None = None
+    requirement_id: str
+    runtime: str
+    agent_source: str
     status: str
     score: float | None
+    test_pass_rate: float | None
     passed_count: int
     failed_count: int
+    run_duration_seconds: int | None
+    token_cost_usd: float | None
+    feature_implemented_count: int
+    feature_total_count: int
+    feature_implementation_rate: float | None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
     failure_reason: str | None
 
 
-class SubmissionDetail(SubmissionSummary):
+class RunDetail(RunSummary):
     steps: list[StepState]
     stdout_path: str | None
     stderr_path: str | None
@@ -94,8 +114,14 @@ class SubmissionCreateResponse(BaseModel):
     submission: SubmissionSummary
 
 
-class SubmissionRerunResponse(BaseModel):
-    submission: SubmissionSummary
+class RunCreateResponse(BaseModel):
+    run: RunSummary
+
+
+# Temporary import aliases keep ancillary run-detail endpoints compatible while
+# callers are moved from the legacy /submissions API to /runs.
+SubmissionDetail = RunDetail
+SubmissionRerunResponse = RunCreateResponse
 
 
 class SubmissionManualEditCommitPreview(BaseModel):

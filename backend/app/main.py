@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import auth, health, notifications, requirements, submissions, user_tasks
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.schema import ensure_schema
 from app.db.session import engine
 from app.services.submission_event_stream import SubmissionEventStream
 
@@ -28,7 +29,8 @@ app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(requirements.router, prefix=settings.api_prefix)
 app.include_router(requirements.competition_router, prefix=settings.api_prefix)
 app.include_router(requirements.benchmark_router, prefix=settings.api_prefix)
-app.include_router(submissions.router, prefix=settings.api_prefix)
+app.include_router(submissions.submission_router, prefix=settings.api_prefix)
+app.include_router(submissions.run_router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(user_tasks.router, prefix=settings.api_prefix)
 if settings.site_assets_root.is_dir():
@@ -39,6 +41,7 @@ def on_startup() -> None:
     settings.user_submissions_root.mkdir(parents=True, exist_ok=True)
     settings.user_tasks_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    ensure_schema(engine)
 
 
 @app.on_event("shutdown")

@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.enums import AgentSourceType, SubmissionStatus
 from app.db.session import SessionLocal
 from app.models.requirement import Requirement
+from app.models.submission import Submission
 from app.models.user import User
 from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
@@ -18,7 +19,7 @@ from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
-from app.services.submission_service import SubmissionService
+from app.services.submission_service import RunService
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -44,25 +45,29 @@ class ExecutionService:
     def _run_submission_internal(self, submission_id: str, *, reuse_workspace: bool) -> None:
         db = SessionLocal()
         try:
-            submission_service = SubmissionService(db)
+            submission_service = RunService(db)
             submission = submission_service.get_submission(submission_id)
+            agent_submission = db.get(Submission, submission.submission_id)
             user = db.get(User, submission.user_id) if submission.user_id else None
             if not user:
                 raise RuntimeError(f"User '{submission.user_id}' not found")
+            if agent_submission is None:
+                raise RuntimeError(f"Source submission '{submission.submission_id}' not found")
             requirement = db.get(Requirement, submission.requirement_id)
             if not requirement:
                 raise RuntimeError(f"Requirement '{submission.requirement_id}' not found")
-            self._run(db, submission_service, submission_id, requirement, user, reuse_workspace=reuse_workspace)
+            self._run(db, submission_service, submission_id, requirement, user, agent_submission, reuse_workspace=reuse_workspace)
         finally:
             db.close()
 
     def _run(
         self,
         db: Session,
-        submission_service: SubmissionService,
+        submission_service: RunService,
         submission_id: str,
         requirement: Requirement,
         user: User,
+        agent_submission: Submission,
         *,
         reuse_workspace: bool,
     ) -> None:
@@ -73,10 +78,10 @@ class ExecutionService:
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
-        runner_kind = "octos" if submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value else "python"
+        runner_kind = "octos" if agent_submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value else "python"
         if runner_kind == "octos":
             start_agent_description = "Running built-in Octos CLI agent"
-        elif submission.agent_source == AgentSourceType.BUILTIN_ARC_AGENT.value:
+        elif agent_submission.agent_source == AgentSourceType.BUILTIN_ARC_AGENT.value:
             start_agent_description = "Continuing built-in ARC agent" if reuse_workspace else "Running built-in ARC agent"
         else:
             start_agent_description = "Running uploaded agent"
@@ -236,7 +241,7 @@ class ExecutionService:
                 emit_event("deploy_agent", "Existing workspace is ready", status="success")
             else:
                 emit_event("deploy_agent", "Preparing workspace")
-                workspace_path = self.assembler.assemble(submission, requirement, user)
+                workspace_path = self.assembler.assemble(submission, agent_submission, requirement, user)
                 debug_log = DebugLogService(workspace_path)
                 debug_log.append("backend", f"Workspace assembled at {workspace_path}")
                 emit_event("deploy_agent", "Workspace assembled", status="success")
@@ -274,7 +279,7 @@ class ExecutionService:
             container = manager.create_container(
                 submission.id,
                 workspace_path,
-                model_name=submission.model_name,
+                model_name=agent_submission.model_name,
                 github_email=user.github_email,
                 github_username=user.github_username,
                 runner_kind=runner_kind,
@@ -315,7 +320,7 @@ class ExecutionService:
                 if not stuck_notification_sent and time.time() - last_runner_signal_at >= 300:
                     NotificationService(db).create_once(
                         user_id=user.id,
-                        submission_id=submission_id,
+                        run_id=submission_id,
                         kind="no_progress",
                         title="Run may be stuck",
                         body="No runner progress or heartbeat was recorded for five minutes. Open the run to refresh its logs or cancel it.",
@@ -472,6 +477,10 @@ class ExecutionService:
                 stderr_path=None,
                 result_path=None,
                 failure_reason=failure_reason,
+                test_pass_rate=parsed["test_pass_rate"],
+                feature_implemented_count=parsed["feature_implemented_count"],
+                feature_total_count=parsed["feature_total_count"],
+                feature_implementation_rate=parsed["feature_implementation_rate"],
             )
             debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
         except Exception as exc:  # noqa: BLE001

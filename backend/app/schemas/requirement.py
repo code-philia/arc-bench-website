@@ -67,6 +67,33 @@ class CompetitionLeaderboardEntry(BaseModel):
     submission_count: int
 
 
+class CompetitionTaskRunScore(BaseModel):
+    task_id: str
+    task_title: str
+    run_id: str | None = None
+    status: str | None = None
+    test_pass_rate: float | None = None
+    feature_implementation_rate: float | None = None
+    run_duration_seconds: int | None = None
+    token_cost_usd: float | None = None
+    completed_at: str | None = None
+
+
+class CompetitionSubmissionHistoryEntry(BaseModel):
+    id: str
+    display_name: str | None = None
+    model_name: str | None = None
+    original_filename: str
+    runtime: str
+    created_at: str
+    task_scores: list[CompetitionTaskRunScore] = Field(default_factory=list)
+    average_test_pass_rate: float = 0.0
+    average_feature_implementation_rate: float = 0.0
+    total_run_duration_seconds: int = 0
+    token_cost_usd: float | None = None
+    is_selected_score: bool = False
+
+
 class CompetitionDetail(CompetitionSummary):
     downloads: CompetitionTaskDownloadLinks | None = None
     tasks: list[CompetitionTaskSummary]

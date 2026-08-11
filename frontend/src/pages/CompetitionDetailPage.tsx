@@ -7,7 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import AgentTemplateDialog from "../components/requirements/AgentTemplateDialog";
 import { api } from "../lib/api";
 import { DEFAULT_MODEL_NAME, MODEL_OPTIONS } from "../lib/models";
-import type { CompetitionDetail, SubmissionSummary } from "../lib/types";
+import type { CompetitionDetail, CompetitionSubmissionHistoryEntry } from "../lib/types";
 
 type AgentSource = "upload" | "builtin_arc_agent" | "builtin_octos_agent";
 
@@ -20,16 +20,17 @@ function download(file: File) {
   URL.revokeObjectURL(url);
 }
 
-function statusClass(status: string) {
-  return status === "READY"
-    ? "bg-[var(--bg-elevated)] text-[var(--text)]"
-    : "bg-[var(--bg-elevated)] text-[var(--text-dim)]";
-}
-
 function formatCompetitionRange(start?: string | null, end?: string | null) {
   if (!start || !end) return "Dates to be announced";
   const formatter = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" });
   return `${formatter.format(new Date(`${start}T00:00:00`))}\u2013${formatter.format(new Date(`${end}T00:00:00`))}`;
+}
+
+function formatDuration(seconds: number | null) {
+  if (seconds == null) return "--";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
 }
 
 function taskOverview(taskId: string) {
@@ -59,7 +60,7 @@ export default function CompetitionDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [competition, setCompetition] = useState<CompetitionDetail | null>(null);
-  const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
+  const [submissions, setSubmissions] = useState<CompetitionSubmissionHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"create" | "history">("create");
   const [runtime, setRuntime] = useState("python");
@@ -76,9 +77,7 @@ export default function CompetitionDetailPage() {
       setSubmissions([]);
       return;
     }
-    const all = await api.listSubmissions();
-    const agentId = `${competitionId}--__agent__`;
-    setSubmissions(all.filter((submission) => submission.requirement_id === agentId));
+    setSubmissions(await api.getCompetitionSubmissionHistory(competitionId));
   };
 
   useEffect(() => {
@@ -133,7 +132,7 @@ export default function CompetitionDetailPage() {
     }
   };
 
-  const deleteSubmission = (submission: SubmissionSummary) => {
+  const deleteSubmission = (submission: CompetitionSubmissionHistoryEntry) => {
     Modal.confirm({
       title: "Delete this submission?",
       content: "The stored agent archive will be permanently removed. Existing task runs remain available.",
@@ -260,11 +259,27 @@ export default function CompetitionDetailPage() {
                 <div className="competition-submission-history">
                   {!user ? <div className="competition-empty">Sign in to manage your saved agent submissions.</div>
                     : submissions.length === 0 ? <div className="competition-empty">No saved agent submissions yet.</div>
-                      : submissions.map((submission) => <div key={submission.id} className="competition-submission-row">
-                        <h3>{submission.display_name || submission.id}</h3>
-                        <div><span className={statusClass(submission.status)}>{submission.status}</span><span>{submission.model_name || "No model name"}</span><span>{submission.original_filename}</span></div>
-                        <p><button onClick={() => api.downloadSubmissionArchive(submission.id).then(download).catch((error) => message.error(error.message))}><DownloadOutlined /> Download code</button><button className="danger" onClick={() => deleteSubmission(submission)}><DeleteOutlined /> Delete</button></p>
-                      </div>)}
+                      : <>
+                        <p className="competition-history-rule">Current task scores use the most recent completed run. Your final score is the highest average test pass rate across every task and saved submission; tasks that have not run count as 0.</p>
+                        {submissions.map((submission) => <article key={submission.id} className="competition-submission-row competition-submission-row--scored">
+                          <div className="competition-submission-row-heading">
+                            <div><h3>{submission.display_name || submission.id}</h3><div className="competition-submission-meta"><span>{submission.model_name || "No model name"}</span><span>{submission.original_filename}</span><span>{new Date(submission.created_at).toLocaleString()}</span></div></div>
+                            {submission.is_selected_score ? <span className="competition-selected-score">Selected score</span> : null}
+                          </div>
+                          <div className="competition-score-summary"><span><strong>{submission.average_test_pass_rate.toFixed(1)}%</strong> avg. test pass</span><span><strong>{submission.average_feature_implementation_rate.toFixed(1)}%</strong> avg. feature completion</span><span><strong>{formatDuration(submission.total_run_duration_seconds)}</strong> total run time</span><span><strong>--</strong> token cost</span></div>
+                          <div className="competition-task-score-list">
+                            {submission.task_scores.map((taskScore) => <div key={taskScore.task_id} className="competition-task-score-row">
+                              <span className="competition-task-score-title">{taskScore.task_title}</span>
+                              <span>Tests {taskScore.test_pass_rate == null ? "--" : `${taskScore.test_pass_rate.toFixed(1)}%`}</span>
+                              <span>Features {taskScore.feature_implementation_rate == null ? "--" : `${taskScore.feature_implementation_rate.toFixed(1)}%`}</span>
+                              <span>Time {formatDuration(taskScore.run_duration_seconds)}</span>
+                              <span>Token {taskScore.token_cost_usd == null ? "--" : `$${taskScore.token_cost_usd.toFixed(4)}`}</span>
+                              {taskScore.run_id ? <Link to={`/runs/${taskScore.run_id}`}>Open run</Link> : <span>Not run</span>}
+                            </div>)}
+                          </div>
+                          <p><button onClick={() => api.downloadSubmissionArchive(submission.id).then(download).catch((error) => message.error(error.message))}><DownloadOutlined /> Download code</button><button className="danger" onClick={() => deleteSubmission(submission)}><DeleteOutlined /> Delete</button></p>
+                        </article>)}
+                      </>}
                 </div>
               )}
             </section>

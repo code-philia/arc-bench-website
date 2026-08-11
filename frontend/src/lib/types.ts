@@ -64,6 +64,33 @@ export type CompetitionLeaderboardEntry = {
   submission_count: number;
 };
 
+export type CompetitionTaskRunScore = {
+  task_id: string;
+  task_title: string;
+  run_id: string | null;
+  status: string | null;
+  test_pass_rate: number | null;
+  feature_implementation_rate: number | null;
+  run_duration_seconds: number | null;
+  token_cost_usd: number | null;
+  completed_at: string | null;
+};
+
+export type CompetitionSubmissionHistoryEntry = {
+  id: string;
+  display_name: string | null;
+  model_name: string | null;
+  original_filename: string;
+  runtime: string;
+  created_at: string;
+  task_scores: CompetitionTaskRunScore[];
+  average_test_pass_rate: number;
+  average_feature_implementation_rate: number;
+  total_run_duration_seconds: number;
+  token_cost_usd: number | null;
+  is_selected_score: boolean;
+};
+
 export type CompetitionDetail = CompetitionSummary & {
   downloads: CompetitionTaskDownloadLinks | null;
   tasks: CompetitionTaskSummary[];
@@ -100,6 +127,7 @@ export type SubmissionStep = {
 
 export type SubmissionSummary = {
   id: string;
+  submission_id: string;
   display_name: string | null;
   model_name: string | null;
   requirement_id: string;
@@ -108,12 +136,31 @@ export type SubmissionSummary = {
   original_filename: string;
   status: string;
   score: number | null;
+  test_pass_rate: number | null;
   passed_count: number;
   failed_count: number;
+  run_duration_seconds: number | null;
+  token_cost_usd: number | null;
+  feature_implemented_count: number;
+  feature_total_count: number;
+  feature_implementation_rate: number | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
   failure_reason: string | null;
+};
+
+export type AgentSubmissionSummary = {
+  id: string;
+  display_name: string | null;
+  model_name: string | null;
+  catalog: string;
+  competition_id: string | null;
+  requirement_id: string | null;
+  runtime: string;
+  agent_source: "upload" | string;
+  original_filename: string;
+  created_at: string;
 };
 
 export type SubmissionDetail = SubmissionSummary & {
@@ -232,7 +279,7 @@ export type SubmissionRunnerEvent = {
 
 export type NotificationItem = {
   id: string;
-  submission_id: string | null;
+  run_id: string | null;
   kind: string;
   title: string;
   body: string;

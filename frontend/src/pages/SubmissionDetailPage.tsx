@@ -23,6 +23,12 @@ function formatDuration(startedAt: string | null, finishedAt: string | null) {
   return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
+function formatDurationSeconds(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
 function resultSummary(submission: SubmissionDetail) {
   const total = submission.passed_count + submission.failed_count;
   if (total === 0) return "No test results yet";
@@ -252,7 +258,7 @@ export default function SubmissionDetailPage() {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-6">
+          <div className="grid grid-cols-1 divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-3 xl:grid-cols-9">
             <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Submission ID</div>
               <div className="submission-meta-value">{submission.id}</div>
@@ -271,11 +277,23 @@ export default function SubmissionDetailPage() {
             </div>
             <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Duration</div>
-              <div className="submission-meta-value">{formatDuration(submission.started_at, submission.finished_at)}</div>
+              <div className="submission-meta-value">{submission.run_duration_seconds == null ? formatDuration(submission.started_at, submission.finished_at) : formatDurationSeconds(submission.run_duration_seconds)}</div>
             </div>
             <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
               <div className="submission-meta-label">Results</div>
               <div className="submission-meta-value">{resultSummary(submission)}</div>
+            </div>
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
+              <div className="submission-meta-label">Test pass rate</div>
+              <div className="submission-meta-value">{submission.test_pass_rate == null ? "-" : `${submission.test_pass_rate.toFixed(1)}%`}</div>
+            </div>
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
+              <div className="submission-meta-label">Feature completion</div>
+              <div className="submission-meta-value">{submission.feature_implementation_rate == null ? "-" : `${submission.feature_implementation_rate.toFixed(1)}%`}</div>
+            </div>
+            <div className="submission-meta-card rounded-none border-0 bg-transparent p-4">
+              <div className="submission-meta-label">Token cost</div>
+              <div className="submission-meta-value">--</div>
             </div>
           </div>
         </div>

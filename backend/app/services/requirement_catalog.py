@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 import yaml
 
@@ -16,6 +16,7 @@ from app.core.enums import SubmissionStatus
 from app.core.config import get_settings
 from app.models.requirement import Requirement
 from app.models.submission import Submission
+from app.models.run import Run
 from app.models.user import User
 from app.schemas.requirement import (
     BenchmarkDetail,
@@ -24,7 +25,9 @@ from app.schemas.requirement import (
     BenchmarkTaskSummary,
     CompetitionDetail,
     CompetitionLeaderboardEntry,
+    CompetitionSubmissionHistoryEntry,
     CompetitionSummary,
+    CompetitionTaskRunScore,
     CompetitionTaskDownloadLinks,
     CompetitionTaskSummary,
     RequirementDetail,
@@ -307,8 +310,50 @@ class RequirementCatalogService:
 
         normalized_competition_id = competition_id.strip().lower() if competition_id else None
         if normalized_competition_id:
-            requirement_ids = requirement_ids_by_category.get(normalized_competition_id, [])
-        elif normalized_track == "all":
+            # A leaderboard entry is the user's selected competition
+            # submission, rather than an average over every retry ever run.
+            # This matches the score rule shown on the competition page.
+            competitors = self.db.execute(
+                select(Submission.user_id, User.username)
+                .join(User, Submission.user_id == User.id)
+                .where(Submission.catalog == "competition")
+                .where(Submission.competition_id == normalized_competition_id)
+                .where(Submission.user_id.is_not(None))
+                .distinct()
+            ).all()
+            leaderboard: list[CompetitionLeaderboardEntry] = []
+            for user_id, username in competitors:
+                history = self.list_competition_submission_history(normalized_competition_id, str(user_id))
+                selected = next((entry for entry in history if entry.is_selected_score), None)
+                if selected is None:
+                    continue
+                completed_tasks = [task for task in selected.task_scores if task.run_id is not None]
+                avg_runtime_seconds = (
+                    int(round(selected.total_run_duration_seconds / len(completed_tasks)))
+                    if completed_tasks
+                    else None
+                )
+                leaderboard.append(
+                    CompetitionLeaderboardEntry(
+                        username=str(username),
+                        model_name=selected.model_name,
+                        track=normalized_competition_id,
+                        avg_pass_rate=selected.average_test_pass_rate,
+                        total_token_millions=None,
+                        avg_runtime_seconds=avg_runtime_seconds,
+                        submission_count=len(history),
+                    )
+                )
+            leaderboard.sort(
+                key=lambda item: (
+                    -item.avg_pass_rate,
+                    item.avg_runtime_seconds if item.avg_runtime_seconds is not None else 10**9,
+                    item.username.lower(),
+                )
+            )
+            return leaderboard
+
+        if normalized_track == "all":
             requirement_ids = [requirement_id for ids in requirement_ids_by_category.values() for requirement_id in ids]
         else:
             requirement_ids = requirement_ids_by_category.get(normalized_track, [])
@@ -317,17 +362,18 @@ class RequirementCatalogService:
             return []
 
         query = (
-            select(Submission, User.username)
-            .join(User, Submission.user_id == User.id)
-            .where(Submission.requirement_id.in_(requirement_ids))
-            .where(Submission.user_id.is_not(None))
-            .where(Submission.status.in_([SubmissionStatus.PASSED.value, SubmissionStatus.FAILED.value]))
-            .where(Submission.score.is_not(None))
+            select(Run, User.username, Submission.model_name)
+            .join(User, Run.user_id == User.id)
+            .outerjoin(Submission, Run.submission_id == Submission.id)
+            .where(Run.requirement_id.in_(requirement_ids))
+            .where(Run.user_id.is_not(None))
+            .where(Run.status.in_([SubmissionStatus.PASSED.value, SubmissionStatus.FAILED.value]))
+            .where(Run.score.is_not(None))
         )
 
         aggregates: dict[tuple[str, str], dict[str, object]] = {}
-        for submission, username in self.db.execute(query).all():
-            model_name = (submission.model_name or "").strip() or None
+        for submission, username, source_model_name in self.db.execute(query).all():
+            model_name = (source_model_name or "").strip() or None
             key = (submission.user_id or "", model_name or "")
             aggregate = aggregates.setdefault(
                 key,
@@ -374,6 +420,107 @@ class RequirementCatalogService:
             )
         )
         return leaderboard
+
+    def list_competition_submission_history(
+        self,
+        competition_id: str,
+        user_id: str,
+    ) -> list[CompetitionSubmissionHistoryEntry]:
+        """Return one row per uploaded competition agent and its latest task scores.
+
+        Re-running a task never overwrites a previous run.  The competition view
+        treats the most recently completed run of a task as that submission's
+        current task score.  Missing tasks count as zero in the submission's
+        average so partially run submissions cannot receive an inflated score.
+        """
+        normalized_competition_id = competition_id.strip().lower()
+        task_entries = [
+            entry for entry in self.scan_entries() if entry.category == normalized_competition_id
+        ]
+        if not any(item.id == normalized_competition_id for item in self.list_competitions()):
+            raise LookupError(f"Competition '{competition_id}' not found")
+
+        snapshots = self.db.scalars(
+            select(Submission)
+            .where(Submission.user_id == user_id)
+            .where(Submission.catalog == "competition")
+            .where(Submission.competition_id == normalized_competition_id)
+            .order_by(desc(Submission.created_at))
+        ).all()
+        if not snapshots:
+            return []
+
+        snapshot_ids = [snapshot.id for snapshot in snapshots]
+        completed_statuses = [SubmissionStatus.PASSED.value, SubmissionStatus.FAILED.value]
+        runs = self.db.scalars(
+            select(Run)
+            .where(Run.user_id == user_id)
+            .where(Run.submission_id.in_(snapshot_ids))
+            .where(Run.requirement_id.in_([task.id for task in task_entries]))
+            .where(Run.status.in_(completed_statuses))
+            .order_by(desc(Run.finished_at), desc(Run.created_at))
+        ).all()
+
+        latest_runs: dict[tuple[str, str], Run] = {}
+        for run in runs:
+            key = (str(run.submission_id), run.requirement_id)
+            latest_runs.setdefault(key, run)
+
+        history: list[CompetitionSubmissionHistoryEntry] = []
+        for snapshot in snapshots:
+            task_scores: list[CompetitionTaskRunScore] = []
+            pass_rate_sum = 0.0
+            feature_rate_sum = 0.0
+            duration_sum = 0
+            for task in task_entries:
+                run = latest_runs.get((snapshot.id, task.id))
+                if run is None:
+                    task_scores.append(CompetitionTaskRunScore(task_id=task.id, task_title=task.title))
+                    continue
+                test_pass_rate = run.test_pass_rate if run.test_pass_rate is not None else run.score
+                feature_rate = run.feature_implementation_rate
+                pass_rate_sum += float(test_pass_rate or 0.0)
+                feature_rate_sum += float(feature_rate or 0.0)
+                duration_sum += int(run.run_duration_seconds or 0)
+                task_scores.append(
+                    CompetitionTaskRunScore(
+                        task_id=task.id,
+                        task_title=task.title,
+                        run_id=run.id,
+                        status=run.status,
+                        test_pass_rate=test_pass_rate,
+                        feature_implementation_rate=feature_rate,
+                        run_duration_seconds=run.run_duration_seconds,
+                        token_cost_usd=run.token_cost_usd,
+                        completed_at=run.finished_at.isoformat() if run.finished_at else None,
+                    )
+                )
+            task_count = len(task_entries)
+            history.append(
+                CompetitionSubmissionHistoryEntry(
+                    id=snapshot.id,
+                    display_name=snapshot.display_name,
+                    model_name=snapshot.model_name,
+                    original_filename=snapshot.original_filename,
+                    runtime=snapshot.runtime,
+                    created_at=snapshot.created_at.isoformat(),
+                    task_scores=task_scores,
+                    average_test_pass_rate=round(pass_rate_sum / task_count, 1) if task_count else 0.0,
+                    average_feature_implementation_rate=round(feature_rate_sum / task_count, 1) if task_count else 0.0,
+                    total_run_duration_seconds=duration_sum,
+                    token_cost_usd=None,
+                )
+            )
+
+        if history:
+            # Stable tie-breaking keeps the newest equally scoring submission
+            # selected, because snapshots are already ordered by created_at.
+            selected = max(
+                enumerate(history),
+                key=lambda indexed: (indexed[1].average_test_pass_rate, -indexed[0]),
+            )[0]
+            history[selected].is_selected_score = True
+        return history
 
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
         rows = self.scan_entries()

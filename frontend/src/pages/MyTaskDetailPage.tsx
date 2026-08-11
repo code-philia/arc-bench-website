@@ -80,7 +80,7 @@ export default function MyTaskDetailPage() {
           setSubmissions([]);
           return;
         }
-        return api.listSubmissions(taskId).then(setSubmissions).catch(() => setSubmissions([]));
+        return api.listRuns(taskId).then(setSubmissions).catch(() => setSubmissions([]));
       })
       .catch(() => {
         setTask(null);
@@ -188,11 +188,11 @@ export default function MyTaskDetailPage() {
         modelName: normalizedModelName,
         catalog: "my_tasks",
       });
-      setSubmissions((current) => [created.submission, ...current]);
-      const started = await api.startSubmission(created.submission.id);
+      const createdRun = await api.createRun(created.submission.id, task.id);
+      const started = await api.startSubmission(createdRun.run.id);
       setActiveSubmission(started);
       setSubmissionTab("submit");
-      beginPolling(created.submission.id);
+      beginPolling(createdRun.run.id);
       setDisplayName("");
       setModelName(DEFAULT_MODEL_NAME);
       setFile(null);

@@ -8,7 +8,7 @@ import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument"
 import TestSuiteViewer from "../components/requirements/TestSuiteViewer";
 import { api } from "../lib/api";
 import { parseTaskTreeYaml } from "../lib/taskTree";
-import type { RequirementDetail, RequirementTestFile, SubmissionSummary } from "../lib/types";
+import type { AgentSubmissionSummary, RequirementDetail, RequirementTestFile, SubmissionSummary } from "../lib/types";
 
 function statusClass(status: string) {
   if (status === "PASSED") return "pass";
@@ -22,7 +22,7 @@ export default function CompetitionTaskPage() {
   const { user } = useAuth();
   const [task, setTask] = useState<RequirementDetail | null>(null);
   const [testFiles, setTestFiles] = useState<RequirementTestFile[]>([]);
-  const [savedSubmissions, setSavedSubmissions] = useState<SubmissionSummary[]>([]);
+  const [savedSubmissions, setSavedSubmissions] = useState<AgentSubmissionSummary[]>([]);
   const [runs, setRuns] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<"readme" | "tests">("readme");
   const [panelTab, setPanelTab] = useState<"run" | "history">("run");
@@ -34,12 +34,12 @@ export default function CompetitionTaskPage() {
     Promise.all([
       api.getRequirement(requirementId, "competition"),
       api.getRequirementTests(requirementId, "competition"),
-      user ? api.listSubmissions() : Promise.resolve([]),
-    ]).then(([detail, tests, records]) => {
+      user ? Promise.all([api.listSubmissions(), api.listRuns(requirementId)]) : Promise.resolve([[], []]),
+    ]).then(([detail, tests, [records, runRecords]]) => {
       setTask(detail);
       setTestFiles(tests.files);
-      setSavedSubmissions(records.filter((record) => record.requirement_id === `${competitionId}--__agent__`));
-      setRuns(records.filter((record) => record.requirement_id === requirementId));
+      setSavedSubmissions(records.filter((record) => record.competition_id === competitionId));
+      setRuns(runRecords);
     }).catch((error) => {
       setTask(null);
       setTestFiles([]);
@@ -63,10 +63,10 @@ export default function CompetitionTaskPage() {
     if (!latestSubmission) return;
     try {
       setStarting(true);
-      const created = await api.rerunSubmission(latestSubmission.id, requirementId);
-      await api.startSubmission(created.submission.id);
+      const created = await api.createRun(latestSubmission.id, requirementId);
+      await api.startSubmission(created.run.id);
       message.success("A new run was created from the latest saved submission.");
-      navigate(`/runs/${created.submission.id}`);
+      navigate(`/runs/${created.run.id}`);
     } catch (error) {
       message.error((error as Error).message);
     } finally {

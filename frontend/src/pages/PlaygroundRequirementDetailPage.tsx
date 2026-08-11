@@ -113,7 +113,7 @@ export default function PlaygroundRequirementDetailPage() {
       setSubmissions([]);
       return;
     }
-    setSubmissions(await api.listSubmissions(requirementId));
+    setSubmissions(await api.listRuns(requirementId));
   };
 
   useEffect(() => {
@@ -233,11 +233,11 @@ export default function PlaygroundRequirementDetailPage() {
         modelName: normalizedModelName,
         catalog,
       });
-      setSubmissions((current) => [created.submission, ...current]);
-      const started = await api.startSubmission(created.submission.id);
+      const createdRun = await api.createRun(created.submission.id, requirement.id);
+      const started = await api.startSubmission(createdRun.run.id);
       setActiveSubmission(started);
       setSubmissionTab("submit");
-      beginPolling(created.submission.id);
+      beginPolling(createdRun.run.id);
       setDisplayName("");
       setModelName(DEFAULT_MODEL_NAME);
       if (!active || agentSource !== "upload") {
@@ -258,7 +258,7 @@ export default function PlaygroundRequirementDetailPage() {
       return;
     }
     try {
-      await api.deleteSubmission(record.id);
+      await api.deleteRun(record.id);
       if (activeSubmission?.id === record.id) {
         setActiveSubmission(null);
       }
