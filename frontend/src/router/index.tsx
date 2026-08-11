@@ -18,7 +18,6 @@ import ProfilePage from "../pages/ProfilePage";
 import ResearchPage from "../pages/ResearchPage";
 import RegisterPage from "../pages/RegisterPage";
 import RequirementsPage from "../pages/RequirementsPage";
-import SubmissionDetailPage from "../pages/SubmissionDetailPage";
 
 export const router = createBrowserRouter([
   {
@@ -35,9 +34,9 @@ export const router = createBrowserRouter([
       { path: "api-doc", element: <ApiDocPage /> },
       { path: "competitions/:competitionId", element: <CompetitionDetailPage /> },
       { path: "competitions/:competitionId/tasks/:requirementId", element: <CompetitionTaskPage /> },
-      { path: "runs/:submissionId", element: <SubmissionDetailPage /> },
+      { path: "runs/:submissionId", element: <PlaygroundSubmissionDetailPage /> },
       { path: "requirements/:requirementId", element: <PlaygroundRequirementDetailPage /> },
-      { path: "submissions/:submissionId", element: <SubmissionDetailPage /> },
+      { path: "submissions/:submissionId", element: <PlaygroundSubmissionDetailPage /> },
       { path: "playground", element: <PlaygroundPage /> },
       { path: "playground/arc-bench/:taskType", element: <PlaygroundTaskListPage /> },
       { path: "playground/arc-bench/:taskType/:requirementId", element: <PlaygroundRequirementDetailPage /> },

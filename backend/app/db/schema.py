@@ -23,10 +23,12 @@ RUN_ADDITIVE_COLUMNS: dict[str, str] = {
     "submission_display_name": "VARCHAR(120)",
     "model_name": "VARCHAR(120)",
     "original_filename": "VARCHAR(255)",
+    "catalog": "VARCHAR(32) NOT NULL DEFAULT 'playground'",
+    "competition_id": "VARCHAR(64)",
 }
 
 RUN_COLUMNS = (
-    "id, user_id, submission_id, submission_display_name, model_name, original_filename, requirement_id, runtime, agent_source, agent_archive_path, status, "
+    "id, user_id, submission_id, submission_display_name, model_name, original_filename, catalog, competition_id, requirement_id, runtime, agent_source, agent_archive_path, status, "
     "score, test_pass_rate, passed_count, failed_count, run_duration_seconds, token_cost_usd, "
     "feature_implemented_count, feature_total_count, feature_implementation_rate, created_at, started_at, "
     "finished_at, workspace_path, stdout_path, stderr_path, result_path, failure_reason, steps_json"
@@ -222,7 +224,7 @@ def _insert_legacy_run(connection, row, submission_id: str) -> None:
     connection.execute(
         text(
             f"INSERT OR IGNORE INTO runs ({RUN_COLUMNS}) VALUES "
-            "(:id, :user_id, :submission_id, :submission_display_name, :model_name, :original_filename, :requirement_id, :runtime, :agent_source, :agent_archive_path, :status, "
+            "(:id, :user_id, :submission_id, :submission_display_name, :model_name, :original_filename, :catalog, :competition_id, :requirement_id, :runtime, :agent_source, :agent_archive_path, :status, "
             ":score, :test_pass_rate, :passed_count, :failed_count, :run_duration_seconds, :token_cost_usd, "
             ":feature_implemented_count, :feature_total_count, :feature_implementation_rate, :created_at, :started_at, "
             ":finished_at, :workspace_path, :stdout_path, :stderr_path, :result_path, :failure_reason, :steps_json)"
@@ -234,6 +236,11 @@ def _insert_legacy_run(connection, row, submission_id: str) -> None:
             "submission_display_name": row.get("display_name"),
             "model_name": row.get("model_name"),
             "original_filename": row.get("original_filename"),
+            "catalog": row.get("catalog") or ("competition" if "--" in str(row.get("requirement_id") or "") else "playground"),
+            "competition_id": row.get("competition_id") or (
+                str(row.get("requirement_id") or "").split("--", 1)[0]
+                if "--" in str(row.get("requirement_id") or "") else None
+            ),
             "requirement_id": row.get("requirement_id"),
             "runtime": row.get("runtime"),
             "agent_source": row.get("agent_source") or "upload",

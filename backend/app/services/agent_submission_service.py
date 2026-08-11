@@ -148,6 +148,8 @@ class AgentSubmissionService:
             submission_display_name=submission.display_name,
             model_name=submission.model_name,
             original_filename=submission.original_filename,
+            catalog=submission.catalog,
+            competition_id=submission.competition_id,
             requirement_id=target_requirement_id,
             runtime=submission.runtime,
             agent_source=submission.agent_source,

@@ -19,6 +19,10 @@ class Run(Base):
     submission_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     model_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Copied from the source snapshot so an historical run remains fully
+    # navigable even after that reusable submission is deleted.
+    catalog: Mapped[str] = mapped_column(String(32), nullable=False, default="playground", index=True)
+    competition_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     requirement_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     runtime: Mapped[str] = mapped_column(String(32), nullable=False)
     agent_source: Mapped[str] = mapped_column(String(64), nullable=False, default="upload", index=True)

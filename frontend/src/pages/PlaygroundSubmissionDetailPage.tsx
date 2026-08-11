@@ -76,6 +76,13 @@ function normalizeTaskType(value: string) {
   return "web";
 }
 
+function normalizeRequirementCatalog(value: string | null | undefined): "playground" | "competition" | "benchmark" | "my_tasks" {
+  if (value === "competition" || value === "benchmark" || value === "my_tasks") {
+    return value;
+  }
+  return "playground";
+}
+
 function formatLineNumber(value: number | null) {
   return value && value > 0 ? value : 1;
 }
@@ -1503,16 +1510,18 @@ function CommitHistoryPanel({
 export default function PlaygroundSubmissionDetailPage() {
   const params = useParams();
   const rawTaskType = params.taskType ?? "web";
-  const requirementId = params.requirementId ?? params.taskId ?? "";
+  const routeRequirementId = params.requirementId ?? params.taskId ?? "";
   const submissionId = params.submissionId ?? "";
   const location = useLocation();
-  const requirementCatalog: "playground" | "competition" | "benchmark" | "my_tasks" = location.pathname.startsWith("/submissions/")
-    ? "competition"
-    : location.pathname.startsWith("/playground/my-tasks/")
-      ? "my_tasks"
+  const isRunDetailRoute = location.pathname.startsWith("/runs/") || location.pathname.startsWith("/submissions/");
+  const routeRequirementCatalog: "playground" | "competition" | "benchmark" | "my_tasks" = location.pathname.startsWith("/playground/my-tasks/")
+    ? "my_tasks"
     : location.pathname.startsWith("/playground/arc-bench/")
       ? "benchmark"
       : "playground";
+  const [runContext, setRunContext] = useState<{ requirementId: string; catalog: "playground" | "competition" | "benchmark" | "my_tasks"; competitionId: string | null } | null>(null);
+  const requirementId = isRunDetailRoute ? runContext?.requirementId ?? "" : routeRequirementId;
+  const requirementCatalog = isRunDetailRoute ? runContext?.catalog ?? "playground" : routeRequirementCatalog;
   const { user } = useAuth();
   const factoryCanvasRef = useRef<SubmissionFactoryCanvasHandle | null>(null);
   const [submission, setSubmission] = useState<SubmissionDetail | null>(null);
@@ -1817,26 +1826,35 @@ export default function PlaygroundSubmissionDetailPage() {
     setLoading(true);
     setLoadError(null);
     setLoadErrorStatus(null);
-    Promise.all([
-      refreshSubmissionDetail(),
-      refreshSubmissionLogs(),
-      requirementCatalog === "my_tasks"
-        ? api.getMyTask(requirementId).then(adaptUserTaskToRequirementDetail)
-        : api.getRequirement(requirementId, requirementCatalog),
-    ])
-      .then(([detail, latestLogs, requirementDetail]) => {
+    const loadRunCanvas = async () => {
+      try {
+        const [detail, latestLogs] = await Promise.all([refreshSubmissionDetail(), refreshSubmissionLogs()]);
+        const resolvedRequirementId = isRunDetailRoute ? detail.requirement_id : routeRequirementId;
+        const resolvedCatalog = isRunDetailRoute ? normalizeRequirementCatalog(detail.catalog) : routeRequirementCatalog;
+        const requirementDetail = resolvedCatalog === "my_tasks"
+          ? await api.getMyTask(resolvedRequirementId).then(adaptUserTaskToRequirementDetail)
+          : await api.getRequirement(resolvedRequirementId, resolvedCatalog);
+        if (isRunDetailRoute) {
+          setRunContext({
+            requirementId: detail.requirement_id,
+            catalog: resolvedCatalog,
+            competitionId: detail.competition_id,
+          });
+        }
         setSubmission(detail);
         setLogs(latestLogs);
         setRequirement(requirementDetail);
-      })
-      .catch((error: Error) => {
+      } catch (error) {
         setSubmission(null);
         setLogs(null);
         setRequirement(null);
-        setLoadError(error.message);
+        setLoadError((error as Error).message);
         setLoadErrorStatus(error instanceof ApiError ? error.status : null);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadRunCanvas();
 
     return () => {
       if (eventSourceRef.current) {
@@ -1848,7 +1866,7 @@ export default function PlaygroundSubmissionDetailPage() {
         sseReconnectRef.current = null;
       }
     };
-  }, [requirementCatalog, requirementId, submissionId]);
+  }, [isRunDetailRoute, routeRequirementCatalog, routeRequirementId, submissionId]);
 
   useEffect(() => {
     if (!submission) {
@@ -2468,7 +2486,9 @@ export default function PlaygroundSubmissionDetailPage() {
                 <Link
                   className="inline-link"
                   to={
-                    requirementCatalog === "my_tasks"
+                    requirementCatalog === "competition"
+                      ? `/competitions/${runContext?.competitionId ?? ""}/tasks/${requirementId}`
+                      : requirementCatalog === "my_tasks"
                       ? `/playground/my-tasks/${requirementId}`
                       : requirementCatalog === "benchmark"
                       ? `/playground/arc-bench/${taskType}/${requirementId}`

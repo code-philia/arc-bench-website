@@ -41,7 +41,7 @@ const navItems: NavItem[] = [
     to: "/competition",
     label: "Competition",
     icon: <TrophyOutlined />,
-    matches: ["/competition", "/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId"],
+    matches: ["/competition", "/requirements", "/competitions/:competitionId", "/requirements/:requirementId", "/submissions/:submissionId", "/runs/:submissionId"],
   },
   { to: "/research", label: "Research", icon: <ReadOutlined />, matches: ["/research"] },
   { to: "/api-doc", label: "API Doc", icon: <ApiOutlined />, matches: ["/api-doc"] },

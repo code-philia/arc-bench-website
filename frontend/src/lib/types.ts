@@ -131,6 +131,8 @@ export type SubmissionSummary = {
   display_name: string | null;
   model_name: string | null;
   requirement_id: string;
+  catalog: "playground" | "competition" | "benchmark" | "my_tasks" | string;
+  competition_id: string | null;
   runtime: string;
   agent_source: "upload" | string;
   original_filename: string;

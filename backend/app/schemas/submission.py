@@ -50,6 +50,8 @@ class RunSummary(BaseModel):
     display_name: str | None = None
     model_name: str | None = None
     original_filename: str | None = None
+    catalog: str
+    competition_id: str | None = None
     requirement_id: str
     runtime: str
     agent_source: str
