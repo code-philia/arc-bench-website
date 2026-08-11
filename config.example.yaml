@@ -1,0 +1,34 @@
+# Copy this file to config.yaml. The real file is ignored by Git.
+# Values are injected only into the runner container selected for a submission.
+environment:
+  # Docker DNS servers for every runner container. Use a YAML list or a comma-separated string.
+  ARCBENCH_RUNNER_DNS_SERVERS:
+    - 223.5.5.5
+    - 1.1.1.1
+
+models:
+  gpt-5.5:
+    OPENAI_API_KEY: CHANGE_ME
+    OPENAI_BASE_URL: https://api.example.com/v1
+    MODEL: gpt-5.5
+  gpt-5.6:
+    OPENAI_API_KEY: CHANGE_ME
+    OPENAI_BASE_URL: https://api.example.com/v1
+    MODEL: gpt-5.6
+  deepseek-v4-flash:
+    OPENAI_API_KEY: CHANGE_ME
+    OPENAI_BASE_URL: https://api.example.com/v1
+    MODEL: deepseek-v4-flash
+  deepseek-v4-pro:
+    OPENAI_API_KEY: CHANGE_ME
+    OPENAI_BASE_URL: https://api.example.com/v1
+    MODEL: deepseek-v4-pro
+  kimi-k3:
+    OPENAI_API_KEY: CHANGE_ME
+    OPENAI_BASE_URL: https://api.example.com/v1
+    MODEL: kimi-k3
+
+visual:
+  VISUAL_API_KEY: CHANGE_ME
+  VISUAL_BASE_URL: https://api.example.com/v1
+  VISUAL_MODEL: CHANGE_ME

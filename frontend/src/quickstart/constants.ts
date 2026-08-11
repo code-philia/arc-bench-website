@@ -3,7 +3,7 @@ import type { QuickStartStep } from "./types";
 export const QUICK_START_REQUIREMENT_ID = "ticketbooking";
 export const QUICK_START_TASK_TYPE = "web";
 export const QUICK_START_DISPLAY_NAME = "Quick Start Demo Agent";
-export const QUICK_START_MODEL_NAME = "ArcBench Demo Runtime";
+export const QUICK_START_MODEL_NAME = "gpt-5.6";
 
 export const QUICK_START_PYTHON_SNIPPET = `from arcbench_agent_runtime import AgentRuntime
 

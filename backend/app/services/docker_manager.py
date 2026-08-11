@@ -5,11 +5,13 @@ import docker
 from docker.errors import APIError, BuildError, DockerException, ImageNotFound, NotFound
 
 from app.core.config import get_settings
+from app.services.model_provider_service import ModelProviderService
 
 
 class DockerManager:
     def __init__(self) -> None:
         self.settings = get_settings()
+        self.model_providers = ModelProviderService(self.settings.runtime_config_path)
         try:
             self.client = docker.from_env()
             self.client.ping()
@@ -130,20 +132,8 @@ class DockerManager:
             + "\n",
             encoding="utf-8",
         )
-        builtin_openai_base_url = self.settings.builtin_openai_base_url or ""
-        builtin_openai_api_key = self.settings.builtin_openai_api_key or ""
-        builtin_visual_api_key = self.settings.builtin_visual_api_key or builtin_openai_api_key
-        builtin_visual_base_url = self.settings.builtin_visual_base_url or builtin_openai_base_url
-        builtin_model = (model_name or "").strip() or (self.settings.builtin_model or "").strip()
-        builtin_visual_model = (self.settings.builtin_visual_model or "").strip() or builtin_model
         environment = {
-            "OPENAI_API_KEY": builtin_openai_api_key,
-            "OPENAI_BASE_URL": builtin_openai_base_url,
-            "MODEL": builtin_model,
-            "VISUAL_API_KEY": builtin_visual_api_key,
-            "VISUAL_BASE_URL": builtin_visual_base_url,
-            "VISUAL_MODEL": builtin_visual_model,
-            "ARC_DEBUG": str(self.settings.builtin_debug_mode),
+            **self.model_providers.build_container_environment(model_name),
             "PIP_INDEX_URL": self.settings.pip_index_url,
             "PIP_TRUSTED_HOST": self.settings.pip_trusted_host,
             "ARCBENCH_PIP_INDEX_URL": self.settings.pip_index_url,
@@ -174,7 +164,7 @@ class DockerManager:
         network_mode = (self.settings.runner_network_mode or "").strip()
         if network_mode:
             container_kwargs["network_mode"] = network_mode
-        dns_servers = self.settings.get_runner_dns_servers()
+        dns_servers = self.model_providers.get_runner_dns_servers()
         if dns_servers:
             container_kwargs["dns"] = dns_servers
         extra_hosts = self.settings.get_runner_extra_hosts()

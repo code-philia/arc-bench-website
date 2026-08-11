@@ -85,6 +85,8 @@ def create_submission(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return SubmissionCreateResponse(submission=SubmissionSummary.model_validate(submission, from_attributes=True))
 
 

@@ -21,6 +21,7 @@ runtime/app.db
 requirement/
 
 .env
+config.yaml
 *.whl
 __demo__
 !data/playground/web/__demo__/

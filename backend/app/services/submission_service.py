@@ -44,6 +44,7 @@ from app.services.demo_replay_loader import (
 )
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.notification_service import NotificationService
+from app.services.model_provider_service import ModelProviderService
 from app.services.requirement_catalog import RequirementCatalogService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
@@ -81,6 +82,7 @@ class SubmissionService:
     def __init__(self, db: Session):
         self.db = db
         self.settings = get_settings()
+        self.model_providers = ModelProviderService(self.settings.runtime_config_path)
         self.runtime_paths = RuntimePathService()
         self.artifact_service = SubmissionArtifactService()
 
@@ -131,6 +133,8 @@ class SubmissionService:
             )
         if catalog != "competition" and requirement.category not in {"web", "cli"}:
             raise ValueError("Only web and cli requirements are supported in v1")
+        normalized_display_name = self._normalize_display_name(display_name)
+        normalized_model_name = self._normalize_model_name(model_name)
         submission_id = uuid.uuid4().hex[:12]
         draft_submission = Submission(id=submission_id, user_id=user_id)
         submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
@@ -154,9 +158,6 @@ class SubmissionService:
                 shutil.copyfileobj(upload.file, output)
             original_filename = upload.filename
             self._validate_agent_archive(archive_path, runtime)
-
-        normalized_display_name = self._normalize_display_name(display_name)
-        normalized_model_name = self._normalize_model_name(model_name)
 
         submission = Submission(
             id=submission_id,
@@ -801,16 +802,8 @@ class SubmissionService:
             raise ValueError(f"Unsupported task type: {task_type}")
         return normalized
 
-    @staticmethod
-    def _normalize_model_name(model_name: str | None) -> str | None:
-        if model_name is None:
-            return None
-        normalized = " ".join(model_name.strip().split())
-        if not normalized:
-            return None
-        if len(normalized) > 120:
-            raise ValueError("Model name must be 120 characters or fewer")
-        return normalized
+    def _normalize_model_name(self, model_name: str | None) -> str:
+        return self.model_providers.resolve_model(model_name).name
 
     def append_step_event(
         self,
@@ -1041,6 +1034,8 @@ if __name__ == "__main__":
         competitions = RequirementCatalogService.for_catalog(self.db, "competition").list_competitions()
         if not any(competition.id == competition_id for competition in competitions):
             raise LookupError(f"Competition '{competition_id}' not found")
+        normalized_display_name = self._normalize_display_name(display_name)
+        normalized_model_name = self._normalize_model_name(model_name)
         submission_id = uuid.uuid4().hex[:12]
         submission_dir = self.runtime_paths.get_submission_root(Submission(id=submission_id, user_id=user.id), username=user.username)
         submission_dir.mkdir(parents=True, exist_ok=True)
@@ -1067,8 +1062,8 @@ if __name__ == "__main__":
         submission = Submission(
             id=submission_id,
             user_id=user.id,
-            display_name=self._normalize_display_name(display_name),
-            model_name=self._normalize_model_name(model_name),
+            display_name=normalized_display_name,
+            model_name=normalized_model_name,
             requirement_id=f"{competition_id}--__agent__",
             runtime=runtime.value,
             agent_source=agent_source.value,

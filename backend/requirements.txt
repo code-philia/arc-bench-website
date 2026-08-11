@@ -6,4 +6,3 @@ python-multipart==0.0.20
 docker==7.1.0
 email-validator==2.2.0
 PyYAML==6.0.2
-python-dotenv==1.0.1

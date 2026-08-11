@@ -1,14 +1,10 @@
 from functools import lru_cache
-import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
-load_dotenv(ROOT_DIR / ".env", override=False)
 
 
 class Settings(BaseSettings):
@@ -48,37 +44,7 @@ class Settings(BaseSettings):
     runner_dockerfile: str = "backend/runner/Dockerfile"
     runner_image: str = "arcbench-runner:latest"
     runner_build_on_demand: bool = False
-    builtin_openai_api_key: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("OPENAI_API_KEY", "ARCBENCH_BUILTIN_OPENAI_API_KEY"),
-    )
-    builtin_openai_base_url: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "OPENAI_BASE_URL",
-            "ARCBENCH_BUILTIN_OPENAI_BASE_URL",
-        ),
-    )
-    builtin_visual_api_key: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("VISUAL_API_KEY", "ARCBENCH_BUILTIN_VISUAL_API_KEY"),
-    )
-    builtin_visual_base_url: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("VISUAL_BASE_URL", "ARCBENCH_BUILTIN_VISUAL_BASE_URL"),
-    )
-    builtin_visual_model: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("VISUAL_MODEL", "ARCBENCH_BUILTIN_VISUAL_MODEL"),
-    )
-    builtin_model: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("MODEL", "ARCBENCH_BUILTIN_MODEL"),
-    )
-    builtin_debug_mode: str = Field(
-        default="0",
-        validation_alias=AliasChoices("ARC_DEBUG", "DEBUG_MODE", "ARCBENCH_BUILTIN_DEBUG_MODE"),
-    )
+    runtime_config_path: Path = ROOT_DIR / "config.yaml"
     session_secret: str = "arcbench-dev-session-secret"
 
     runner_cpu_limit: int = 2
@@ -86,7 +52,6 @@ class Settings(BaseSettings):
     runner_timeout_seconds: int = 0
     agent_health_timeout_seconds: int = 90
     runner_network_mode: str | None = None
-    runner_dns_servers: str | None = None
     runner_extra_hosts: str | None = None
     pip_index_url: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
     pip_trusted_host: str = "pypi.tuna.tsinghua.edu.cn"
@@ -102,9 +67,6 @@ class Settings(BaseSettings):
         if value is None:
             return []
         return [item.strip() for item in value.split(",") if item.strip()]
-
-    def get_runner_dns_servers(self) -> list[str]:
-        return self._split_csv(self.runner_dns_servers)
 
     def get_runner_extra_hosts(self) -> dict[str, str]:
         entries: dict[str, str] = {}

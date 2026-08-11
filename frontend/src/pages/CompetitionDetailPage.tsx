@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import AgentTemplateDialog from "../components/requirements/AgentTemplateDialog";
 import { api } from "../lib/api";
+import { DEFAULT_MODEL_NAME, MODEL_OPTIONS } from "../lib/models";
 import type { CompetitionDetail, SubmissionSummary } from "../lib/types";
 
 type AgentSource = "upload" | "builtin_arc_agent" | "builtin_octos_agent";
@@ -65,7 +66,7 @@ export default function CompetitionDetailPage() {
   const [agentSource, setAgentSource] = useState<AgentSource>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [modelName, setModelName] = useState("");
+  const [modelName, setModelName] = useState<string>(DEFAULT_MODEL_NAME);
   const [creating, setCreating] = useState(false);
 
   const refresh = async () => {
@@ -121,7 +122,7 @@ export default function CompetitionDetailPage() {
       });
       setFile(null);
       setDisplayName("");
-      setModelName("");
+      setModelName(DEFAULT_MODEL_NAME);
       setTab("history");
       message.success("Agent submission saved. Open a task to run it.");
       await refresh();
@@ -252,7 +253,7 @@ export default function CompetitionDetailPage() {
                   </>}
                   <div className="env-selector">{["python", "javascript", "typescript"].map((item) => <button key={item} disabled={agentSource !== "upload" && item !== "python"} className={`env-option${runtime === item ? " active" : ""}`} onClick={() => setRuntime(item)}>{item === "python" ? "Python" : item === "javascript" ? "JavaScript" : "TypeScript"}</button>)}</div>
                   <label className="field-stack"><span>Submission name</span><input className="text-input" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Optional" /></label>
-                  <label className="field-stack"><span>Model name</span><input className="text-input" value={modelName} onChange={(event) => setModelName(event.target.value)} placeholder="Optional" /></label>
+                  <label className="field-stack"><span>Model</span><select className="text-input" value={modelName} onChange={(event) => setModelName(event.target.value)}>{MODEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
                   <button type="button" onClick={() => void createSubmission()} disabled={creating || !canCreate} className="btn-primary w-full">{creating ? "Saving..." : "Save submission"}</button>
                 </div>
               ) : (

@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
+import { DEFAULT_MODEL_NAME, MODEL_OPTIONS } from "../lib/models";
 import { parseTaskTreeYaml } from "../lib/taskTree";
 import type { SubmissionDetail, SubmissionSummary, UserTaskDetail } from "../lib/types";
 
@@ -63,7 +64,7 @@ export default function MyTaskDetailPage() {
   const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent" | "builtin_octos_agent">("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [modelName, setModelName] = useState("");
+  const [modelName, setModelName] = useState<string>(DEFAULT_MODEL_NAME);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -193,7 +194,7 @@ export default function MyTaskDetailPage() {
       setSubmissionTab("submit");
       beginPolling(created.submission.id);
       setDisplayName("");
-      setModelName("");
+      setModelName(DEFAULT_MODEL_NAME);
       setFile(null);
       message.success("Submission created and queued.");
     } catch (error) {
@@ -419,17 +420,16 @@ export default function MyTaskDetailPage() {
                   </div>
                   <div className="submission-name-field">
                     <label className="field-label" htmlFor="my-task-submission-model">
-                      Model Name
+                      Model
                     </label>
-                    <input
+                    <select
                       id="my-task-submission-model"
                       className="text-input"
-                      type="text"
-                      maxLength={120}
-                      placeholder="Claude Sonnet 4"
                       value={modelName}
                       onChange={(event) => setModelName(event.target.value)}
-                    />
+                    >
+                      {MODEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
                   </div>
                   {agentSource === "upload" && file ? (
                     <div className="uploaded-file">
