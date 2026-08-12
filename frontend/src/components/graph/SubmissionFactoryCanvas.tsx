@@ -1567,7 +1567,13 @@ const SubmissionFactoryCanvas = forwardRef<SubmissionFactoryCanvasHandle, Submis
               },
             },
           },
-          behaviors: ["drag-canvas", "zoom-canvas"],
+          // G6 only pans from an empty canvas by default. Swimlanes and cards
+          // are graph nodes, so make every graph target a valid pan/zoom
+          // surface; node click handlers still provide selection on release.
+          behaviors: [
+            { type: "drag-canvas", enable: true, direction: "both" },
+            { type: "zoom-canvas", enable: true, trigger: ["wheel"], preventDefault: true },
+          ],
         });
         bindGraphEvents(graph);
         graphRef.current = graph;
