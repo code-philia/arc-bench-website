@@ -39,22 +39,53 @@ submodule under `templates/<template-id>/files`.
 | Python | 3.11+ — backend development |
 | Docker | Builds and runs the submission runner |
 
-### 1. Refresh external source modules
+### 1. Clone and refresh external source repositories
 
-`arc-template` and `reference-implementations/arc` are independent Git
-checkouts. ARC-Bench consumes their local working copies, but does not maintain
-or commit either repository. When their remotes have updates, pull them in
-place:
+`arc-template/` and `reference-implementations/arc/` are intentionally
+independent Git working copies. They are not Git submodules of ARC-Bench, so
+`git submodule update` does not create them. ARC-Bench does not maintain their
+history or make commits in either repository.
+
+After cloning ARC-Bench for the first time, fetch the two repositories into
+their expected paths. ARC contains its own nested `src/arc-template` submodule,
+so clone ARC recursively:
+
+```bash
+git clone https://github.com/Weiyu-Kong/arc-template.git arc-template
+git clone --recurse-submodules https://github.com/code-philia/agentic-requirement-compiler.git reference-implementations/arc
+```
+
+If ARC was cloned previously without its nested template, initialize only that
+nested submodule:
+
+```bash
+git -C reference-implementations/arc submodule update --init --recursive
+```
+
+When the upstream repositories have new commits, fast-forward each working
+copy in place:
 
 ```bash
 git -C arc-template pull --ff-only
 git -C reference-implementations/arc pull --ff-only
+git -C reference-implementations/arc submodule update --init --recursive
 git -C reference-implementations/arc/src/arc-template pull --ff-only
 ```
 
-That is all that is required: do not create commits in ARC-Bench or in the
-external repositories. Newly built agent starter archives use the refreshed
-sources automatically.
+On Windows PowerShell, use the same commands. Do not use `git submodule update
+--remote` at the ARC-Bench root: these repositories are not root submodules.
+Newly downloaded ARC agent archives include the
+complete refreshed `reference-implementations/arc/src/arc-template` catalogue;
+the root `arc-template` is used by ARC-Bench when preparing task starter
+projects.
+
+To confirm all three checkouts are available:
+
+```bash
+git -C arc-template status --short
+git -C reference-implementations/arc status --short
+git -C reference-implementations/arc/src/arc-template status --short
+```
 
 ### Model provider configuration
 
