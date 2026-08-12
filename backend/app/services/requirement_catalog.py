@@ -48,6 +48,7 @@ class CatalogRequirementEntry:
     total_tests: int
     module_count: int
     requirements_path: Path
+    requirements_yaml_path: Path
     prerequisites_path: Path
     tests_path: Path
     assets_path: Path
@@ -108,37 +109,26 @@ class RequirementCatalogService:
                 # deployable task type. Competition packs currently run as
                 # web applications regardless of their event ID.
                 task_category = "web" if self.catalog_name == "competition" else category
-                requirements_dir = task_dir / "requirements"
-                requirements_path = requirements_dir / "requirements.md"
-                prerequisites_path = requirements_dir / "prerequisites.md"
-                tests_path = task_dir / "tests"
-                assets_path = requirements_dir / "assets"
-                references_path = requirements_dir / "reference"
-
-                if self.catalog_name == "competition":
-                    resolved_paths = self._resolve_competition_requirement_paths(task_dir)
-                    if resolved_paths is None:
-                        continue
-                    requirements_path, prerequisites_path, assets_path, references_path = resolved_paths
-
-                if not requirements_path.exists():
+                resolved_paths = self._resolve_task_requirement_paths(task_dir)
+                if resolved_paths is None:
                     continue
-
-                requirements_md = requirements_path.read_text(encoding="utf-8")
-                requirement_yaml_path = self._resolve_requirement_yaml_path(requirements_path)
+                requirements_path, requirement_yaml_path, prerequisites_path, assets_path, references_path = resolved_paths
+                tests_path = task_dir / "tests"
+                requirement_metadata = self._read_requirement_metadata(requirement_yaml_path)
                 leaf_requirement_count = self._count_leaf_requirements(requirement_yaml_path)
                 display_test_count = self._count_test_cases(tests_path)
                 rows.append(
                     CatalogRequirementEntry(
                         id=requirement_id,
                         competition_id=category if self.catalog_name == "competition" else None,
-                        title=self._extract_title(requirements_md, fallback=requirement_id),
+                        title=str(requirement_metadata.get("name") or requirement_id).strip() or requirement_id,
                         category=task_category,
-                        summary=self._extract_summary(requirements_md),
+                        summary=str(requirement_metadata.get("description") or "").strip(),
                         test_runner="playwright",
                         total_tests=display_test_count,
                         module_count=leaf_requirement_count,
                         requirements_path=requirements_path,
+                        requirements_yaml_path=requirement_yaml_path,
                         prerequisites_path=prerequisites_path,
                         tests_path=tests_path,
                         assets_path=assets_path,
@@ -148,12 +138,12 @@ class RequirementCatalogService:
 
         return rows
 
-    def _resolve_competition_requirement_paths(self, task_dir: Path) -> tuple[Path, Path, Path, Path] | None:
-        """Resolve a competition task from its YAML source and render Markdown on demand.
+    def _resolve_task_requirement_paths(self, task_dir: Path) -> tuple[Path, Path, Path, Path, Path] | None:
+        """Resolve a task from its YAML source without requiring rendered Markdown.
 
-        ``requirements.yaml`` is the source of truth.  The nested layout is the
-        preferred convention, while the root-level layout remains supported for
-        existing competition packs.
+        ``requirements.yaml`` is the source of truth for every catalog. Markdown
+        is only a presentation artifact and is rendered on demand when a detail
+        page or document download needs it.
         """
         candidates = (
             task_dir / "requirements" / "requirements.yaml",
@@ -166,9 +156,6 @@ class RequirementCatalogService:
             return None
 
         requirements_path = requirement_yaml_path.with_suffix(".md")
-        if not requirements_path.exists():
-            self._render_competition_requirements(requirement_yaml_path)
-
         source_dir = requirement_yaml_path.parent
         references_path = source_dir / "reference"
         assets_path = source_dir / "assets"
@@ -178,20 +165,29 @@ class RequirementCatalogService:
             assets_path = task_dir / "assets"
         return (
             requirements_path,
+            requirement_yaml_path,
             source_dir / "prerequisites.md",
             assets_path,
             references_path,
         )
 
     @staticmethod
-    def _render_competition_requirements(requirement_yaml_path: Path) -> None:
+    def _render_requirement_markdown(requirement_yaml_path: Path) -> None:
         script_path = Path(__file__).resolve().parents[3] / "scripts" / "render_competition_requirements.py"
         spec = importlib.util.spec_from_file_location("arcbench_competition_requirement_renderer", script_path)
         if spec is None or spec.loader is None:
-            raise RuntimeError(f"Unable to load competition requirement renderer: {script_path}")
+            raise RuntimeError(f"Unable to load requirement renderer: {script_path}")
         renderer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(renderer)
         renderer.convert_file(requirement_yaml_path)
+
+    @staticmethod
+    def _read_requirement_metadata(requirement_yaml_path: Path) -> dict[str, Any]:
+        try:
+            payload = yaml.safe_load(requirement_yaml_path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid requirement YAML: {requirement_yaml_path}") from exc
+        return payload if isinstance(payload, dict) else {}
 
     def _iter_catalog_sources(self) -> list[tuple[str, Path, Path]]:
         if self.catalog_name == "competition":
@@ -271,8 +267,9 @@ class RequirementCatalogService:
         rows = self.scan_entries()
         display_ids = self._build_display_id_map(rows)
         requirement = self.get_entry(requirement_id, rows)
+        self._ensure_requirement_markdown(requirement)
         requirements_markdown = requirement.requirements_path.read_text(encoding="utf-8")
-        requirements_yaml = self._read_requirement_yaml(requirement.requirements_path)
+        requirements_yaml = requirement.requirements_yaml_path.read_text(encoding="utf-8")
         prerequisites_markdown = self._read_text_if_exists(requirement.prerequisites_path)
 
         return RequirementDetail(
@@ -641,6 +638,8 @@ class RequirementCatalogService:
 
     def get_document(self, requirement_id: str, kind: str) -> str:
         requirement = self.get_entry(requirement_id)
+        if kind == "requirements":
+            self._ensure_requirement_markdown(requirement)
         path = requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path
         return self._read_text_if_exists(path)
 
@@ -656,6 +655,7 @@ class RequirementCatalogService:
 
     def build_public_task_bundle(self, requirement_id: str) -> tuple[bytes, str]:
         requirement = self.get_entry(requirement_id)
+        self._ensure_requirement_markdown(requirement)
         archive_name = f"arcbench-public-{requirement_id}.zip"
         entries = [
             (requirement.requirements_path, f"{requirement.id}/requirements/requirements.md"),
@@ -664,13 +664,13 @@ class RequirementCatalogService:
             (requirement.assets_path, f"{requirement.id}/requirements/assets"),
             (requirement.references_path, f"{requirement.id}/requirements/reference"),
         ]
-        requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
-        if requirement_yaml_path.exists():
-            entries.append((requirement_yaml_path, f"{requirement.id}/requirements/requirements.yaml"))
+        entries.append((requirement.requirements_yaml_path, f"{requirement.id}/requirements/requirements.yaml"))
         return self._build_zip(entries, archive_name)
 
     def build_public_task_document(self, requirement_id: str, kind: str) -> tuple[bytes, str]:
         requirement = self.get_entry(requirement_id)
+        if kind == "requirements":
+            self._ensure_requirement_markdown(requirement)
         source = requirement.requirements_path if kind == "requirements" else requirement.prerequisites_path
         return self._read_bytes_if_exists(source), source.name
 
@@ -694,6 +694,7 @@ class RequirementCatalogService:
         rows = self.scan_entries()
         entries: list[tuple[Path, str]] = []
         for requirement in rows:
+            self._ensure_requirement_markdown(requirement)
             entries.extend(
                 [
                     (requirement.requirements_path, f"public/{requirement.id}/requirements/requirements.md"),
@@ -703,9 +704,7 @@ class RequirementCatalogService:
                     (requirement.references_path, f"public/{requirement.id}/requirements/reference"),
                 ]
             )
-            requirement_yaml_path = self._resolve_requirement_yaml_path(requirement.requirements_path)
-            if requirement_yaml_path.exists():
-                entries.append((requirement_yaml_path, f"public/{requirement.id}/requirements/requirements.yaml"))
+            entries.append((requirement.requirements_yaml_path, f"public/{requirement.id}/requirements/requirements.yaml"))
         return self._build_zip(entries, "arcbench-public-competition.zip")
 
     def build_benchmark_track_bundle(self, benchmark_id: str) -> tuple[bytes, str]:
@@ -751,6 +750,10 @@ class RequirementCatalogService:
             if entry.id == requirement_id:
                 return entry
         raise LookupError(f"Requirement '{requirement_id}' not found")
+
+    def _ensure_requirement_markdown(self, requirement: CatalogRequirementEntry) -> None:
+        if not requirement.requirements_path.is_file():
+            self._render_requirement_markdown(requirement.requirements_yaml_path)
 
     def get_requirement_tests(self, requirement_id: str) -> RequirementTests:
         requirement = self.get_entry(requirement_id)
@@ -885,16 +888,6 @@ class RequirementCatalogService:
             "android": 1,
         }
         return (priority.get(category, 99), category)
-
-    @staticmethod
-    def _resolve_requirement_yaml_path(requirements_path: Path) -> Path:
-        return requirements_path.with_name("requirements.yaml")
-
-    def _read_requirement_yaml(self, requirements_path: Path) -> str | None:
-        yaml_path = self._resolve_requirement_yaml_path(requirements_path)
-        if not yaml_path.exists():
-            return None
-        return yaml_path.read_text(encoding="utf-8")
 
     def _count_leaf_requirements(self, yaml_path: Path) -> int:
         if not yaml_path.exists():
