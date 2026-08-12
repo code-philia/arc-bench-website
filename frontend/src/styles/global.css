@@ -7718,12 +7718,15 @@ button {
 .profile-record-tabs span { color: var(--text-muted); font-size: 10px; }
 .profile-record-list { display: grid; }
 .profile-record-row { display: grid; grid-template-columns: minmax(180px, 1fr) 92px 142px 60px auto; gap: 13px; align-items: center; min-height: 66px; padding: 10px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--transition); }
+.profile-record-row--competition { min-height: 78px; }
 .profile-record-row:last-child { border-bottom: 0; }
 .profile-record-row:hover { background: var(--bg-elevated); }
 .profile-record-main { min-width: 0; display: grid; gap: 4px; }
 .profile-record-main strong, .profile-record-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-record-main strong { color: var(--text); font-size: 13px; }
 .profile-record-main span { color: var(--text-muted); font-size: 11px; }
+.profile-record-main .profile-record-competition { width: max-content; max-width: 100%; padding: 2px 6px; border-radius: 4px; background: var(--tag-amber-bg); color: var(--tag-amber-text); font-size: 10px; font-weight: 700; letter-spacing: 0.015em; }
+.profile-record-row--competition .profile-record-main strong { font-size: 14px; }
 .profile-record-row time, .profile-record-duration { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .profile-records-empty { display: grid; min-height: 220px; place-items: center; padding: 20px; color: var(--text-muted); font-size: 13px; }
 .profile-record-row .profile-submission-actions { justify-content: flex-end; }
@@ -9104,7 +9107,7 @@ button {
 @media (min-width: 981px) {
   .competition-reading-layout.competition-hackathon-layout {
     height: auto;
-    align-items: stretch;
+    align-items: start;
   }
 
   .competition-reading-layout.competition-hackathon-layout .competition-description-scroll {
@@ -9114,7 +9117,7 @@ button {
   }
 
   .competition-reading-layout.competition-hackathon-layout .competition-sidebar {
-    grid-template-rows: auto auto;
+    grid-template-rows: max-content;
     height: auto;
   }
 
@@ -9123,5 +9126,18 @@ button {
   }
 
   .competition-reading-layout.competition-hackathon-layout .competition-task-list { overflow: visible; }
-  .competition-reading-layout.competition-hackathon-layout .competition-submission-panel { overflow: hidden; }
+  .competition-reading-layout.competition-hackathon-layout .competition-submission-panel {
+    display: grid;
+    grid-template-rows: max-content minmax(0, 1fr);
+    height: clamp(540px, calc(100dvh - 240px), 680px);
+    overflow: hidden;
+  }
+
+  .competition-reading-layout.competition-hackathon-layout .competition-submission-form,
+  .competition-reading-layout.competition-hackathon-layout .competition-submission-history {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .competition-reading-layout.competition-hackathon-layout .competition-submission-form { align-content: start; }
 }

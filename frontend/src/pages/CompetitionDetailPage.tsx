@@ -1,7 +1,7 @@
 import { BulbOutlined, CalendarOutlined, DatabaseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InfoCircleOutlined, RocketOutlined, RightOutlined, TrophyOutlined } from "@ant-design/icons";
 import { message, Modal } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import AgentTemplateDialog from "../components/requirements/AgentTemplateDialog";
@@ -58,11 +58,12 @@ function competitionStatusLabel(status: string) {
 export default function CompetitionDetailPage() {
   const { competitionId = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [competition, setCompetition] = useState<CompetitionDetail | null>(null);
   const [submissions, setSubmissions] = useState<CompetitionSubmissionHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"create" | "history">("create");
+  const tab: "create" | "history" = searchParams.get("tab") === "history" ? "history" : "create";
   const [runtime, setRuntime] = useState("python");
   const [agentSource, setAgentSource] = useState<AgentSource>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -98,6 +99,16 @@ export default function CompetitionDetailPage() {
     })) ?? [],
     [competition?.tasks],
   );
+
+  const setTab = (nextTab: "create" | "history") => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextTab === "history") {
+      nextParams.set("tab", "history");
+    } else {
+      nextParams.delete("tab");
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const createSubmission = async () => {
     if (!user) {

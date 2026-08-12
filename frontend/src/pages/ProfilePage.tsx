@@ -131,6 +131,14 @@ export default function ProfilePage() {
     navigate(`/runs/${latestRun.id}`);
   };
 
+  const openCompetitionSubmission = (submission: AgentSubmissionSummary) => {
+    if (!submission.competition_id) {
+      message.error("This submission is not linked to a competition.");
+      return;
+    }
+    navigate(`/competitions/${submission.competition_id}?tab=history`);
+  };
+
   return (
     <div className="page profile-page">
       <div className="profile-layout">
@@ -172,12 +180,12 @@ export default function ProfilePage() {
             </header>
             {submissionsLoading ? <div className="profile-records-empty">Loading activity records...</div>
               : visibleRecords.length === 0 ? <div className="profile-records-empty">{activeRecordView === "submissions" ? "No submission runs yet." : "No competition entries yet."}</div>
-                : <div className="profile-record-list">{visibleRecords.map((submission) => <article key={submission.id} className="profile-record-row" onClick={() => openLatestRun(submission)}>
-                  <div className="profile-record-main"><strong>{submission.display_name || (isCompetitionSnapshot(submission) ? `${competitionLabel(submission)} agent snapshot` : submission.id)}</strong><span>{isCompetitionSnapshot(submission) ? `Competition: ${competitionLabel(submission)}` : submissionTaskLabel(submission.requirement_id)} · {submission.runtime}</span></div>
+                : <div className="profile-record-list">{visibleRecords.map((submission) => <article key={submission.id} className={`profile-record-row${isCompetitionSnapshot(submission) ? " profile-record-row--competition" : ""}`} onClick={() => isCompetitionSnapshot(submission) ? openCompetitionSubmission(submission) : openLatestRun(submission)}>
+                  <div className="profile-record-main">{isCompetitionSnapshot(submission) ? <span className="profile-record-competition">Competition · {competitionLabel(submission)}</span> : null}<strong>{submission.display_name || (isCompetitionSnapshot(submission) ? "Untitled submission" : submission.id)}</strong><span>{isCompetitionSnapshot(submission) ? "Saved agent submission" : submissionTaskLabel(submission.requirement_id)} · {submission.runtime}</span></div>
                   <span className="test-badge pending">SAVED</span>
                   <time>{new Date(submission.created_at).toLocaleString()}</time>
                   <span className="profile-record-duration">{runs.filter((run) => run.submission_id === submission.id).length} runs</span>
-                  <div className="profile-submission-actions"><button type="button" className="profile-submission-open" onClick={(event) => { event.stopPropagation(); openLatestRun(submission); }}>Open run <RightOutlined /></button><button type="button" className="profile-submission-delete" aria-label={`Delete ${submission.display_name || submission.id}`} title="Delete record" onClick={(event) => { event.stopPropagation(); deleteSubmission(submission); }}><DeleteOutlined /></button></div>
+                  <div className="profile-submission-actions"><button type="button" className="profile-submission-open" onClick={(event) => { event.stopPropagation(); isCompetitionSnapshot(submission) ? openCompetitionSubmission(submission) : openLatestRun(submission); }}>{isCompetitionSnapshot(submission) ? "Open submission" : "Open run"} <RightOutlined /></button><button type="button" className="profile-submission-delete" aria-label={`Delete ${submission.display_name || submission.id}`} title="Delete record" onClick={(event) => { event.stopPropagation(); deleteSubmission(submission); }}><DeleteOutlined /></button></div>
                 </article>)}</div>}
           </section>
         </main>
