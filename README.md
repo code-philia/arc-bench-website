@@ -72,18 +72,18 @@ needed for local backend execution.
 ARC and Octos submissions share one local runner image. Build it once, then run its smoke test:
 
 ```bash
-docker build -f backend/runner/Dockerfile -t arcbench-runner:local .
-docker run --rm --entrypoint python3 arcbench-runner:local /opt/arcbench/smoke_test.py
+docker build -f backend/runner/Dockerfile -t arcbench-runner:latest .
+docker run --rm --entrypoint python3 arcbench-runner:latest /opt/arcbench/smoke_test.py
 ```
 
 For local execution, point the backend at this image:
 
 ```bash
 # macOS / Linux
-export ARCBENCH_RUNNER_IMAGE=arcbench-runner:local
+export ARCBENCH_RUNNER_IMAGE=arcbench-runner:latest
 
 # Windows PowerShell
-$env:ARCBENCH_RUNNER_IMAGE = "arcbench-runner:local"
+$env:ARCBENCH_RUNNER_IMAGE = "arcbench-runner:latest"
 ```
 
 Production deployments should use a validated immutable image tag or digest. See [backend/runner/README.md](backend/runner/README.md) for runner details.
