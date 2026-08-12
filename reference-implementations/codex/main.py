@@ -9,7 +9,7 @@ import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from openai_codex import Codex, CodexConfig, Sandbox
+from openai_codex import ApprovalMode, Codex, CodexConfig, Sandbox
 
 import yaml
 
@@ -103,7 +103,7 @@ def _codex_config(CodexConfig: Any) -> Any:
 
 def _developer_instructions(skills_dir: Path) -> str:
     return textwrap.dedent(
-        """
+        f"""
         You implement an ARC-Bench application in the current working directory.
         The directory already contains an initialized starter application. Preserve existing work.
 
@@ -154,6 +154,7 @@ def implement_modules(
 ) -> None:
     model = os.environ.get("MODEL", "").strip() or None
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
     completed_ids: list[str] = []
 
     with Codex(config=_codex_config(CodexConfig)) as codex:
@@ -161,7 +162,8 @@ def implement_modules(
             codex.login_api_key(api_key)
         thread = codex.thread_start(
             cwd=str(output_dir),
-            sandbox=Sandbox.workspace_write,
+            sandbox=Sandbox.full_access,
+            approval_mode=ApprovalMode.deny_all,
             model=model,
             developer_instructions=_developer_instructions(skills_dir),
         )
