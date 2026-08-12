@@ -44,7 +44,7 @@ class AgentStarterService:
         that layout leaves the blank starter as the active entry point.
         """
         if template_kind == "arc":
-            self._add_arc_agent_template(archive)
+            self._add_arc_agent_template(archive, task_type)
             return
 
         source_roots = {
@@ -59,7 +59,7 @@ class AgentStarterService:
         )
         self._add_task_template(archive, self._resolve_template_root(task_type))
 
-    def _add_arc_agent_template(self, archive: zipfile.ZipFile) -> None:
+    def _add_arc_agent_template(self, archive: zipfile.ZipFile, task_type: str) -> None:
         source_root = self.settings.builtin_arc_agent_source_dir
         if not source_root.is_dir():
             raise FileNotFoundError(f"Agent template source directory not found: {source_root}")
@@ -68,10 +68,13 @@ class AgentStarterService:
             if path.is_dir() or self._should_exclude_starter_path(path, source_root):
                 continue
             relative_path = path.relative_to(source_root)
+            if relative_path.parts[0] == "arc-template":
+                continue
             archive_name = "arc_main.py" if relative_path == Path("main.py") else relative_path.as_posix()
             archive.write(path, arcname=archive_name)
 
         archive.writestr("main.py", self._build_arc_entrypoint())
+        self._add_task_template(archive, self._resolve_template_root(task_type))
 
     @staticmethod
     def _build_arc_entrypoint() -> str:
@@ -171,7 +174,7 @@ if __name__ == "__main__":
     def _resolve_template_root(self, task_type: str) -> Path:
         normalized = str(task_type or "").strip().lower()
         if normalized == "cli":
-            return self.settings.builtin_arc_agent_source_dir / "arc-template" / "templates" / "cli-python"
+            return self.settings.cli_template_files_root
         if normalized in {"mobile", "android"}:
             return self.settings.mobile_template_files_root
         return self.settings.web_template_files_root
