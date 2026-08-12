@@ -1,11 +1,6 @@
 # Unified runner image
 
-`backend/runner/Dockerfile` is the only runner environment. It contains the ARC runner, Octos CLI, Python, Node.js, Git, Playwright, Chromium, and the benchmark test package.
-
-The backend selects the runner mode with the container command, not with a different image:
-
-- ARC: `python3 /opt/arcbench/run_submission.py`
-- Octos: `python3 /opt/arcbench/run_octos_submission.py`
+`backend/runner/Dockerfile` is the only evaluation environment. It contains Python, Node.js, Git, Playwright, Chromium, and the benchmark test package. It executes all uploaded and built-in agents through the common Python runner.
 
 Build and validate a release image before enabling evaluation:
 

@@ -9,7 +9,7 @@ import { api } from "../lib/api";
 import { DEFAULT_MODEL_NAME, MODEL_OPTIONS } from "../lib/models";
 import type { CompetitionDetail, CompetitionSubmissionHistoryEntry } from "../lib/types";
 
-type AgentSource = "upload" | "builtin_arc_agent" | "builtin_octos_agent";
+type AgentSource = "upload" | "builtin_arc_agent";
 
 function download(file: File) {
   const url = URL.createObjectURL(file);
@@ -241,11 +241,10 @@ export default function CompetitionDetailPage() {
                   <div><h2>Save an agent snapshot</h2><p>This snapshot is shared by all competition tasks. Choose a task afterwards to run it.</p></div>
                   <div><div className="competition-field-label">Agent source</div><div className="agent-source-selector">
                     <button type="button" className={`agent-source-card${agentSource === "upload" ? " active" : ""}`} onClick={() => setAgentSource("upload")}><span className="agent-source-title">Upload .zip</span><span className="agent-source-copy">Use your own agent package.</span></button>
-                    <button type="button" className={`agent-source-card${agentSource !== "upload" ? " active" : ""}`} onClick={() => { setAgentSource("builtin_arc_agent"); setRuntime("python"); }}><span className="agent-source-title">Built-in Agent</span><span className="agent-source-copy">Use ARC Agent or Octos Agent.</span></button>
+                    <button type="button" className={`agent-source-card${agentSource !== "upload" ? " active" : ""}`} onClick={() => { setAgentSource("builtin_arc_agent"); setRuntime("python"); }}><span className="agent-source-title">Built-in ARC Agent</span><span className="agent-source-copy">Use the bundled ARC Agent.</span></button>
                   </div></div>
                   {agentSource !== "upload" ? <div className="builtin-agent-selector" role="group" aria-label="Built-in agent type">
                     <button type="button" className={`builtin-agent-option${agentSource === "builtin_arc_agent" ? " active" : ""}`} onClick={() => setAgentSource("builtin_arc_agent")}><span>ARC Agent</span><small>Agentic Requirement Compiler</small></button>
-                    <button type="button" className={`builtin-agent-option${agentSource === "builtin_octos_agent" ? " active" : ""}`} onClick={() => setAgentSource("builtin_octos_agent")}><span>Octos Agent</span><small>Your Own AI Assistant</small></button>
                   </div> : <>
                     <AgentTemplateDialog href={templateUrl} runtime={runtime} />
                     <label className="upload-zone"><input className="visually-hidden" type="file" accept=".zip" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /><div className="upload-icon"><FileZipOutlined /></div><div className="upload-text">{file ? file.name : "Drop your agent code here"}</div><div className="upload-hint">Keep the runtime entrypoint at the ZIP root.</div></label>

@@ -40,6 +40,7 @@ from app.schemas.requirement import (
 @dataclass
 class CatalogRequirementEntry:
     id: str
+    competition_id: str | None
     title: str
     category: str
     summary: str
@@ -103,6 +104,10 @@ class RequirementCatalogService:
                     if self.catalog_name == "competition"
                     else source_requirement_id
                 )
+                # A competition directory identifies the event, not the
+                # deployable task type. Competition packs currently run as
+                # web applications regardless of their event ID.
+                task_category = "web" if self.catalog_name == "competition" else category
                 requirements_dir = task_dir / "requirements"
                 requirements_path = requirements_dir / "requirements.md"
                 prerequisites_path = requirements_dir / "prerequisites.md"
@@ -126,8 +131,9 @@ class RequirementCatalogService:
                 rows.append(
                     CatalogRequirementEntry(
                         id=requirement_id,
+                        competition_id=category if self.catalog_name == "competition" else None,
                         title=self._extract_title(requirements_md, fallback=requirement_id),
-                        category=category,
+                        category=task_category,
                         summary=self._extract_summary(requirements_md),
                         test_runner="playwright",
                         total_tests=display_test_count,
@@ -289,7 +295,7 @@ class RequirementCatalogService:
         rows = self.scan_entries()
         grouped: dict[str, list[CatalogRequirementEntry]] = {}
         for row in rows:
-            grouped.setdefault(row.category, []).append(row)
+            grouped.setdefault(row.competition_id or row.category, []).append(row)
 
         competitions: list[CompetitionSummary] = []
         for root in self._competition_roots():
@@ -435,7 +441,7 @@ class RequirementCatalogService:
         """
         normalized_competition_id = competition_id.strip().lower()
         task_entries = [
-            entry for entry in self.scan_entries() if entry.category == normalized_competition_id
+            entry for entry in self.scan_entries() if entry.competition_id == normalized_competition_id
         ]
         if not any(item.id == normalized_competition_id for item in self.list_competitions()):
             raise LookupError(f"Competition '{competition_id}' not found")
@@ -525,7 +531,7 @@ class RequirementCatalogService:
     def get_competition_detail(self, competition_id: str, base_url: str) -> CompetitionDetail:
         rows = self.scan_entries()
         display_ids = self._build_display_id_map(rows)
-        competition_tasks = [row for row in rows if row.category == competition_id]
+        competition_tasks = [row for row in rows if row.competition_id == competition_id]
         competition_root = next((root for root in self._competition_roots() if self._competition_id(root.name) == competition_id), None)
         if competition_root is None:
             raise LookupError(f"Competition '{competition_id}' not found")

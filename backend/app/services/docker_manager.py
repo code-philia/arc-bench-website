@@ -83,9 +83,6 @@ class DockerManager:
             self.settings.runner_context_dir / self.settings.runner_dockerfile,
             self.settings.runner_context_dir / "backend" / "runner" / "agent-runner" / "run_submission.py",
             self.settings.runner_context_dir / "backend" / "runner" / "agent-runner" / "smoke_test.py",
-            self.settings.runner_context_dir / "backend" / "runner" / "octos-runner" / "run_octos_submission.py",
-            self.settings.runner_context_dir / "octos" / "Cargo.toml",
-            self.settings.runner_context_dir / "octos" / "Cargo.lock",
         ]
         if any(not path.exists() for path in source_paths):
             return False
@@ -156,10 +153,7 @@ class DockerManager:
             "mem_limit": self.settings.runner_memory_limit,
             "nano_cpus": self.settings.runner_cpu_limit * 1_000_000_000,
             "working_dir": "/workspace",
-            "command": [
-                "python3",
-                "/opt/arcbench/run_octos_submission.py" if runner_kind == "octos" else "/opt/arcbench/run_submission.py",
-            ],
+            "command": ["python3", "/opt/arcbench/run_submission.py"],
         }
         network_mode = (self.settings.runner_network_mode or "").strip()
         if network_mode:

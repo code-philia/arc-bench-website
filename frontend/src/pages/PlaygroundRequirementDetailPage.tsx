@@ -79,7 +79,7 @@ export default function PlaygroundRequirementDetailPage() {
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<"readme" | "tests">("readme");
   const [runtime, setRuntime] = useState("python");
-  const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent" | "builtin_octos_agent">("upload");
+  const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent">("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL_NAME);
@@ -385,17 +385,6 @@ export default function PlaygroundRequirementDetailPage() {
                         <span>ARC Agent</span>
                         <small>Agentic Requirement Compiler</small>
                       </button>
-                      <button
-                        type="button"
-                        className={`builtin-agent-option${agentSource === "builtin_octos_agent" ? " active" : ""}`}
-                        onClick={() => {
-                          setAgentSource("builtin_octos_agent");
-                          setUploadError(null);
-                        }}
-                      >
-                        <span>Octos Agent</span>
-                        <small>Your Own AI Assistant</small>
-                      </button>
                     </div>
                   ) : null}
                   {agentSource === "upload" ? (
@@ -432,9 +421,9 @@ export default function PlaygroundRequirementDetailPage() {
                     </label>
                   ) : (
                     <div className="builtin-agent-panel">
-                      <div className="file-icon">{agentSource === "builtin_octos_agent" ? "OCT" : "ARC"}</div>
+                      <div className="file-icon">ARC</div>
                       <div className="file-info">
-                        <div className="file-name">{agentSource === "builtin_octos_agent" ? "Octos Agent" : "ARC Agent"}</div>
+                        <div className="file-name">ARC Agent</div>
                       </div>
                     </div>
                   )}

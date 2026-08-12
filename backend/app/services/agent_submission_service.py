@@ -48,6 +48,8 @@ class AgentSubmissionService:
         normalized_catalog = catalog.strip().lower()
         normalized_competition_id = (competition_id or "").strip().lower() or None
         normalized_requirement_id = (requirement_id or "").strip() or None
+        if agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
+            raise ValueError("Built-in Octos agent is temporarily unavailable")
         if normalized_catalog == "competition":
             if not normalized_competition_id:
                 raise ValueError("competition_id is required for a competition submission")
@@ -93,11 +95,6 @@ class AgentSubmissionService:
             RunService._write_builtin_arc_agent_archive(archive_path)
             original_filename = "builtin-arc-agent.zip"
             RunService._validate_agent_archive(archive_path, runtime)
-        elif agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
-            if runtime != RuntimeType.PYTHON:
-                raise ValueError("Built-in Octos agent only supports Python runtime")
-            RunService._write_builtin_octos_agent_archive(archive_path)
-            original_filename = "builtin-octos-agent.zip"
         else:
             if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
                 raise ValueError("Only .zip uploads are supported")

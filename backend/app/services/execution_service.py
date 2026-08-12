@@ -1,4 +1,5 @@
 import json
+import math
 import time
 from pathlib import Path
 
@@ -35,6 +36,17 @@ class ExecutionService:
         self.result_parser = ResultParser()
         self.runtime_paths = RuntimePathService()
         self.artifact_service = SubmissionArtifactService()
+
+    def _read_agent_execution_duration(self, workspace_path: Path) -> float | None:
+        metrics_path = self.runtime_paths.get_arc_dir_from_workspace(workspace_path) / "agent-execution.json"
+        try:
+            payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        value = payload.get("duration_seconds") if isinstance(payload, dict) else None
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            return None
+        return float(value)
 
     def run_submission(self, submission_id: str) -> None:
         self._run_submission_internal(submission_id, reuse_workspace=False)
@@ -78,11 +90,13 @@ class ExecutionService:
 
         submission = submission_service.get_submission(submission_id)
         workspace_path = self.runtime_paths.get_workspace_root(submission, username=user.username)
-        runner_kind = "octos" if agent_submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value else "python"
-        if runner_kind == "octos":
-            start_agent_description = "Running built-in Octos CLI agent"
-        elif agent_submission.agent_source == AgentSourceType.BUILTIN_ARC_AGENT.value:
+        runner_kind = "python"
+        if agent_submission.agent_source == AgentSourceType.BUILTIN_ARC_AGENT.value:
             start_agent_description = "Continuing built-in ARC agent" if reuse_workspace else "Running built-in ARC agent"
+        elif agent_submission.agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT.value:
+            # Existing historical records can still be opened safely; new
+            # Octos submissions are rejected at creation time above.
+            start_agent_description = "Running archived legacy agent"
         else:
             start_agent_description = "Running uploaded agent"
         arc_dir = self.runtime_paths.get_arc_dir_from_workspace(workspace_path)
@@ -100,6 +114,7 @@ class ExecutionService:
         pause_requested_at: float | None = None
         pause_signal_sent_at: float | None = None
         paused = False
+        agent_execution_duration: float | None = None
         last_runner_signal_at = time.time()
         stuck_notification_sent = False
 
@@ -450,7 +465,11 @@ class ExecutionService:
                 ),
             )
 
+            agent_execution_duration = self._read_agent_execution_duration(workspace_path)
             parsed = self.result_parser.parse_playwright_report(playwright_report_path)
+            total_tests = parsed["passed"] + parsed["failed"]
+            if total_tests <= 0:
+                raise RuntimeError("Runner did not produce any executed Playwright tests")
             debug_log.append("backend", f"Parsed Playwright report at {playwright_report_path}: {parsed}")
             emit_event(
                 "run_tests",
@@ -481,6 +500,7 @@ class ExecutionService:
                 feature_implemented_count=parsed["feature_implemented_count"],
                 feature_total_count=parsed["feature_total_count"],
                 feature_implementation_rate=parsed["feature_implementation_rate"],
+                run_duration_seconds=agent_execution_duration,
             )
             debug_log.append("backend", f"Submission finalized with status={status.value}, score={parsed['score']}")
         except Exception as exc:  # noqa: BLE001
@@ -517,6 +537,7 @@ class ExecutionService:
                 stderr_path=None,
                 result_path=None,
                 failure_reason=str(exc),
+                run_duration_seconds=agent_execution_duration or self._read_agent_execution_duration(workspace_path),
             )
             debug_log.append("backend", "Failure state persisted to database")
         finally:

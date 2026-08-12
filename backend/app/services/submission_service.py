@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal, Optional, List
 
-from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -46,13 +45,10 @@ from app.services.demo_replay_loader import (
 )
 from app.services.host_demo_preview_service import HostDemoPreviewService
 from app.services.notification_service import NotificationService
-from app.services.model_provider_service import ModelProviderService
-from app.services.requirement_catalog import RequirementCatalogService
 from app.services.result_parser import ResultParser
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
-from app.services.user_task_service import UserTaskService
 from app.services.workspace_assembler import WorkspaceAssembler
 
 
@@ -84,7 +80,6 @@ class RunService:
     def __init__(self, db: Session):
         self.db = db
         self.settings = get_settings()
-        self.model_providers = ModelProviderService(self.settings.runtime_config_path)
         self.runtime_paths = RuntimePathService()
         self.artifact_service = SubmissionArtifactService()
 
@@ -93,91 +88,6 @@ class RunService:
         if not user:
             raise LookupError(f"User '{user_id}' not found")
         return user
-
-    def _legacy_create_mixed_submission(
-        self,
-        requirement_id: str | None,
-        runtime: RuntimeType,
-        user_id: str,
-        upload: UploadFile | None = None,
-        catalog: str = "playground",
-        display_name: str | None = None,
-        model_name: str | None = None,
-        task_type: str | None = None,
-        agent_source: AgentSourceType = AgentSourceType.UPLOAD,
-        competition_id: str | None = None,
-    ) -> Submission:
-        user = self._get_submission_user(user_id)
-        normalized_competition_id = (competition_id or "").strip().lower()
-        if catalog == "competition" and normalized_competition_id and not requirement_id:
-            return self._legacy_create_mixed_competition_submission(
-                competition_id=normalized_competition_id,
-                runtime=runtime,
-                user=user,
-                upload=upload,
-                display_name=display_name,
-                model_name=model_name,
-                agent_source=agent_source,
-            )
-        if not requirement_id:
-            raise ValueError("A requirement id is required for a task submission")
-        normalized_task_type = self._normalize_task_type_hint(task_type)
-        if catalog == "my_tasks":
-            _task, requirement = UserTaskService(self.db).get_owned_task_for_submission(user, requirement_id)
-        else:
-            RequirementCatalogService.for_catalog(self.db, catalog).sync_to_db(requirement_id)
-            requirement = self.db.get(Requirement, requirement_id)
-        if not requirement:
-            raise LookupError(f"Requirement '{requirement_id}' not found")
-        if catalog != "competition" and normalized_task_type and normalized_task_type != str(requirement.category or "").strip().lower():
-            raise ValueError(
-                f"Task type mismatch: frontend reported '{normalized_task_type}' but backend resolved '{requirement.category}'"
-            )
-        if catalog != "competition" and requirement.category not in {"web", "cli"}:
-            raise ValueError("Only web and cli requirements are supported in v1")
-        normalized_display_name = self._normalize_display_name(display_name)
-        normalized_model_name = self._normalize_model_name(model_name)
-        submission_id = uuid.uuid4().hex[:12]
-        draft_submission = Submission(id=submission_id, user_id=user_id)
-        submission_dir = self.runtime_paths.get_submission_root(draft_submission, username=user.username)
-        submission_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = submission_dir / "agent.zip"
-        if agent_source == AgentSourceType.BUILTIN_ARC_AGENT:
-            if runtime != RuntimeType.PYTHON:
-                raise ValueError("Built-in ARC agent only supports Python runtime")
-            self._write_builtin_arc_agent_archive(archive_path)
-            original_filename = "builtin-arc-agent.zip"
-            self._validate_agent_archive(archive_path, RuntimeType.PYTHON)
-        elif agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
-            if runtime != RuntimeType.PYTHON:
-                raise ValueError("Built-in Octos agent only supports Python runtime")
-            self._write_builtin_octos_agent_archive(archive_path)
-            original_filename = "builtin-octos-agent.zip"
-        else:
-            if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
-                raise ValueError("Only .zip uploads are supported")
-            with archive_path.open("wb") as output:
-                shutil.copyfileobj(upload.file, output)
-            original_filename = upload.filename
-            self._validate_agent_archive(archive_path, runtime)
-
-        submission = Submission(
-            id=submission_id,
-            user_id=user_id,
-            display_name=normalized_display_name,
-            model_name=normalized_model_name,
-            requirement_id=requirement_id,
-            runtime=runtime.value,
-            agent_source=agent_source.value,
-            original_filename=original_filename,
-            archive_path=str(archive_path),
-            status=SubmissionStatus.PENDING.value,
-            steps_json=json.dumps([step.model_dump() for step in DEFAULT_STEPS]),
-        )
-        self.db.add(submission)
-        self.db.commit()
-        self.db.refresh(submission)
-        return submission
 
     def get_submission_checkpoint_path(self, submission: Submission) -> Path | None:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -577,11 +487,10 @@ class RunService:
         self.update_steps(submission, self.build_cancelled_step_states(active_step, completed))
         submission.status = SubmissionStatus.CANCELLED.value
         submission.finished_at = datetime.utcnow()
-        submission.run_duration_seconds = (
-            max(0, int((submission.finished_at - submission.started_at).total_seconds()))
-            if submission.started_at is not None
-            else None
-        )
+        # This column represents agent-process time, not wall-clock time. A
+        # forced cancellation may terminate the runner before it writes its
+        # execution metric, so do not substitute elapsed wall time here.
+        submission.run_duration_seconds = None
         submission.failure_reason = "Run cancelled by user"
         self.db.add(submission)
         self.db.commit()
@@ -793,31 +702,6 @@ class RunService:
         )
         return all(path.exists() for path in required_paths)
 
-    @staticmethod
-    def _normalize_display_name(display_name: str | None) -> str | None:
-        if display_name is None:
-            return None
-        normalized = " ".join(display_name.strip().split())
-        if not normalized:
-            return None
-        if len(normalized) > 120:
-            raise ValueError("Submission name must be 120 characters or fewer")
-        return normalized
-
-    @staticmethod
-    def _normalize_task_type_hint(task_type: str | None) -> str | None:
-        if task_type is None:
-            return None
-        normalized = str(task_type).strip().lower()
-        if not normalized:
-            return None
-        if normalized not in {"web", "mobile", "kernel", "mixed", "cli"}:
-            raise ValueError(f"Unsupported task type: {task_type}")
-        return normalized
-
-    def _normalize_model_name(self, model_name: str | None) -> str:
-        return self.model_providers.resolve_model(model_name).name
-
     def append_step_event(
         self,
         submission_id: str,
@@ -892,8 +776,9 @@ class RunService:
             return ("index.ts", "package.json")
         raise ValueError(f"Unsupported runtime: {runtime}")
 
-    def _write_builtin_arc_agent_archive(self, archive_path: Path) -> None:
-        source_dir = Path(self.settings.builtin_arc_agent_source_dir).resolve()
+    @staticmethod
+    def _write_builtin_arc_agent_archive(archive_path: Path) -> None:
+        source_dir = Path(get_settings().builtin_arc_agent_source_dir).resolve()
         if not source_dir.is_dir():
             raise ValueError(f"Built-in ARC agent source directory not found: {source_dir}")
 
@@ -908,11 +793,11 @@ class RunService:
                 if path.is_dir():
                     continue
                 relative_path = path.relative_to(source_dir)
-                if self._should_exclude_builtin_arc_agent_path(relative_path):
+                if RunService._should_exclude_builtin_arc_agent_path(relative_path):
                     continue
                 archive_name = "arc_main.py" if relative_path == Path("main.py") else relative_path.as_posix()
                 archive.write(path, archive_name)
-            archive.writestr("main.py", self._build_builtin_arc_entrypoint())
+            archive.writestr("main.py", RunService._build_builtin_arc_entrypoint())
 
     @staticmethod
     def _build_builtin_arc_entrypoint() -> str:
@@ -936,15 +821,6 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 '''
-
-    @staticmethod
-    def _write_builtin_octos_agent_archive(archive_path: Path) -> None:
-        archive_path.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(
-                "README.md",
-                "Built-in Octos agent submissions are executed by the Octos runner image.\n",
-            )
 
     @staticmethod
     def _should_exclude_builtin_arc_agent_path(relative_path: Path) -> bool:
@@ -1061,111 +937,6 @@ if __name__ == "__main__":
             raise error
         os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
         remove_func(path)
-
-    def _legacy_create_mixed_competition_submission(
-        self,
-        *,
-        competition_id: str,
-        runtime: RuntimeType,
-        user: User,
-        upload: UploadFile | None,
-        display_name: str | None,
-        model_name: str | None,
-        agent_source: AgentSourceType,
-    ) -> Submission:
-        competitions = RequirementCatalogService.for_catalog(self.db, "competition").list_competitions()
-        if not any(competition.id == competition_id for competition in competitions):
-            raise LookupError(f"Competition '{competition_id}' not found")
-        normalized_display_name = self._normalize_display_name(display_name)
-        normalized_model_name = self._normalize_model_name(model_name)
-        submission_id = uuid.uuid4().hex[:12]
-        submission_dir = self.runtime_paths.get_submission_root(Submission(id=submission_id, user_id=user.id), username=user.username)
-        submission_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = submission_dir / "agent.zip"
-        if agent_source == AgentSourceType.BUILTIN_ARC_AGENT:
-            if runtime != RuntimeType.PYTHON:
-                raise ValueError("Built-in ARC agent only supports Python runtime")
-            self._write_builtin_arc_agent_archive(archive_path)
-            original_filename = "builtin-arc-agent.zip"
-            self._validate_agent_archive(archive_path, RuntimeType.PYTHON)
-        elif agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
-            if runtime != RuntimeType.PYTHON:
-                raise ValueError("Built-in Octos agent only supports Python runtime")
-            self._write_builtin_octos_agent_archive(archive_path)
-            original_filename = "builtin-octos-agent.zip"
-        else:
-            if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
-                raise ValueError("Only .zip uploads are supported")
-            with archive_path.open("wb") as output:
-                shutil.copyfileobj(upload.file, output)
-            original_filename = upload.filename
-            self._validate_agent_archive(archive_path, runtime)
-
-        submission = Submission(
-            id=submission_id,
-            user_id=user.id,
-            display_name=normalized_display_name,
-            model_name=normalized_model_name,
-            requirement_id=f"{competition_id}--__agent__",
-            runtime=runtime.value,
-            agent_source=agent_source.value,
-            original_filename=original_filename,
-            archive_path=str(archive_path),
-            status=SubmissionStatus.READY.value,
-            steps_json=json.dumps([step.model_dump() for step in DEFAULT_STEPS]),
-        )
-        self.db.add(submission)
-        self.db.commit()
-        self.db.refresh(submission)
-        return submission
-
-    def _legacy_clone_mixed_submission_for_rerun(self, submission_id: str, user_id: str, *, requirement_id: str) -> Submission:
-        source = self.get_submission(submission_id, user_id)
-        user = self._get_submission_user(user_id)
-        source_competition_id = source.requirement_id.removesuffix("--__agent__")
-        if source.status != SubmissionStatus.READY.value or source_competition_id == source.requirement_id:
-            raise ValueError("Only a saved competition submission can be used to start a task run")
-        latest_snapshot_id = self.db.scalar(
-            select(Submission.id)
-            .where(Submission.user_id == user_id)
-            .where(Submission.requirement_id == f"{source_competition_id}--__agent__")
-            .order_by(desc(Submission.created_at))
-            .limit(1)
-        )
-        if latest_snapshot_id != source.id:
-            raise ValueError("Runs must use the latest saved agent submission for this competition")
-        if not requirement_id.startswith(f"{source_competition_id}--") or requirement_id.endswith("--__agent__"):
-            raise ValueError("The selected submission does not belong to this competition task")
-        RequirementCatalogService.for_catalog(self.db, "competition").sync_to_db(requirement_id)
-        if not self.db.get(Requirement, requirement_id):
-            raise LookupError(f"Requirement '{requirement_id}' not found")
-        source_archive = Path(source.archive_path)
-        if not source_archive.is_file():
-            raise FileNotFoundError("The uploaded agent archive is no longer available")
-
-        rerun_id = uuid.uuid4().hex[:12]
-        submission_dir = self.runtime_paths.get_submission_root(Submission(id=rerun_id, user_id=user_id), username=user.username)
-        submission_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = submission_dir / "agent.zip"
-        shutil.copy2(source_archive, archive_path)
-        rerun = Submission(
-            id=rerun_id,
-            user_id=user_id,
-            display_name=source.display_name,
-            model_name=source.model_name,
-            competition_submission_id=source.id,
-            requirement_id=requirement_id,
-            runtime=source.runtime,
-            agent_source=source.agent_source,
-            original_filename=source.original_filename,
-            archive_path=str(archive_path),
-            status=SubmissionStatus.PENDING.value,
-            steps_json=json.dumps([step.model_dump() for step in DEFAULT_STEPS]),
-        )
-        self.db.add(rerun)
-        self.db.commit()
-        self.db.refresh(rerun)
-        return rerun
 
     def to_detail(self, submission: Submission) -> SubmissionDetail:
         source = self.db.get(AgentSubmission, submission.submission_id)
@@ -1514,6 +1285,7 @@ if __name__ == "__main__":
         feature_implemented_count: int = 0,
         feature_total_count: int = 0,
         feature_implementation_rate: float | None = None,
+        run_duration_seconds: float | None = None,
     ) -> None:
         submission.status = status.value
         submission.finished_at = datetime.utcnow()
@@ -1521,9 +1293,12 @@ if __name__ == "__main__":
         submission.failed_count = failed_count
         submission.score = score
         submission.test_pass_rate = test_pass_rate if test_pass_rate is not None else score
+        # The runner measures this around the generation-agent subprocess and
+        # excludes image preparation, dependency installation, deployment,
+        # tests, and paused waiting. Never derive it from the run wall clock.
         submission.run_duration_seconds = (
-            max(0, int((submission.finished_at - submission.started_at).total_seconds()))
-            if submission.started_at is not None
+            max(0, int(round(run_duration_seconds)))
+            if isinstance(run_duration_seconds, (int, float))
             else None
         )
         # score remains the backwards-compatible test pass-rate field.

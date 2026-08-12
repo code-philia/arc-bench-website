@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from queue import Empty, Queue
 from urllib.error import URLError
@@ -31,6 +32,7 @@ RESUME_REQUEST_PATH = ARC_DIR / "resume.request.json"
 CONTINUE_REQUEST_PATH = ARC_DIR / "continue.request.json"
 CHECKPOINT_PATH = ARC_DIR / "checkpoint.json"
 PLAYWRIGHT_REPORT_PATH = ARC_DIR / "playwright-report.json"
+AGENT_EXECUTION_PATH = ARC_DIR / "agent-execution.json"
 PIP_CACHE_DIR = Path("/tmp/arcbench/pip-cache")
 REQUIREMENT_SOURCE_DIR = Path("/tmp/arcbench/requirements-source")
 PIP_INSTALL_ATTEMPTS = 3
@@ -39,6 +41,7 @@ PIP_RESUME_RETRIES = 8
 
 WEB_APP_PORT = 3000
 PLAYWRIGHT_WORKERS = 4
+PLAYWRIGHT_TEST_TIMEOUT_MS = 10_000
 CONSOLE_WRITE_LOCK = threading.Lock()
 HEARTBEAT_LOCK = threading.Lock()
 HEARTBEAT_STEP = "deploy_agent"
@@ -612,14 +615,51 @@ def run_generation_agent_once(stdout_file, stderr_file) -> subprocess.CompletedP
 def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
     checkpoint = read_checkpoint()
     last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+    first_started_at: str | None = None
+    active_seconds = 0.0
+
+    def record_execution() -> None:
+        _write_json_atomic(
+            AGENT_EXECUTION_PATH,
+            {
+                "started_at": first_started_at,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                # Paused time is deliberately excluded: this is only the time
+                # spent inside the uploaded/built-in agent process.
+                "duration_seconds": round(active_seconds, 3),
+            },
+        )
+
     if last_completed_index > 0:
         append_runner_event("start_agent", f"Resuming from checkpoint at commit {last_completed_index}", status="info")
 
-    while True:
-        completed = run_generation_agent_once(stdout_file, stderr_file)
-        if completed.returncode == 0:
-            checkpoint = read_checkpoint()
-            if checkpoint.get("paused") or PAUSE_REQUEST_PATH.exists():
+    try:
+        while True:
+            if first_started_at is None:
+                first_started_at = datetime.now(timezone.utc).isoformat()
+            started_at = time.monotonic()
+            completed = run_generation_agent_once(stdout_file, stderr_file)
+            active_seconds += time.monotonic() - started_at
+            if completed.returncode == 0:
+                checkpoint = read_checkpoint()
+                if checkpoint.get("paused") or PAUSE_REQUEST_PATH.exists():
+                    append_runner_state("paused", "Generation paused")
+                    append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
+                    while not RESUME_REQUEST_PATH.exists():
+                        time.sleep(1)
+                    append_runner_state("resumed", "Generation resumed")
+                    append_runner_event("start_agent", "Resume request received", status="success")
+                    clear_request_file(PAUSE_REQUEST_PATH)
+                    clear_request_file(RESUME_REQUEST_PATH)
+                    checkpoint = read_checkpoint()
+                    last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
+                    continue
+                append_runner_event("start_agent", "Generation agent finished successfully", status="success")
+                clear_request_file(PAUSE_REQUEST_PATH)
+                clear_request_file(RESUME_REQUEST_PATH)
+                return
+
+            if completed.returncode == 130 or PAUSE_REQUEST_PATH.exists():
                 append_runner_state("paused", "Generation paused")
                 append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
                 while not RESUME_REQUEST_PATH.exists():
@@ -631,30 +671,15 @@ def run_generation_agent_with_resume(stdout_file, stderr_file) -> None:
                 checkpoint = read_checkpoint()
                 last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
                 continue
-            append_runner_event("start_agent", "Generation agent finished successfully", status="success")
-            clear_request_file(PAUSE_REQUEST_PATH)
-            clear_request_file(RESUME_REQUEST_PATH)
-            return
 
-        if completed.returncode == 130 or PAUSE_REQUEST_PATH.exists():
-            append_runner_state("paused", "Generation paused")
-            append_runner_event("start_agent", "Generation paused; waiting for resume request", status="info")
-            while not RESUME_REQUEST_PATH.exists():
-                time.sleep(1)
-            append_runner_state("resumed", "Generation resumed")
-            append_runner_event("start_agent", "Resume request received", status="success")
-            clear_request_file(PAUSE_REQUEST_PATH)
-            clear_request_file(RESUME_REQUEST_PATH)
-            checkpoint = read_checkpoint()
-            last_completed_index = int(checkpoint.get("last_completed_index", 0) or 0)
-            continue
-
-        raise subprocess.CalledProcessError(
-            completed.returncode,
-            completed.args,
-            output=completed.stdout,
-            stderr=completed.stderr,
-        )
+            raise subprocess.CalledProcessError(
+                completed.returncode,
+                completed.args,
+                output=completed.stdout,
+                stderr=completed.stderr,
+            )
+    finally:
+        record_execution()
 
 
 def install_node_dependencies(project_dir: Path, stdout_file, stderr_file, label: str, step_key: str, install_args: list[str] | None = None) -> None:
@@ -727,7 +752,8 @@ import {{ defineConfig }} from '@playwright/test';
 
 export default defineConfig({{
   testDir: '.',
-  timeout: 30000,
+  timeout: {PLAYWRIGHT_TEST_TIMEOUT_MS},
+  expect: {{ timeout: {PLAYWRIGHT_TEST_TIMEOUT_MS} }},
   fullyParallel: false,
   workers: {PLAYWRIGHT_WORKERS},
   reporter: [['json', {{ outputFile: '{PLAYWRIGHT_REPORT_PATH.as_posix()}' }}]],
@@ -848,9 +874,13 @@ def run_playwright_tests_with_progress(stdout_file, stderr_file) -> subprocess.P
 def parse_playwright_results() -> dict:
     report_path = PLAYWRIGHT_REPORT_PATH
     if not report_path.exists():
-        return {"passed": 0, "failed": 0, "score": 100.0, "duration_seconds": 0, "tests": []}
-
-    report = json.loads(report_path.read_text(encoding="utf-8"))
+        raise RuntimeError("Playwright exited without producing its JSON report")
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Playwright produced an unreadable JSON report") from exc
+    if not isinstance(report, dict) or not isinstance(report.get("suites"), list):
+        raise RuntimeError("Playwright JSON report has an invalid suite structure")
     tests = []
     passed = 0
     failed = 0
@@ -909,7 +939,9 @@ def parse_playwright_results() -> dict:
         walk_suite(suite)
 
     total = passed + failed
-    score = round((passed / total) * 100, 1) if total else 100.0
+    if total == 0:
+        raise RuntimeError("Playwright JSON report contains no executed tests")
+    score = round((passed / total) * 100, 1)
     return {
         "passed": passed,
         "failed": failed,
@@ -1136,10 +1168,11 @@ def main() -> int:
                 returncode=playwright_process.returncode if playwright_process.returncode is not None else 1,
             )
             append_runner_event("run_tests", f"Playwright test process finished with code {playwright_result.returncode}")
-
             results = parse_playwright_results()
             append_runner_event("run_tests", f"Playwright results parsed: passed={results['passed']}, failed={results['failed']}, score={results['score']}", status="success")
-            return 0 if results["failed"] == 0 else 1
+            if playwright_result.returncode != 0 or results["failed"] > 0:
+                return 1
+            return 0
         except Exception as exc:  # noqa: BLE001
             append_debug_log(f"Runner failed: {exc}")
             error_step = "run_tests" if (TESTS_DIR / "playwright.config.ts").exists() else "start_agent"

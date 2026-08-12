@@ -8,7 +8,7 @@ import sys
 
 
 def main() -> int:
-    required = ("node", "npm", "python3", "git", "octos")
+    required = ("node", "npm", "python3", "git")
     missing = [command for command in required if shutil.which(command) is None]
     if missing:
         raise RuntimeError(f"Missing required runner commands: {', '.join(missing)}")
@@ -27,7 +27,7 @@ def main() -> int:
     )
     if browser_check.returncode != 0:
         raise RuntimeError(f"Chromium launch smoke test failed:\n{browser_check.stdout}")
-    print("Runner smoke test passed: Python, Node.js, Git, Octos, and Chromium are available.")
+    print("Runner smoke test passed: Python, Node.js, Git, Playwright, and Chromium are available.")
     return 0
 
 
