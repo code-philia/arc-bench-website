@@ -2731,6 +2731,58 @@ button {
   border-color: var(--submit-sidebar-line);
 }
 
+.competition-task-page .competition-latest-submission {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0 2px;
+  border-top: 1px solid var(--submit-sidebar-line);
+  background: transparent;
+}
+
+.competition-task-page .competition-latest-submission-topline,
+.competition-task-page .competition-latest-submission-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.competition-task-page .competition-latest-submission-topline time,
+.competition-task-page .competition-latest-submission-label {
+  color: var(--submit-sidebar-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.competition-task-page .competition-latest-submission-status {
+  color: #4d8560;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.competition-task-page .competition-latest-submission-name {
+  overflow: hidden;
+  color: var(--submit-sidebar-text);
+  font-size: 0.94rem;
+  font-weight: 760;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.competition-task-page .competition-latest-submission-meta {
+  justify-content: flex-start;
+}
+
+.competition-task-page .competition-latest-submission .model-chip {
+  min-height: 24px;
+  padding: 0 8px;
+  border-color: #c9dfcf;
+  background: #f0f8f1;
+  color: #40734f;
+  font-size: 0.7rem;
+}
+
 .stepper {
   display: flex;
   flex-direction: column;

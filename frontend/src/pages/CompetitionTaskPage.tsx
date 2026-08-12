@@ -16,6 +16,11 @@ function statusClass(status: string) {
   return "pending";
 }
 
+function formatSubmissionTime(value: string) {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? "Time unavailable" : timestamp.toLocaleString();
+}
+
 export default function CompetitionTaskPage() {
   const { competitionId = "", requirementId = "" } = useParams();
   const navigate = useNavigate();
@@ -119,12 +124,16 @@ export default function CompetitionTaskPage() {
                 <div className="submission-subsection">
                   <div className="submission-subsection-title">Latest saved submission</div>
                   {latestSubmission ? (
-                    <div className="submission-summary-card">
-                      <div className="submission-summary-top">
-                        <div><div className="submission-summary-name">{latestSubmission.display_name || latestSubmission.id}</div><div className="submission-summary-meta">{latestSubmission.model_name ? <span className="model-chip">{latestSubmission.model_name}</span> : <span>Model not specified</span>}</div></div>
-                        <span className="test-badge pending">READY</span>
+                    <div className="competition-latest-submission">
+                      <div className="competition-latest-submission-topline">
+                        <span className="competition-latest-submission-status">Ready to run</span>
+                        <time dateTime={latestSubmission.created_at}>{formatSubmissionTime(latestSubmission.created_at)}</time>
                       </div>
-                      <div className="mt-3 text-sm leading-6 text-[var(--text-dim)]">This agent snapshot will be copied into a new isolated run for {task.display_id}.</div>
+                      <div className="competition-latest-submission-name">{latestSubmission.display_name || latestSubmission.id}</div>
+                      <div className="competition-latest-submission-meta">
+                        <span className="competition-latest-submission-label">Model</span>
+                        {latestSubmission.model_name ? <span className="model-chip">{latestSubmission.model_name}</span> : <span>Not specified</span>}
+                      </div>
                     </div>
                   ) : <div className="empty-state compact">No saved submission is available for this competition.</div>}
                 </div>
