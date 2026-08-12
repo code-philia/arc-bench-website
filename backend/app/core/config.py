@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     playground_root: Path = data_root / "playground"
     competition_root: Path = data_root / "competition"
     arc_template_root: Path = ROOT_DIR / "arc-template" / "templates"
-    web_template_files_root: Path = arc_template_root / "web-react-fastapi"
+    web_template_files_root: Path = arc_template_root / "web-react-express"
     mobile_template_files_root: Path = arc_template_root / "mobile-android-java"
     cli_template_files_root: Path = arc_template_root / "cli-python"
     requirements_root: Path = arc_bench_root / "web"
