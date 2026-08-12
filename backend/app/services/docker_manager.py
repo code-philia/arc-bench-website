@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import time
 
 import docker
 from docker.errors import APIError, BuildError, DockerException, ImageNotFound, NotFound
@@ -186,13 +187,20 @@ class DockerManager:
         container.remove(force=True)
 
     def remove_submission_container(self, submission_id: str) -> bool:
+        """Force-remove a runner and confirm Docker no longer reports it."""
         container_name = f"arcbench-{submission_id}"
         try:
             container = self.client.containers.get(container_name)
         except NotFound:
             return False
         container.remove(force=True)
-        return True
+        for _ in range(30):
+            try:
+                self.client.containers.get(container_name)
+            except NotFound:
+                return True
+            time.sleep(0.1)
+        raise RuntimeError(f"Runner container '{container_name}' was not removed by Docker")
 
     @staticmethod
     def collect_logs(container) -> tuple[str, str]:

@@ -1,4 +1,4 @@
-import { HistoryOutlined, PlayCircleOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, HistoryOutlined, PlayCircleOutlined, PlusOutlined } from "@ant-design/icons";
 import { message } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -33,6 +33,8 @@ export default function CompetitionTaskPage() {
   const [panelTab, setPanelTab] = useState<"run" | "history">("run");
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [runSelectionMode, setRunSelectionMode] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -79,6 +81,38 @@ export default function CompetitionTaskPage() {
     }
   };
 
+  const refreshRuns = async () => {
+    if (!user) {
+      setRuns([]);
+      return;
+    }
+    setRuns(await api.listRuns(requirementId));
+  };
+
+  const deleteSelectedRuns = async () => {
+    if (selectedRunIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedRunIds.length} selected run${selectedRunIds.length === 1 ? "" : "s"}? Their runtime directories will be permanently removed.`)) return;
+    try {
+      const result = await api.deleteRuns(selectedRunIds);
+      const skippedIds = result.skipped.map((item) => item.id);
+      setSelectedRunIds(skippedIds);
+      setRunSelectionMode(skippedIds.length > 0);
+      await refreshRuns();
+      if (result.deleted_ids.length > 0) {
+        message.success(`${result.deleted_ids.length} selected run${result.deleted_ids.length === 1 ? "" : "s"} deleted.`);
+      }
+      if (result.skipped.length > 0) {
+        message.warning(`${result.skipped.length} run${result.skipped.length === 1 ? "" : "s"} could not be deleted and remain selected.`);
+      }
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
+  const toggleRunSelection = (runId: string) => {
+    setSelectedRunIds((current) => current.includes(runId) ? current.filter((id) => id !== runId) : [...current, runId]);
+  };
+
   if (loading) return <div className="page centered"><div className="loading-state">Loading task...</div></div>;
   if (!task) return <div className="page centered"><div className="empty-state">Task not found.</div></div>;
 
@@ -111,10 +145,10 @@ export default function CompetitionTaskPage() {
         </section>
 
         <aside className="action-panel action-panel-locked">
-          <div className="action-section action-section-locked">
+          <div className={`action-section action-section-locked${panelTab === "history" ? " action-section--history" : ""}`}>
             <div className="detail-tabs submission-tabs-shell">
               <div className="tabs submission-tabs">
-                <button type="button" className={`tab${panelTab === "run" ? " active" : ""}`} onClick={() => setPanelTab("run")}>Run</button>
+                <button type="button" className={`tab${panelTab === "run" ? " active" : ""}`} onClick={() => { setPanelTab("run"); setRunSelectionMode(false); setSelectedRunIds([]); }}>Run</button>
                 <button type="button" className={`tab${panelTab === "history" ? " active" : ""}`} onClick={() => setPanelTab("history")}>Run history</button>
               </div>
             </div>
@@ -147,7 +181,7 @@ export default function CompetitionTaskPage() {
               </>
             ) : !user ? <div className="empty-state compact">Sign in to view task run history.</div>
               : runs.length === 0 ? <div className="empty-state compact">No task runs yet.</div>
-                : <table className="task-table compact"><thead><tr><th>Run</th><th style={{ width: "100px" }}>Score</th><th style={{ width: "100px" }}>Status</th></tr></thead><tbody>{runs.map((run) => <tr key={run.id} onClick={() => navigate(`/runs/${run.id}`)}><td><Link className="inline-link" to={`/runs/${run.id}`}>{run.display_name || run.id}</Link><div className="table-sub mono-sub">{new Date(run.created_at).toLocaleString()}</div></td><td>{run.score == null ? "--" : run.score.toFixed(1)}</td><td><span className={`test-badge ${statusClass(run.status)}`}>{run.status}</span></td></tr>)}</tbody></table>}
+                : <div className="submission-history-area"><div className="submission-history-toolbar">{runSelectionMode ? <><label><input type="checkbox" checked={runs.length > 0 && selectedRunIds.length === runs.length} onChange={(event) => setSelectedRunIds(event.target.checked ? runs.map((run) => run.id) : [])} /> Select all</label><div className="history-selection-actions"><button type="button" className="history-select-button" onClick={() => { setRunSelectionMode(false); setSelectedRunIds([]); }}>Cancel</button><button type="button" className="history-bulk-delete" disabled={selectedRunIds.length === 0} onClick={() => void deleteSelectedRuns()}><DeleteOutlined /> Delete selected{selectedRunIds.length ? ` (${selectedRunIds.length})` : ""}</button></div></> : <button type="button" className="history-select-button" onClick={() => setRunSelectionMode(true)}>Select</button>}</div><div className="submission-history-table-wrap"><table className="task-table compact"><thead><tr>{runSelectionMode ? <th style={{ width: "36px" }} aria-label="Select" /> : null}<th>Run</th><th style={{ width: "100px" }}>Score</th><th style={{ width: "100px" }}>Status</th></tr></thead><tbody>{runs.map((run) => <tr key={run.id} onClick={() => navigate(`/runs/${run.id}`)}>{runSelectionMode ? <td onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedRunIds.includes(run.id)} onChange={() => toggleRunSelection(run.id)} aria-label={`Select ${run.display_name || run.id}`} /></td> : null}<td><Link className="inline-link" to={`/runs/${run.id}`}>{run.display_name || run.id}</Link><div className="table-sub mono-sub">{new Date(run.created_at).toLocaleString()}</div></td><td>{run.score == null ? "--" : run.score.toFixed(1)}</td><td><span className={`test-badge ${statusClass(run.status)}`}>{run.status}</span></td></tr>)}</tbody></table></div></div>}
           </div>
         </aside>
       </div>

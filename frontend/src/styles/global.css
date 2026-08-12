@@ -914,6 +914,18 @@ button {
 .profile-submission-open:hover { border-color: var(--accent); background: var(--accent-glow); color: var(--accent); }
 .profile-submission-delete:hover,
 .history-delete-button:hover { border-color: #ef4444; background: rgba(239, 68, 68, 0.08); color: #ef4444; }
+.submission-history-area { display: grid; grid-template-rows: max-content minmax(0, 1fr); min-height: 0; height: 100%; }
+.submission-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 0 12px; color: var(--text-muted); font-size: 12px; }
+.submission-history-toolbar label, .competition-submission-select { display: inline-flex; align-items: flex-start; gap: 8px; }
+.submission-history-toolbar input, .competition-submission-select input, .task-table input[type="checkbox"] { accent-color: var(--text); cursor: pointer; }
+.history-selection-actions { display: inline-flex; align-items: center; gap: 8px; }
+.history-select-button { padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text-muted); font-size: 11px; font-weight: 700; cursor: pointer; }
+.history-select-button:hover { border-color: var(--text-dim); color: var(--text); }
+.history-bulk-delete { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--fail) 38%, var(--border)); border-radius: 6px; background: var(--bg); color: var(--fail); font-size: 11px; font-weight: 700; cursor: pointer; }
+.history-bulk-delete:disabled { cursor: not-allowed; opacity: 0.42; }
+.history-bulk-delete:not(:disabled):hover { background: color-mix(in srgb, var(--fail) 8%, var(--bg)); }
+.submission-history-table-wrap { min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
+.submission-history-table-wrap .task-table { min-width: 100%; }
 .profile-submissions-empty { padding: 34px 28px; color: var(--text-dim); line-height: 1.6; }
 
 .profile-settings-head {
@@ -2730,6 +2742,10 @@ button {
   color: var(--submit-sidebar-muted);
   border-color: var(--submit-sidebar-line);
 }
+
+.action-section-locked.action-section--history { overflow: hidden; }
+.action-section-locked > .submission-history-area { min-height: 100%; }
+.action-section-locked > .submission-history-area .submission-history-table-wrap { scrollbar-gutter: stable; }
 
 .competition-task-page .competition-latest-submission {
   display: grid;
@@ -7029,6 +7045,9 @@ button {
 .competition-submission-panel .btn-outline:hover,
 .competition-task-page .btn-outline:hover { border-color: var(--text-muted); background: var(--bg-elevated); color: var(--text); }
 .competition-submission-history { display: grid; }
+.competition-submission-history .competition-history-toolbar { margin: 0 18px 2px; padding-top: 2px; }
+.competition-submission-select { min-width: 0; }
+.competition-submission-select > div { min-width: 0; }
 .competition-submission-row { padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .competition-submission-row:last-child { border-bottom: 0; }
 .competition-submission-row h3 { overflow: hidden; margin: 0; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }

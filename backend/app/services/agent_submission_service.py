@@ -201,6 +201,38 @@ class AgentSubmissionService:
         self.db.delete(submission)
         self.db.commit()
 
+    def delete_many(self, submission_ids: list[str], user_id: str) -> None:
+        """Delete a bounded batch of owned agent snapshots after validating all of them."""
+        unique_ids = list(dict.fromkeys(item.strip() for item in submission_ids if item and item.strip()))
+        if not unique_ids:
+            raise ValueError("Choose at least one submission to delete")
+
+        submissions = [self.get(submission_id, user_id) for submission_id in unique_ids]
+        active_statuses = [
+            SubmissionStatus.PENDING.value,
+            SubmissionStatus.RUNNING.value,
+            SubmissionStatus.PAUSE_REQUESTED.value,
+            SubmissionStatus.PAUSED.value,
+            SubmissionStatus.RESUME_REQUESTED.value,
+        ]
+        active_run = self.db.scalar(
+            select(Run.id)
+            .where(Run.submission_id.in_(unique_ids))
+            .where(Run.status.in_(active_statuses))
+            .limit(1)
+        )
+        if active_run:
+            raise ValueError("Finish or cancel every selected submission's active run before deleting it")
+
+        user = self._get_user(user_id)
+        roots = [self.runtime_paths.get_submission_root(submission, username=user.username) for submission in submissions]
+        for root in roots:
+            if root.exists():
+                RunService._remove_submission_runtime_directory(root)
+        for submission in submissions:
+            self.db.delete(submission)
+        self.db.commit()
+
     def _get_user(self, user_id: str) -> User:
         user = self.db.get(User, user_id)
         if user is None:

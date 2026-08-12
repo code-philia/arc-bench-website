@@ -1,9 +1,12 @@
 import os
+import errno
+import shutil
 import stat
 import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +23,37 @@ from app.services.submission_service import RunService
 
 
 class SubmissionAndRunServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.container_cleanup = mock.patch.object(RunService, "_remove_runner_container_for_deletion")
+        self.container_cleanup.start()
+
+    def tearDown(self) -> None:
+        self.container_cleanup.stop()
+
+    def test_runtime_directory_removal_retries_windows_non_empty_directory_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            submission_dir = Path(temp_dir) / "submission"
+            submission_dir.mkdir()
+            (submission_dir / "artifact.txt").write_text("artifact", encoding="utf-8")
+            original_rmtree = shutil.rmtree
+            error = OSError(errno.ENOTEMPTY, "Directory not empty")
+            error.winerror = 145  # type: ignore[attr-defined]
+            calls = 0
+
+            def delayed_rmtree(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise error
+                return original_rmtree(*args, **kwargs)
+
+            with mock.patch("app.services.submission_service.shutil.rmtree", side_effect=delayed_rmtree):
+                RunService._remove_submission_runtime_directory(submission_dir)
+
+            self.assertEqual(calls, 2)
+            self.assertFalse(submission_dir.exists())
+
+
     def test_mark_running_records_workspace_on_the_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             engine = create_engine("sqlite://")
@@ -103,6 +137,114 @@ class SubmissionAndRunServiceTests(unittest.TestCase):
             self.assertIsNotNone(session.get(Run, run.id))
             self.assertFalse(snapshot_dir.exists())
             self.assertTrue(run_dir.exists())
+            session.close()
+            engine.dispose()
+
+    def test_deleting_multiple_runs_removes_only_selected_owned_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "user-submissions"
+            engine = create_engine("sqlite://")
+            Base.metadata.create_all(engine)
+            session = sessionmaker(bind=engine)()
+            user = User(id="user-a", email="user-a@example.com", username="user-a", password_hash="hash")
+            selected = Run(
+                id="selected-run", user_id=user.id, submission_id="snapshot-a", requirement_id="task-a",
+                runtime="python", agent_source="upload", agent_archive_path="selected.zip", status=SubmissionStatus.PASSED.value,
+            )
+            remaining = Run(
+                id="remaining-run", user_id=user.id, submission_id="snapshot-a", requirement_id="task-a",
+                runtime="python", agent_source="upload", agent_archive_path="remaining.zip", status=SubmissionStatus.PASSED.value,
+            )
+            session.add_all([user, selected, remaining])
+            session.commit()
+
+            selected_dir = root / "user-a-user-a" / selected.id
+            remaining_dir = root / "user-a-user-a" / remaining.id
+            selected_dir.mkdir(parents=True)
+            remaining_dir.mkdir(parents=True)
+            service = RunService(session)
+            service.settings.user_submissions_root = root
+            service.runtime_paths.settings.user_submissions_root = root
+
+            result = service.delete_submissions([selected.id], user.id)
+
+            self.assertEqual(result["deleted_ids"], [selected.id])
+            self.assertEqual(result["skipped"], [])
+            self.assertIsNone(session.get(Run, selected.id))
+            self.assertIsNotNone(session.get(Run, remaining.id))
+            self.assertFalse(selected_dir.exists())
+            self.assertTrue(remaining_dir.exists())
+            session.close()
+            engine.dispose()
+
+    def test_batch_delete_skips_a_locked_run_and_continues_with_the_next_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "user-submissions"
+            engine = create_engine("sqlite://")
+            Base.metadata.create_all(engine)
+            session = sessionmaker(bind=engine)()
+            user = User(id="user-a", email="user-a@example.com", username="user-a", password_hash="hash")
+            locked = Run(
+                id="locked-run", user_id=user.id, submission_id="snapshot-a", requirement_id="task-a",
+                runtime="python", agent_source="upload", agent_archive_path="locked.zip", status=SubmissionStatus.RUNNING.value,
+            )
+            deletable = Run(
+                id="deletable-run", user_id=user.id, submission_id="snapshot-a", requirement_id="task-a",
+                runtime="python", agent_source="upload", agent_archive_path="deletable.zip", status=SubmissionStatus.PASSED.value,
+            )
+            session.add_all([user, locked, deletable])
+            session.commit()
+
+            locked_dir = root / "user-a-user-a" / locked.id
+            deletable_dir = root / "user-a-user-a" / deletable.id
+            locked_dir.mkdir(parents=True)
+            deletable_dir.mkdir(parents=True)
+            service = RunService(session)
+            service.settings.user_submissions_root = root
+            service.runtime_paths.settings.user_submissions_root = root
+            original_remove = service._remove_submission_runtime_directory
+
+            def remove_directory(path: Path) -> None:
+                if path == locked_dir.resolve():
+                    raise OSError(errno.EBUSY, "runtime directory is still locked")
+                original_remove(path)
+
+            with mock.patch.object(service, "_remove_submission_runtime_directory", side_effect=remove_directory):
+                result = service.delete_submissions([locked.id, deletable.id], user.id)
+
+            self.assertEqual(result["deleted_ids"], [deletable.id])
+            self.assertEqual(result["skipped"][0]["id"], locked.id)
+            self.assertIsNotNone(session.get(Run, locked.id))
+            self.assertIsNone(session.get(Run, deletable.id))
+            self.assertTrue(locked_dir.exists())
+            self.assertFalse(deletable_dir.exists())
+            session.close()
+            engine.dispose()
+
+    def test_deleting_an_active_run_cancels_it_before_removing_the_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "user-submissions"
+            engine = create_engine("sqlite://")
+            Base.metadata.create_all(engine)
+            session = sessionmaker(bind=engine)()
+            user = User(id="user-a", email="user-a@example.com", username="user-a", password_hash="hash")
+            run = Run(
+                id="running-run", user_id=user.id, submission_id="snapshot-a", requirement_id="task-a",
+                runtime="python", agent_source="upload", agent_archive_path="running.zip", status=SubmissionStatus.RUNNING.value,
+            )
+            session.add_all([user, run])
+            session.commit()
+
+            run_dir = root / "user-a-user-a" / run.id
+            run_dir.mkdir(parents=True)
+            service = RunService(session)
+            service.settings.user_submissions_root = root
+            service.runtime_paths.settings.user_submissions_root = root
+
+            service.delete_submissions([run.id], user.id)
+
+            self.assertIsNone(session.get(Run, run.id))
+            self.assertFalse(run_dir.exists())
             session.close()
             engine.dispose()
 

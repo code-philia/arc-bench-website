@@ -86,6 +86,8 @@ export default function PlaygroundRequirementDetailPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeSubmission, setActiveSubmission] = useState<SubmissionDetail | null>(null);
   const [submissionTab, setSubmissionTab] = useState<"submit" | "history">("submit");
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [runSelectionMode, setRunSelectionMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const pollRef = useRef<number | null>(null);
@@ -253,20 +255,29 @@ export default function PlaygroundRequirementDetailPage() {
     }
   };
 
-  const deleteSubmission = async (record: SubmissionSummary) => {
-    if (!window.confirm("Delete this submission? Its run record and runtime directory will be permanently removed.")) {
-      return;
-    }
+  const deleteSelectedRuns = async () => {
+    if (selectedRunIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedRunIds.length} selected run${selectedRunIds.length === 1 ? "" : "s"}? Their runtime directories will be permanently removed.`)) return;
     try {
-      await api.deleteRun(record.id);
-      if (activeSubmission?.id === record.id) {
-        setActiveSubmission(null);
-      }
+      const result = await api.deleteRuns(selectedRunIds);
+      if (activeSubmission && result.deleted_ids.includes(activeSubmission.id)) setActiveSubmission(null);
+      const skippedIds = result.skipped.map((item) => item.id);
+      setSelectedRunIds(skippedIds);
+      setRunSelectionMode(skippedIds.length > 0);
       await refreshSubmissions();
-      message.success("Submission deleted.");
+      if (result.deleted_ids.length > 0) {
+        message.success(`${result.deleted_ids.length} selected run${result.deleted_ids.length === 1 ? "" : "s"} deleted.`);
+      }
+      if (result.skipped.length > 0) {
+        message.warning(`${result.skipped.length} run${result.skipped.length === 1 ? "" : "s"} could not be deleted and remain selected.`);
+      }
     } catch (error) {
       message.error((error as Error).message);
     }
+  };
+
+  const toggleRunSelection = (runId: string) => {
+    setSelectedRunIds((current) => current.includes(runId) ? current.filter((id) => id !== runId) : [...current, runId]);
   };
 
   if (loading) {
@@ -325,13 +336,13 @@ export default function PlaygroundRequirementDetailPage() {
         </section>
 
         <aside className="action-panel action-panel-locked">
-          <div className="action-section action-section-locked">
+          <div className={`action-section action-section-locked${submissionTab === "history" ? " action-section--history" : ""}`}>
             <div className="detail-tabs submission-tabs-shell">
               <div className="tabs submission-tabs">
                 <button
                   type="button"
                   className={`tab${submissionTab === "submit" ? " active" : ""}`}
-                  onClick={() => setSubmissionTab("submit")}
+                  onClick={() => { setSubmissionTab("submit"); setRunSelectionMode(false); setSelectedRunIds([]); }}
                 >
                   Submit
                 </button>
@@ -537,17 +548,25 @@ export default function PlaygroundRequirementDetailPage() {
             ) : submissions.length === 0 ? (
               <div className="empty-state compact">No submissions yet.</div>
             ) : (
+              <div className="submission-history-area">
+                <div className="submission-history-toolbar">
+                  {runSelectionMode ? <>
+                    <label><input type="checkbox" checked={submissions.length > 0 && selectedRunIds.length === submissions.length} onChange={(event) => setSelectedRunIds(event.target.checked ? submissions.map((record) => record.id) : [])} /> Select all</label>
+                    <div className="history-selection-actions"><button type="button" className="history-select-button" onClick={() => { setRunSelectionMode(false); setSelectedRunIds([]); }}>Cancel</button><button type="button" className="history-bulk-delete" disabled={selectedRunIds.length === 0} onClick={() => void deleteSelectedRuns()}><DeleteOutlined /> Delete selected{selectedRunIds.length ? ` (${selectedRunIds.length})` : ""}</button></div>
+                  </> : <button type="button" className="history-select-button" onClick={() => setRunSelectionMode(true)}>Select</button>}
+                </div>
+                <div className="submission-history-table-wrap">
               <table className="task-table compact">
                 <thead>
                   <tr>
+                    {runSelectionMode ? <th style={{ width: "36px" }} aria-label="Select" /> : null}
                     <th>Submission</th>
                     <th style={{ width: "140px" }}>Model</th>
                     <th style={{ width: "100px" }}>Status</th>
-                    <th style={{ width: "56px" }} aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody>
-                  {submissions.slice(0, 5).map((record) => (
+                  {submissions.map((record) => (
                     <tr
                       key={record.id}
                       onClick={() => navigate(
@@ -556,6 +575,7 @@ export default function PlaygroundRequirementDetailPage() {
                           : `/playground/task-bank/${taskType}/${requirement.id}/submissions/${record.id}`,
                       )}
                     >
+                      {runSelectionMode ? <td onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedRunIds.includes(record.id)} onChange={() => toggleRunSelection(record.id)} aria-label={`Select ${record.display_name || record.id}`} /></td> : null}
                       <td>
                         <Link
                           className="inline-link"
@@ -577,24 +597,12 @@ export default function PlaygroundRequirementDetailPage() {
                           {record.status}
                         </span>
                       </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="history-delete-button"
-                          aria-label={`Delete ${record.display_name || record.id}`}
-                          title="Delete submission"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void deleteSubmission(record);
-                          }}
-                        >
-                          <DeleteOutlined />
-                        </button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+                </div>
+              </div>
             )}
           </div>
         </aside>

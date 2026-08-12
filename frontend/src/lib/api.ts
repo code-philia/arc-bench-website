@@ -33,6 +33,11 @@ import type {
 
 const API_BASE = "/api";
 
+export type BulkDeleteResult = {
+  deleted_ids: string[];
+  skipped: Array<{ id: string; reason: string }>;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -380,8 +385,20 @@ export const api = {
   deleteSubmission(submissionId: string) {
     return request<void>(`/submissions/${submissionId}`, { method: "DELETE" });
   },
+  deleteSubmissions(submissionIds: string[]) {
+    return request<void>("/submissions/batch-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids: submissionIds }),
+    });
+  },
   deleteRun(runId: string) {
     return request<void>(`/runs/${runId}`, { method: "DELETE" });
+  },
+  deleteRuns(runIds: string[]) {
+    return request<BulkDeleteResult>("/runs/batch-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids: runIds }),
+    });
   },
   async downloadSubmissionArchive(submissionId: string) {
     const response = await fetch(`${API_BASE}/submissions/${submissionId}/archive`, { credentials: "include" });

@@ -12,7 +12,9 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.submission import (
     SubmissionCommitHistoryPayload,
+    BulkDeleteResult,
     SubmissionCreateResponse,
+    BulkDeletePayload,
     SubmissionEditableTaskPayload,
     SubmissionDetail,
     SubmissionLogs,
@@ -105,6 +107,20 @@ def delete_submission_snapshot(
 ) -> None:
     try:
         AgentSubmissionService(db).delete(submission_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@submission_router.post("/batch-delete", status_code=204)
+def delete_submission_snapshots_batch(
+    payload: BulkDeletePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> None:
+    try:
+        AgentSubmissionService(db).delete_many(payload.ids, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -214,6 +230,20 @@ def delete_submission(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not remove the run directory: {exc}") from exc
+
+
+@router.post("/batch-delete", response_model=BulkDeleteResult)
+def delete_submissions_batch(
+    payload: BulkDeletePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> BulkDeleteResult:
+    try:
+        return BulkDeleteResult(**SubmissionService(db).delete_submissions(payload.ids, current_user.id))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/{submission_id}/archive")

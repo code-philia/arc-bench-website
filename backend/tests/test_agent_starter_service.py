@@ -22,12 +22,12 @@ class AgentStarterServiceTests(unittest.TestCase):
                 with zipfile.ZipFile(BytesIO(content)) as archive:
                     names = set(archive.namelist())
                 self.assertIn("main.py", names)
-                self.assertIn("template/backend/app/main.py", names)
+                self.assertIn("template/backend/src/app.js", names)
                 self.assertIn("template/frontend/package.json", names)
 
     def test_task_type_uses_current_arc_template_directories(self) -> None:
         expected_files = {
-            "web": "template/backend/app/main.py",
+            "web": "template/backend/src/app.js",
             "mobile": "template/app/build.gradle",
             "cli": "template/app/__main__.py",
         }

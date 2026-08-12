@@ -116,6 +116,20 @@ class SubmissionCreateResponse(BaseModel):
     submission: SubmissionSummary
 
 
+class BulkDeletePayload(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class BulkDeleteSkippedItem(BaseModel):
+    id: str
+    reason: str
+
+
+class BulkDeleteResult(BaseModel):
+    deleted_ids: list[str] = Field(default_factory=list)
+    skipped: list[BulkDeleteSkippedItem] = Field(default_factory=list)
+
+
 class RunCreateResponse(BaseModel):
     run: RunSummary
 

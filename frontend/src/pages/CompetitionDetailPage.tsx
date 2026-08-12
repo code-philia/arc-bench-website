@@ -70,6 +70,8 @@ export default function CompetitionDetailPage() {
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL_NAME);
   const [creating, setCreating] = useState(false);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
+  const [submissionSelectionMode, setSubmissionSelectionMode] = useState(false);
 
   const refresh = async () => {
     const detail = await api.getCompetition(competitionId);
@@ -101,6 +103,10 @@ export default function CompetitionDetailPage() {
   );
 
   const setTab = (nextTab: "create" | "history") => {
+    if (nextTab !== "history") {
+      setSubmissionSelectionMode(false);
+      setSelectedSubmissionIds([]);
+    }
     const nextParams = new URLSearchParams(searchParams);
     if (nextTab === "history") {
       nextParams.set("tab", "history");
@@ -143,18 +149,25 @@ export default function CompetitionDetailPage() {
     }
   };
 
-  const deleteSubmission = (submission: CompetitionSubmissionHistoryEntry) => {
+  const deleteSelectedSubmissions = () => {
+    if (selectedSubmissionIds.length === 0) return;
     Modal.confirm({
-      title: "Delete this submission?",
-      content: "The stored agent archive will be permanently removed. Existing task runs remain available.",
-      okText: "Delete submission",
+      title: `Delete ${selectedSubmissionIds.length} selected submission${selectedSubmissionIds.length === 1 ? "" : "s"}?`,
+      content: "The stored agent archives will be permanently removed. Existing task runs remain available.",
+      okText: "Delete selected",
       okButtonProps: { danger: true },
       onOk: async () => {
-        await api.deleteSubmission(submission.id);
+        await api.deleteSubmissions(selectedSubmissionIds);
+        setSelectedSubmissionIds([]);
+        setSubmissionSelectionMode(false);
         await refresh();
-        message.success("Submission deleted.");
+        message.success("Selected submissions deleted.");
       },
     });
+  };
+
+  const toggleSubmissionSelection = (submissionId: string) => {
+    setSelectedSubmissionIds((current) => current.includes(submissionId) ? current.filter((id) => id !== submissionId) : [...current, submissionId]);
   };
 
   if (loading) return <div className="page centered"><div className="loading-state">Loading competition...</div></div>;
@@ -271,9 +284,10 @@ export default function CompetitionDetailPage() {
                     : submissions.length === 0 ? <div className="competition-empty">No saved agent submissions yet.</div>
                       : <>
                         <p className="competition-history-rule">Current task scores use the most recent completed run. Your final score is the highest average test pass rate across every task and saved submission; tasks that have not run count as 0.</p>
+                        <div className="submission-history-toolbar competition-history-toolbar">{submissionSelectionMode ? <><label><input type="checkbox" checked={submissions.length > 0 && selectedSubmissionIds.length === submissions.length} onChange={(event) => setSelectedSubmissionIds(event.target.checked ? submissions.map((submission) => submission.id) : [])} /> Select all</label><div className="history-selection-actions"><button type="button" className="history-select-button" onClick={() => { setSubmissionSelectionMode(false); setSelectedSubmissionIds([]); }}>Cancel</button><button type="button" className="history-bulk-delete" disabled={selectedSubmissionIds.length === 0} onClick={deleteSelectedSubmissions}><DeleteOutlined /> Delete selected{selectedSubmissionIds.length ? ` (${selectedSubmissionIds.length})` : ""}</button></div></> : <button type="button" className="history-select-button" onClick={() => setSubmissionSelectionMode(true)}>Select</button>}</div>
                         {submissions.map((submission) => <article key={submission.id} className="competition-submission-row competition-submission-row--scored">
                           <div className="competition-submission-row-heading">
-                            <div><h3>{submission.display_name || submission.id}</h3><div className="competition-submission-meta"><span>{submission.model_name || "No model name"}</span><span>{submission.original_filename}</span><span>{new Date(submission.created_at).toLocaleString()}</span></div></div>
+                            <div className="competition-submission-select">{submissionSelectionMode ? <input type="checkbox" checked={selectedSubmissionIds.includes(submission.id)} onChange={() => toggleSubmissionSelection(submission.id)} aria-label={`Select ${submission.display_name || submission.id}`} /> : null}<div><h3>{submission.display_name || submission.id}</h3><div className="competition-submission-meta"><span>{submission.model_name || "No model name"}</span><span>{submission.original_filename}</span><span>{new Date(submission.created_at).toLocaleString()}</span></div></div></div>
                             {submission.is_selected_score ? <span className="competition-selected-score">Selected score</span> : null}
                           </div>
                           <div className="competition-score-summary"><span><strong>{submission.average_test_pass_rate.toFixed(1)}%</strong> avg. test pass</span><span><strong>{submission.average_feature_implementation_rate.toFixed(1)}%</strong> avg. feature completion</span><span><strong>{formatDuration(submission.total_run_duration_seconds)}</strong> total run time</span><span><strong>--</strong> token cost</span></div>
@@ -287,7 +301,7 @@ export default function CompetitionDetailPage() {
                               {taskScore.run_id ? <Link to={`/runs/${taskScore.run_id}`}>Open run</Link> : <span>Not run</span>}
                             </div>)}
                           </div>
-                          <p><button onClick={() => api.downloadSubmissionArchive(submission.id).then(download).catch((error) => message.error(error.message))}><DownloadOutlined /> Download code</button><button className="danger" onClick={() => deleteSubmission(submission)}><DeleteOutlined /> Delete</button></p>
+                          <p><button onClick={() => api.downloadSubmissionArchive(submission.id).then(download).catch((error) => message.error(error.message))}><DownloadOutlined /> Download code</button></p>
                         </article>)}
                       </>}
                 </div>

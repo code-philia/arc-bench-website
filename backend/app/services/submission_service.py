@@ -892,12 +892,7 @@ if __name__ == "__main__":
         leaves every previously created task run available.
         """
         submission = self.get_submission(submission_id, user_id)
-        if submission.status in {
-            SubmissionStatus.RUNNING.value,
-            SubmissionStatus.PAUSE_REQUESTED.value,
-            SubmissionStatus.RESUME_REQUESTED.value,
-        }:
-            raise ValueError("Stop or finish this run before deleting it")
+        self._cancel_for_deletion(submission)
 
         user = self._get_submission_user(user_id)
         runtime_root = self.settings.user_submissions_root.resolve()
@@ -911,25 +906,73 @@ if __name__ == "__main__":
 
         # Docker Desktop keeps Windows bind-mount file handles open until the
         # container is removed. Release it before deleting .git/workspace files.
-        self._stop_runner_container(submission.id)
+        self._remove_runner_container_for_deletion(submission.id)
         self._stop_preview_container(submission.id)
         if submission_root.exists():
             self._remove_submission_runtime_directory(submission_root)
         self.db.delete(submission)
         self.db.commit()
 
+    def delete_submissions(self, submission_ids: list[str], user_id: str) -> dict[str, list]:
+        """Best-effort batch deletion: retain only records that could not be removed."""
+        unique_ids = list(dict.fromkeys(item.strip() for item in submission_ids if item and item.strip()))
+        if not unique_ids:
+            raise ValueError("Choose at least one run to delete")
+
+        deleted_ids: list[str] = []
+        skipped: list[dict[str, str]] = []
+        for submission_id in unique_ids:
+            try:
+                self.delete_submission(submission_id, user_id)
+                deleted_ids.append(submission_id)
+            except Exception as exc:  # noqa: BLE001 - batch deletion is intentionally best-effort
+                # A failed item must retain its database record so it stays
+                # visible and can be retried after a filesystem lock clears.
+                self.db.rollback()
+                skipped.append({"id": submission_id, "reason": str(exc)})
+        return {"deleted_ids": deleted_ids, "skipped": skipped}
+
+    def _cancel_for_deletion(self, submission: Submission) -> None:
+        """Make deletion a terminal action: stop an active run before removing it."""
+        if submission.status in {
+            SubmissionStatus.PENDING.value,
+            SubmissionStatus.RUNNING.value,
+            SubmissionStatus.PAUSE_REQUESTED.value,
+            SubmissionStatus.PAUSED.value,
+            SubmissionStatus.RESUME_REQUESTED.value,
+        }:
+            submission.status = SubmissionStatus.CANCELLED.value
+            submission.finished_at = datetime.utcnow()
+            submission.run_duration_seconds = None
+            submission.failure_reason = "Run cancelled because it was deleted"
+            self.db.add(submission)
+            self.db.flush()
+
     @staticmethod
     def _remove_submission_runtime_directory(submission_root: Path) -> None:
-        for attempt in range(3):
+        # Docker Desktop can briefly keep a bind-mounted directory open, or
+        # finish a delayed filesystem write just after the container is removed.
+        # Retry those Windows-specific transient errors before giving up.
+        for attempt in range(6):
             try:
                 shutil.rmtree(submission_root, onexc=RunService._clear_readonly_for_removal)
                 return
             except FileNotFoundError:
                 return
-            except PermissionError:
-                if attempt == 2:
+            except OSError as exc:
+                if not RunService._is_retryable_runtime_removal_error(exc):
                     raise
-                time.sleep(0.2 * (attempt + 1))
+                if attempt == 5:
+                    raise
+                time.sleep(0.25 * (attempt + 1))
+
+    @staticmethod
+    def _is_retryable_runtime_removal_error(error: OSError) -> bool:
+        return error.errno in {errno.EACCES, errno.EPERM, errno.ENOTEMPTY} or getattr(error, "winerror", None) in {
+            5,   # Access is denied.
+            32,  # The process cannot access the file because it is being used.
+            145, # The directory is not empty.
+        }
 
     @staticmethod
     def _clear_readonly_for_removal(remove_func, path: str, error: OSError) -> None:
@@ -1790,6 +1833,11 @@ if __name__ == "__main__":
             DockerManager().remove_submission_container(submission_id)
         except Exception:  # noqa: BLE001
             return
+
+    @staticmethod
+    def _remove_runner_container_for_deletion(submission_id: str) -> None:
+        """Strict container cleanup used before destructive workspace deletion."""
+        DockerManager().remove_submission_container(submission_id)
 
     @staticmethod
     def _stop_preview_container(submission_id: str) -> None:
