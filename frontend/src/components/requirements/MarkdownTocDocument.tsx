@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { RequirementNode } from "../../lib/taskTree";
-import MarkdownDocument, { extractHeadings, slugify } from "./MarkdownDocument";
+import MarkdownDocument, { extractHeadings, extractRequirementId, slugify } from "./MarkdownDocument";
 
 type TocEntry = {
   id: string;
+  requirementId: string | null;
   text: string;
   depth: number;
 };
@@ -31,6 +32,7 @@ function flattenRequirementToc(node: RequirementNode, depth = 0): TocEntry[] {
   return [
     {
       id: slugify(`${node.id} ${node.name}`),
+      requirementId: node.id.toLowerCase(),
       text: `${node.id} ${node.name}`,
       depth,
     },
@@ -56,6 +58,7 @@ export default function MarkdownTocDocument({
   const tocEntries = useMemo<TocEntry[]>(
     () => (tocTree ? flattenRequirementToc(tocTree) : extractHeadings(markdown).filter((heading) => heading.level >= 2).map((heading) => ({
       id: heading.id,
+      requirementId: extractRequirementId(heading.text),
       text: heading.text,
       depth: Math.max(0, heading.level - 2),
     }))),
@@ -65,6 +68,31 @@ export default function MarkdownTocDocument({
   const [tocWidth, setTocWidth] = useState(240);
   const [isResizingToc, setIsResizingToc] = useState(false);
   const isTocCollapsed = tocWidth <= 56;
+
+  const findHeadingElement = useCallback((entry: TocEntry): HTMLElement | null => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return null;
+    }
+
+    // Scope the lookup to this document. Several requirement previews can be
+    // mounted in the application, so document.getElementById can otherwise
+    // select a heading from a different panel.
+    const directMatch = Array.from(container.querySelectorAll<HTMLElement>("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]"))
+      .find((heading) => heading.id === entry.id);
+    if (directMatch) {
+      return directMatch;
+    }
+
+    // Markdown is generated from YAML, but historical documents can format a
+    // node title differently. The node ID remains stable, including leaf
+    // nodes, and makes a reliable fallback target.
+    if (entry.requirementId) {
+      return Array.from(container.querySelectorAll<HTMLElement>("[data-requirement-id]"))
+        .find((heading) => heading.dataset.requirementId === entry.requirementId) ?? null;
+    }
+    return null;
+  }, []);
 
   const syncActiveHeading = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -79,7 +107,7 @@ export default function MarkdownTocDocument({
     let nextActiveId = tocEntries[0]?.id ?? null;
 
     for (const entry of tocEntries) {
-      const element = document.getElementById(entry.id);
+      const element = findHeadingElement(entry);
       if (!element) {
         continue;
       }
@@ -97,12 +125,13 @@ export default function MarkdownTocDocument({
     }
 
     setActiveHeadingId((current) => (current === nextActiveId ? current : nextActiveId));
-  }, [tocEntries]);
+  }, [findHeadingElement, tocEntries]);
 
   const scrollToHeading = useCallback(
     (headingId: string, behavior: ScrollBehavior) => {
       const container = scrollContainerRef.current;
-      const target = document.getElementById(headingId);
+      const entry = tocEntries.find((candidate) => candidate.id === headingId);
+      const target = entry ? findHeadingElement(entry) : null;
       if (!container || !target) {
         return;
       }
@@ -116,7 +145,7 @@ export default function MarkdownTocDocument({
         behavior,
       });
     },
-    [],
+    [findHeadingElement, tocEntries],
   );
 
   useEffect(() => {

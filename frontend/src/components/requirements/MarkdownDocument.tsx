@@ -18,6 +18,11 @@ export function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+export function extractRequirementId(text: string): string | null {
+  const match = /^([A-Za-z]+(?:[-_]\d+)+(?:[-_]\d+)*)\b/.exec(text.trim());
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
 function extractTextContent(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
     return String(node);
@@ -99,15 +104,27 @@ export default function MarkdownDocument({
         components={{
           h1: ({ children }) => {
             const text = extractTextContent(Children.toArray(children)).trim();
-            return <h1 id={slugify(text)}>{children}</h1>;
+            return <h1 id={slugify(text)} data-requirement-id={extractRequirementId(text) ?? undefined}>{children}</h1>;
           },
           h2: ({ children }) => {
             const text = extractTextContent(Children.toArray(children)).trim();
-            return <h2 id={slugify(text)}>{children}</h2>;
+            return <h2 id={slugify(text)} data-requirement-id={extractRequirementId(text) ?? undefined}>{children}</h2>;
           },
           h3: ({ children }) => {
             const text = extractTextContent(Children.toArray(children)).trim();
-            return <h3 id={slugify(text)}>{children}</h3>;
+            return <h3 id={slugify(text)} data-requirement-id={extractRequirementId(text) ?? undefined}>{children}</h3>;
+          },
+          h4: ({ children }) => {
+            const text = extractTextContent(Children.toArray(children)).trim();
+            return <h4 id={slugify(text)} data-requirement-id={extractRequirementId(text) ?? undefined}>{children}</h4>;
+          },
+          h5: ({ children }) => {
+            const text = extractTextContent(Children.toArray(children)).trim();
+            return <h5 id={slugify(text)} data-requirement-id={extractRequirementId(text) ?? undefined}>{children}</h5>;
+          },
+          h6: ({ children }) => {
+            const text = extractTextContent(Children.toArray(children)).trim();
+            return <h6 id={slugify(text)} data-requirement-id={extractRequirementId(text) ?? undefined}>{children}</h6>;
           },
           img: ({ src = "", alt = "" }) => (
             <DescriptionAttachmentPreview
