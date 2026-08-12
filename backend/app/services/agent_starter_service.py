@@ -68,8 +68,6 @@ class AgentStarterService:
             if path.is_dir() or self._should_exclude_starter_path(path, source_root):
                 continue
             relative_path = path.relative_to(source_root)
-            if relative_path.parts[0] == "arc-template":
-                continue
             archive_name = "arc_main.py" if relative_path == Path("main.py") else relative_path.as_posix()
             archive.write(path, arcname=archive_name)
 
