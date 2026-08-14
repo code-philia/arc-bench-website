@@ -7,7 +7,8 @@ type AuthContextValue = {
   user: UserSummary | null;
   isLoading: boolean;
   login: (payload: { email: string; password: string }) => Promise<UserSummary>;
-  register: (payload: { email: string; username: string; password: string }) => Promise<UserSummary>;
+  loginWithHackathon: (accessToken: string) => Promise<UserSummary>;
+  register: (payload: { email: string; username: string; password: string; internal_beta_code?: string | null }) => Promise<UserSummary>;
   updateProfile: (payload: { github_email?: string | null; github_username?: string | null }) => Promise<UserSummary>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -40,7 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return response.user;
   }, []);
 
-  const register = useCallback(async (payload: { email: string; username: string; password: string }) => {
+  const loginWithHackathon = useCallback(async (accessToken: string) => {
+    const response = await api.exchangeHackathonSession(accessToken);
+    setUser(response.user);
+    return response.user;
+  }, []);
+
+  const register = useCallback(async (payload: { email: string; username: string; password: string; internal_beta_code?: string | null }) => {
     const response = await api.register(payload);
     setUser(response.user);
     return response.user;
@@ -58,8 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, register, updateProfile, logout, refresh }),
-    [user, isLoading, login, register, updateProfile, logout, refresh],
+    () => ({ user, isLoading, login, loginWithHackathon, register, updateProfile, logout, refresh }),
+    [user, isLoading, login, loginWithHackathon, register, updateProfile, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

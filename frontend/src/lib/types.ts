@@ -374,7 +374,50 @@ export type UserSummary = {
   username: string;
   github_email: string | null;
   github_username: string | null;
+  registration_source: "standard" | "beta" | "hackathon";
+  display_name: string | null;
+  avatar_url: string | null;
   created_at: string;
+};
+
+export type TeamSummary = {
+  id: string;
+  name: string;
+  leader_user_id: string;
+  leader_username: string;
+  member_count: number;
+  source_provider: string | null;
+  source_team_id: string | null;
+  github_repo: string | null;
+  model_name: string | null;
+  harness: string | null;
+  created_at: string;
+};
+
+export type TeamMemberSummary = {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  role: "leader" | "member";
+  created_at: string;
+};
+
+export type TeamJoinRequestSummary = {
+  id: string;
+  team_id: string;
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  status: "PENDING" | "ACCEPTED" | "DECLINED";
+  created_at: string;
+};
+
+export type MyTeamResponse = {
+  team: TeamSummary | null;
+  members: TeamMemberSummary[];
+  incoming_requests: TeamJoinRequestSummary[];
+  pending_request: TeamJoinRequestSummary | null;
+  source_managed: boolean;
 };
 
 export type WorkspaceFileEntry = {

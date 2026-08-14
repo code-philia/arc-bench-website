@@ -21,6 +21,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isInternalBeta, setIsInternalBeta] = useState(false);
+  const [internalBetaCode, setInternalBetaCode] = useState("");
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -38,6 +40,9 @@ export default function RegisterPage() {
     if (password.length < 8 || password.length > 128) {
       nextErrors.password = "Password does not meet the requirements.";
     }
+    if (isInternalBeta && !internalBetaCode.trim()) {
+      nextErrors.password = "Enter your internal beta invitation code.";
+    }
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       return;
@@ -45,7 +50,7 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      await register({ email, username, password });
+      await register({ email, username, password, internal_beta_code: isInternalBeta ? internalBetaCode.trim() : null });
       message.success("Account created successfully.");
       navigate(redirectTo, { replace: true });
     } catch (error) {
@@ -114,6 +119,14 @@ export default function RegisterPage() {
           <label className="field-label" htmlFor="register-password">
             Password
           </label>
+          <label className="auth-beta-choice">
+            <input type="checkbox" checked={isInternalBeta} onChange={(event) => setIsInternalBeta(event.target.checked)} />
+            <span>I have an internal beta invitation code</span>
+          </label>
+          {isInternalBeta ? <label className="field-label" htmlFor="register-beta-code">
+            Internal beta invitation code
+            <input id="register-beta-code" className="text-input" value={internalBetaCode} onChange={(event) => setInternalBetaCode(event.target.value)} autoComplete="off" placeholder="ARC-BETA-CODE" />
+          </label> : null}
           <input
             id="register-password"
             className="text-input"

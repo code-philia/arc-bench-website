@@ -29,6 +29,8 @@ import type {
   NotificationItem,
   NotificationList,
   TestCreatePayload,
+  MyTeamResponse,
+  TeamJoinRequestSummary,
 } from "./types";
 
 const API_BASE = "/api";
@@ -110,7 +112,7 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  register(payload: { email: string; username: string; password: string }) {
+  register(payload: { email: string; username: string; password: string; internal_beta_code?: string | null }) {
     return request<AuthResponse>("/auth/register", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -120,6 +122,12 @@ export const api = {
     return request<AuthResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+  },
+  exchangeHackathonSession(accessToken: string) {
+    return request<AuthResponse>("/auth/hackathon/session", {
+      method: "POST",
+      body: JSON.stringify({ access_token: accessToken }),
     });
   },
   logout() {
@@ -173,6 +181,24 @@ export const api = {
   listSubmissions(requirementId?: string) {
     const query = requirementId ? `?requirement_id=${encodeURIComponent(requirementId)}` : "";
     return request<AgentSubmissionSummary[]>(`/submissions${query}`);
+  },
+  getMyTeam() {
+    return request<MyTeamResponse>("/teams/me");
+  },
+  createTeam(payload: { name: string }) {
+    return request<MyTeamResponse>("/teams", { method: "POST", body: JSON.stringify(payload) });
+  },
+  requestTeamJoin(teamId: string) {
+    return request<{ request: TeamJoinRequestSummary }>(`/teams/${encodeURIComponent(teamId)}/join-requests`, { method: "POST" });
+  },
+  acceptTeamJoinRequest(requestId: string) {
+    return request<MyTeamResponse>(`/teams/join-requests/${encodeURIComponent(requestId)}/accept`, { method: "POST" });
+  },
+  declineTeamJoinRequest(requestId: string) {
+    return request<MyTeamResponse>(`/teams/join-requests/${encodeURIComponent(requestId)}/decline`, { method: "POST" });
+  },
+  leaveTeam() {
+    return request<void>("/teams/leave", { method: "POST" });
   },
   listRuns(requirementId?: string, submissionId?: string) {
     const params = new URLSearchParams();

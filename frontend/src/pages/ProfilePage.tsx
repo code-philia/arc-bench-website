@@ -5,7 +5,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../lib/api";
-import type { AgentSubmissionSummary, SubmissionSummary } from "../lib/types";
+import type { AgentSubmissionSummary, MyTeamResponse, SubmissionSummary } from "../lib/types";
 
 function formatDuration(startedAt: string | null, finishedAt: string | null) {
   if (!startedAt) return "-";
@@ -47,6 +47,10 @@ export default function ProfilePage() {
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [activeRecordView, setActiveRecordView] = useState<"submissions" | "competitions">("submissions");
   const [editingProfile, setEditingProfile] = useState(false);
+  const [teamState, setTeamState] = useState<MyTeamResponse | null>(null);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamName, setTeamName] = useState("");
+  const [teamIdToJoin, setTeamIdToJoin] = useState("");
 
   useEffect(() => {
     setGithubEmail(user?.github_email ?? "");
@@ -73,6 +77,25 @@ export default function ProfilePage() {
 
   useEffect(() => {
     void refreshSubmissions();
+  }, [user]);
+
+  const refreshTeam = async () => {
+    if (!user) {
+      setTeamState(null);
+      return;
+    }
+    setTeamLoading(true);
+    try {
+      setTeamState(await api.getMyTeam());
+    } catch (error) {
+      message.error((error as Error).message);
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshTeam();
   }, [user]);
 
   if (!isLoading && !user) {
@@ -139,6 +162,56 @@ export default function ProfilePage() {
     navigate(`/competitions/${submission.competition_id}?tab=history`);
   };
 
+  const createTeam = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      const next = await api.createTeam({ name: teamName });
+      setTeamState(next);
+      setTeamName("");
+      message.success("Team created. You are its leader.");
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
+  const requestTeamJoin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      await api.requestTeamJoin(teamIdToJoin.trim());
+      setTeamIdToJoin("");
+      await refreshTeam();
+      message.success("Join request sent to the team leader.");
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
+  const resolveTeamRequest = async (requestId: string, accept: boolean) => {
+    try {
+      const next = accept ? await api.acceptTeamJoinRequest(requestId) : await api.declineTeamJoinRequest(requestId);
+      setTeamState(next);
+      message.success(accept ? "Member request accepted." : "Member request declined.");
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
+  const leaveTeam = () => {
+    Modal.confirm({
+      title: "Leave this team?",
+      content: teamState?.team?.leader_user_id === user.id && (teamState.members?.length ?? 0) > 1
+        ? "Team leaders must first remove the other members before leaving."
+        : "Your future competition submissions will be personal unless you join another team.",
+      okText: "Leave team",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await api.leaveTeam();
+        await refreshTeam();
+        message.success("You left the team.");
+      },
+    });
+  };
+
   return (
     <div className="page profile-page">
       <div className="profile-layout">
@@ -154,6 +227,26 @@ export default function ProfilePage() {
             <h2>Account details</h2>
             <div><span>GitHub username</span><strong>{user.github_username || "Not set"}</strong></div>
             <div><span>GitHub email</span><strong>{user.github_email || "Not set"}</strong></div>
+          </section>
+
+          <section className="profile-team-card">
+            <header><h2>Team</h2><span className="profile-team-source">{teamState?.team?.source_provider === "supabase_hackathon" ? "Hackathon" : "Competition"}</span></header>
+            {teamLoading && !teamState ? <p className="profile-team-empty">Loading team details...</p> : teamState?.team ? <>
+              <div className="profile-team-title"><strong>{teamState.team.name}</strong><code title="Team ID">{teamState.team.id}</code></div>
+              <p className="profile-team-leader">Leader: {teamState.team.leader_username} · {teamState.team.member_count} member{teamState.team.member_count === 1 ? "" : "s"}</p>
+              <div className="profile-team-members">{teamState.members.map((member) => <span key={member.user_id} className={member.role === "leader" ? "leader" : ""}>{member.display_name || member.username}{member.role === "leader" ? " · leader" : ""}</span>)}</div>
+              {teamState.source_managed ? <p className="profile-team-pending">This Hackathon team is managed on the Hackathon website and mirrored here automatically.</p> : <>
+                {teamState.incoming_requests.length > 0 ? <div className="profile-team-requests"><h3>Join requests</h3>{teamState.incoming_requests.map((request) => <div key={request.id}><span>{request.display_name || request.username}</span><button type="button" onClick={() => void resolveTeamRequest(request.id, true)}>Accept</button><button type="button" onClick={() => void resolveTeamRequest(request.id, false)}>Decline</button></div>)}</div> : null}
+                <button type="button" className="profile-team-leave" onClick={leaveTeam}>Leave team</button>
+              </>}
+            </> : <>
+              {teamState?.source_managed ? <p className="profile-team-pending">Create or join your team on the Hackathon website. ARC-Bench will mirror it automatically.</p> : <>
+                {teamState?.pending_request ? <p className="profile-team-pending">Your join request is waiting for the team leader's decision.</p> : null}
+                <form className="profile-team-form" onSubmit={createTeam}><label>New team name<input className="text-input" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="Your team" /></label><button type="submit" disabled={!teamName.trim()}>Create team</button></form>
+                <div className="profile-team-divider">or</div>
+                <form className="profile-team-form" onSubmit={requestTeamJoin}><label>Team ID<input className="text-input" value={teamIdToJoin} onChange={(event) => setTeamIdToJoin(event.target.value)} placeholder="Paste a team ID" /></label><button type="submit" disabled={!teamIdToJoin.trim() || Boolean(teamState?.pending_request)}>Request to join</button></form>
+              </>}
+            </>}
           </section>
 
           {editingProfile ? <section className="profile-editor-card">
