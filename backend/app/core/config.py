@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     runner_image: str = "arcbench-runner:latest"
     runner_build_on_demand: bool = False
     runtime_config_path: Path = ROOT_DIR / "config.yaml"
+    beta_invite_codes_path: Path = ROOT_DIR / "data" / "beta-invite-codes.yaml"
     session_secret: str = "arcbench-dev-session-secret"
 
     runner_cpu_limit: int = 2

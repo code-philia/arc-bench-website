@@ -5,11 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import auth, health, notifications, requirements, submissions, user_tasks
+from app.api.routes import auth, health, integrations, notifications, requirements, submissions, teams, user_tasks
 from app.core.config import get_settings
-from app.db.base import Base
-from app.db.schema import ensure_schema
 from app.db.session import engine
+from app.db.schema_validation import verify_current_schema
 from app.services.submission_event_stream import SubmissionEventStream
 
 
@@ -32,6 +31,8 @@ app.include_router(requirements.benchmark_router, prefix=settings.api_prefix)
 app.include_router(submissions.submission_router, prefix=settings.api_prefix)
 app.include_router(submissions.run_router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
+app.include_router(teams.router, prefix=settings.api_prefix)
+app.include_router(integrations.router, prefix=settings.api_prefix)
 app.include_router(user_tasks.router, prefix=settings.api_prefix)
 if settings.site_assets_root.is_dir():
     app.mount("/paper-assets", StaticFiles(directory=settings.site_assets_root), name="paper-assets")
@@ -40,8 +41,7 @@ if settings.site_assets_root.is_dir():
 def on_startup() -> None:
     settings.user_submissions_root.mkdir(parents=True, exist_ok=True)
     settings.user_tasks_root.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
-    ensure_schema(engine)
+    verify_current_schema(engine)
 
 
 @app.on_event("shutdown")

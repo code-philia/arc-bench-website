@@ -23,6 +23,8 @@ class Run(Base):
     # navigable even after that reusable submission is deleted.
     catalog: Mapped[str] = mapped_column(String(32), nullable=False, default="playground", index=True)
     competition_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    competition_entry_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    competition_owner_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     requirement_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     runtime: Mapped[str] = mapped_column(String(32), nullable=False)
     agent_source: Mapped[str] = mapped_column(String(64), nullable=False, default="upload", index=True)

@@ -8,11 +8,12 @@ import uuid
 from pathlib import Path
 
 from fastapi import UploadFile
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
+from app.models.competition_account import CompetitionEntry, Team, TeamMembership
 from app.models.run import Run
 from app.models.submission import Submission
 from app.models.user import User
@@ -21,6 +22,7 @@ from app.services.requirement_catalog import RequirementCatalogService
 from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_service import DEFAULT_STEPS, RunService
 from app.services.user_task_service import UserTaskService
+from app.services.competition_access_service import CompetitionAccessService
 
 
 class AgentSubmissionService:
@@ -48,6 +50,7 @@ class AgentSubmissionService:
         normalized_catalog = catalog.strip().lower()
         normalized_competition_id = (competition_id or "").strip().lower() or None
         normalized_requirement_id = (requirement_id or "").strip() or None
+        competition_entry: CompetitionEntry | None = None
         if agent_source == AgentSourceType.BUILTIN_OCTOS_AGENT:
             raise ValueError("Built-in Octos agent is temporarily unavailable")
         if normalized_catalog == "competition":
@@ -56,8 +59,8 @@ class AgentSubmissionService:
             competitions = RequirementCatalogService.for_catalog(self.db, "competition").list_competitions()
             if not any(item.id == normalized_competition_id for item in competitions):
                 raise LookupError(f"Competition '{normalized_competition_id}' not found")
-            # The database's legacy non-null physical column is retained for
-            # backwards-compatible app.db upgrades; code uses competition_id.
+            CompetitionAccessService(self.db).require_access(user, normalized_competition_id)
+            competition_entry = self._competition_entry_for_user(user, normalized_competition_id)
             normalized_requirement_id = f"{normalized_competition_id}--__agent__"
         else:
             if not normalized_requirement_id:
@@ -80,6 +83,8 @@ class AgentSubmissionService:
             model_name=self.model_providers.resolve_model(model_name).name,
             catalog=normalized_catalog,
             competition_id=normalized_competition_id,
+            competition_entry_id=competition_entry.id if competition_entry else None,
+            competition_owner_display_name=competition_entry.display_name if competition_entry else None,
             requirement_id=normalized_requirement_id,
             runtime=runtime.value,
             agent_source=agent_source.value,
@@ -110,17 +115,22 @@ class AgentSubmissionService:
         return submission
 
     def create_run(self, submission_id: str, user_id: str, *, requirement_id: str | None = None) -> Run:
-        submission = self.get(submission_id, user_id)
+        submission = self.get(submission_id, user_id, allow_team_entry=True)
         user = self._get_user(user_id)
         target_requirement_id = (requirement_id or submission.requirement_id or "").strip()
         if submission.catalog == "competition":
             if not submission.competition_id:
                 raise ValueError("Competition submission is missing its competition id")
+            CompetitionAccessService(self.db).require_access(user, submission.competition_id)
             latest_id = self.db.scalar(
                 select(Submission.id)
-                .where(Submission.user_id == user_id)
                 .where(Submission.catalog == "competition")
                 .where(Submission.competition_id == submission.competition_id)
+                .where(
+                    Submission.competition_entry_id == submission.competition_entry_id
+                    if submission.competition_entry_id
+                    else Submission.user_id == submission.user_id
+                )
                 .order_by(desc(Submission.created_at))
                 .limit(1)
             )
@@ -147,6 +157,8 @@ class AgentSubmissionService:
             original_filename=submission.original_filename,
             catalog=submission.catalog,
             competition_id=submission.competition_id,
+            competition_entry_id=submission.competition_entry_id,
+            competition_owner_display_name=submission.competition_owner_display_name,
             requirement_id=target_requirement_id,
             runtime=submission.runtime,
             agent_source=submission.agent_source,
@@ -165,17 +177,25 @@ class AgentSubmissionService:
         return run
 
     def list(self, user_id: str, *, requirement_id: str | None = None, competition_id: str | None = None) -> list[Submission]:
-        query = select(Submission).where(Submission.user_id == user_id).order_by(desc(Submission.created_at))
+        membership = self.db.scalar(select(TeamMembership).where(TeamMembership.user_id == user_id))
+        owner_filter = Submission.user_id == user_id
+        if membership:
+            team_entry_ids = select(CompetitionEntry.id).where(CompetitionEntry.team_id == membership.team_id)
+            owner_filter = or_(owner_filter, Submission.competition_entry_id.in_(team_entry_ids))
+        query = select(Submission).where(owner_filter).order_by(desc(Submission.created_at))
         if requirement_id:
             query = query.where(Submission.requirement_id == requirement_id)
         if competition_id:
             query = query.where(Submission.competition_id == competition_id)
         return self.db.scalars(query).all()
 
-    def get(self, submission_id: str, user_id: str | None = None) -> Submission:
+    def get(self, submission_id: str, user_id: str | None = None, *, allow_team_entry: bool = False) -> Submission:
         submission = self.db.get(Submission, submission_id)
-        if submission is None or (user_id is not None and submission.user_id != user_id):
+        if submission is None:
             raise LookupError(f"Submission '{submission_id}' not found")
+        if user_id is not None and submission.user_id != user_id:
+            if not allow_team_entry or not self._user_can_access_team_entry(user_id, submission.competition_entry_id):
+                raise LookupError(f"Submission '{submission_id}' not found")
         return submission
 
     def delete(self, submission_id: str, user_id: str) -> None:
@@ -238,6 +258,52 @@ class AgentSubmissionService:
         if user is None:
             raise LookupError(f"User '{user_id}' not found")
         return user
+
+    def _competition_entry_for_user(self, user: User, competition_id: str) -> CompetitionEntry:
+        membership = self.db.scalar(select(TeamMembership).where(TeamMembership.user_id == user.id))
+        if membership:
+            team = self.db.get(Team, membership.team_id)
+            if team is None:
+                raise LookupError("Your team is no longer available")
+            entry = self.db.scalar(
+                select(CompetitionEntry).where(
+                    CompetitionEntry.competition_id == competition_id,
+                    CompetitionEntry.team_id == team.id,
+                )
+            )
+            if entry is None:
+                entry = CompetitionEntry(
+                    competition_id=competition_id,
+                    owner_kind="team",
+                    team_id=team.id,
+                    display_name=team.name,
+                )
+                self.db.add(entry)
+                self.db.flush()
+            return entry
+        entry = self.db.scalar(
+            select(CompetitionEntry).where(
+                CompetitionEntry.competition_id == competition_id,
+                CompetitionEntry.user_id == user.id,
+            )
+        )
+        if entry is None:
+            entry = CompetitionEntry(
+                competition_id=competition_id,
+                owner_kind="user",
+                user_id=user.id,
+                display_name=user.display_name or user.username,
+            )
+            self.db.add(entry)
+            self.db.flush()
+        return entry
+
+    def _user_can_access_team_entry(self, user_id: str, entry_id: str | None) -> bool:
+        if not entry_id:
+            return False
+        membership = self.db.scalar(select(TeamMembership).where(TeamMembership.user_id == user_id))
+        entry = self.db.get(CompetitionEntry, entry_id)
+        return bool(membership and entry and entry.owner_kind == "team" and entry.team_id == membership.team_id)
 
     @staticmethod
     def _normalize_display_name(value: str | None) -> str | None:

@@ -21,6 +21,8 @@ class Submission(Base):
     model_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     catalog: Mapped[str] = mapped_column(String(32), nullable=False, default="playground", index=True)
     competition_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    competition_entry_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    competition_owner_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # Playground snapshots are scoped to a task.  Competition snapshots use
     # competition_id; a legacy sentinel can remain in the physical column.
     requirement_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

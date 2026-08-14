@@ -6,6 +6,13 @@ environment:
     - 223.5.5.5
     - 1.1.1.1
 
+# Used by the authenticated Hackathon-to-ARC-Bench account bridge.
+# The webhook secret is shared only with the Supabase Edge Function.
+hackathon:
+  supabase_url: https://your-project.supabase.co
+  jwt_audience: authenticated
+  webhook_secret: CHANGE_ME
+
 models:
   gpt-5.5:
     OPENAI_API_KEY: CHANGE_ME

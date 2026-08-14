@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.user import User
+from app.services.beta_invite_service import BetaInviteService
+from app.services.competition_access_service import CompetitionAccessService
 
 
 class AuthService:
@@ -23,7 +25,7 @@ class AuthService:
         self.settings = get_settings()
         self.secret = self._get_secret()
 
-    def register_user(self, email: str, username: str, password: str) -> User:
+    def register_user(self, email: str, username: str, password: str, internal_beta_code: str | None = None) -> User:
         normalized_email = email.strip().lower()
         if "@" not in normalized_email:
             raise ValueError("Email must include @")
@@ -35,15 +37,34 @@ class AuthService:
         if self.db.scalar(select(User).where(User.username == normalized_username)):
             raise ValueError("Username is already taken")
 
+        is_beta = bool((internal_beta_code or "").strip())
         user = User(
             id=uuid.uuid4().hex,
             email=normalized_email,
             username=normalized_username,
             password_hash=self._hash_password(password),
+            registration_source="beta" if is_beta else "standard",
+            display_name=normalized_username,
         )
         self.db.add(user)
+        self.db.flush()
+        if is_beta:
+            invite_service = BetaInviteService(self.db)
+            invite_service.redeem(internal_beta_code or "", user.id)
+            CompetitionAccessService(self.db).grant(
+                user_id=user.id,
+                competition_id=CompetitionAccessService.GLOBAL_GRANT,
+                granted_by="beta_invite",
+            )
         self.db.commit()
         self.db.refresh(user)
+        if is_beta:
+            # File state is operator-facing only; its failure must not undo a
+            # successfully committed, one-time database redemption.
+            try:
+                invite_service.mark_used_in_seed_file(self.settings.beta_invite_codes_path, internal_beta_code or "")
+            except OSError:
+                pass
         return user
 
     def authenticate_user(self, email: str, password: str) -> User:

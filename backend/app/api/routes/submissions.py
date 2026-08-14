@@ -94,6 +94,8 @@ def create_submission(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return SubmissionCreateResponse(submission=SubmissionSummary.model_validate(submission, from_attributes=True))
@@ -134,7 +136,7 @@ def download_submission_snapshot_archive(
     current_user: User = Depends(require_current_user),
 ) -> FileResponse:
     try:
-        submission = AgentSubmissionService(db).get(submission_id, current_user.id)
+        submission = AgentSubmissionService(db).get(submission_id, current_user.id, allow_team_entry=True)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     archive_path = Path(submission.archive_path)
@@ -156,6 +158,8 @@ def create_run(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return SubmissionRerunResponse(run=RunService(db).to_summary(run))
 
 
@@ -244,6 +248,8 @@ def delete_submissions_batch(
         return BulkDeleteResult(**SubmissionService(db).delete_submissions(payload.ids, current_user.id))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @router.get("/{submission_id}/archive")

@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UpdateProfileRequest, UserSummary
+from app.schemas.auth import AuthResponse, HackathonSessionRequest, LoginRequest, RegisterRequest, UpdateProfileRequest, UserSummary
 from app.services.auth_service import AuthService
+from app.core.config import get_settings
+from app.services.hackathon_config_service import load_hackathon_config
+from app.services.hackathon_sync_service import HackathonSyncService
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -15,7 +19,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)) -> AuthResponse:
     service = AuthService(db)
     try:
-        user = service.register_user(payload.email, payload.username, payload.password)
+        user = service.register_user(payload.email, payload.username, payload.password, payload.internal_beta_code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _set_session_cookie(response, service, user)
@@ -33,6 +37,59 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
         raise HTTPException(status_code=status_code, detail=message) from exc
     _set_session_cookie(response, service, user)
     return AuthResponse(user=UserSummary.model_validate(user, from_attributes=True))
+
+
+@router.post("/hackathon/session", response_model=AuthResponse)
+def exchange_hackathon_session(
+    payload: HackathonSessionRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> AuthResponse:
+    config = load_hackathon_config(get_settings().runtime_config_path)
+    if not config.supabase_url:
+        raise HTTPException(status_code=503, detail="Hackathon sign-in is not configured")
+    try:
+        user = HackathonSyncService(db).exchange_access_token(
+            payload.access_token,
+            issuer=f"{config.supabase_url.rstrip('/')}/auth/v1",
+            audience=config.jwt_audience,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    _set_session_cookie(response, AuthService(db), user)
+    return AuthResponse(user=UserSummary.model_validate(user, from_attributes=True))
+
+
+@router.post("/hackathon/continue")
+def continue_from_hackathon(
+    access_token: str = Form(...),
+    return_to: str = "/competitions/hackathon",
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    if not return_to.startswith("/") or return_to.startswith("//"):
+        raise HTTPException(status_code=400, detail="Invalid return path")
+    config = load_hackathon_config(get_settings().runtime_config_path)
+    if not config.supabase_url:
+        raise HTTPException(status_code=503, detail="Hackathon sign-in is not configured")
+    try:
+        user = HackathonSyncService(db).exchange_access_token(
+            access_token,
+            issuer=f"{config.supabase_url.rstrip('/')}/auth/v1",
+            audience=config.jwt_audience,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    response = RedirectResponse(return_to, status_code=303)
+    _set_session_cookie(response, AuthService(db), user)
+    return response
 
 
 @router.post("/logout")

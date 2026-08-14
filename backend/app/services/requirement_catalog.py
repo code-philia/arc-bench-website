@@ -15,6 +15,7 @@ import yaml
 from app.core.enums import SubmissionStatus
 from app.core.config import get_settings
 from app.models.requirement import Requirement
+from app.models.competition_account import CompetitionEntry, TeamMembership
 from app.models.submission import Submission
 from app.models.run import Run
 from app.models.user import User
@@ -301,12 +302,19 @@ class RequirementCatalogService:
 
         return competitions
 
-    def list_competition_leaderboard(self, track: str = "all", competition_id: str | None = None) -> list[CompetitionLeaderboardEntry]:
+    def list_competition_leaderboard(
+        self,
+        track: str = "all",
+        competition_id: str | None = None,
+        allowed_competition_ids: set[str] | None = None,
+    ) -> list[CompetitionLeaderboardEntry]:
         normalized_track = track.strip().lower() or "all"
         if normalized_track not in {"all", "web", "mobile", "kernel"}:
             raise ValueError(f"Unsupported leaderboard track '{track}'")
 
         rows = self.scan_entries()
+        if allowed_competition_ids is not None:
+            rows = [row for row in rows if (row.competition_id or "").lower() in allowed_competition_ids]
         requirement_ids_by_category: dict[str, list[str]] = {}
         for row in rows:
             requirement_ids_by_category.setdefault(row.category, []).append(row.id)
@@ -316,17 +324,17 @@ class RequirementCatalogService:
             # A leaderboard entry is the user's selected competition
             # submission, rather than an average over every retry ever run.
             # This matches the score rule shown on the competition page.
-            competitors = self.db.execute(
-                select(Submission.user_id, User.username)
-                .join(User, Submission.user_id == User.id)
-                .where(Submission.catalog == "competition")
-                .where(Submission.competition_id == normalized_competition_id)
-                .where(Submission.user_id.is_not(None))
-                .distinct()
+            competitors = self.db.scalars(
+                select(CompetitionEntry).where(CompetitionEntry.competition_id == normalized_competition_id)
             ).all()
             leaderboard: list[CompetitionLeaderboardEntry] = []
-            for user_id, username in competitors:
-                history = self.list_competition_submission_history(normalized_competition_id, str(user_id))
+            for entry in competitors:
+                history = self._competition_submission_history(
+                    normalized_competition_id,
+                    task_entries=[item for item in rows if item.competition_id == normalized_competition_id],
+                    competition_entry_id=entry.id,
+                    legacy_user_id=None,
+                )
                 selected = next((entry for entry in history if entry.is_selected_score), None)
                 if selected is None:
                     continue
@@ -338,12 +346,47 @@ class RequirementCatalogService:
                 )
                 leaderboard.append(
                     CompetitionLeaderboardEntry(
-                        username=str(username),
+                        username=entry.display_name,
                         model_name=selected.model_name,
                         track=normalized_competition_id,
                         avg_pass_rate=selected.average_test_pass_rate,
                         total_token_millions=None,
                         avg_runtime_seconds=avg_runtime_seconds,
+                        submission_count=len(history),
+                    )
+                )
+            # Preserve pre-migration individual snapshots that have no entry
+            # yet; newly created competition snapshots always use an entry.
+            legacy_competitors = self.db.execute(
+                select(Submission.user_id, User.username)
+                .join(User, Submission.user_id == User.id)
+                .where(Submission.catalog == "competition")
+                .where(Submission.competition_id == normalized_competition_id)
+                .where(Submission.competition_entry_id.is_(None))
+                .where(Submission.user_id.is_not(None))
+                .distinct()
+            ).all()
+            for user_id, username in legacy_competitors:
+                history = self._competition_submission_history(
+                    normalized_competition_id,
+                    task_entries=[item for item in rows if item.competition_id == normalized_competition_id],
+                    competition_entry_id=None,
+                    legacy_user_id=str(user_id),
+                )
+                selected = next((item for item in history if item.is_selected_score), None)
+                if selected is None:
+                    continue
+                completed_tasks = [task for task in selected.task_scores if task.run_id is not None]
+                leaderboard.append(
+                    CompetitionLeaderboardEntry(
+                        username=str(username),
+                        model_name=selected.model_name,
+                        track=normalized_competition_id,
+                        avg_pass_rate=selected.average_test_pass_rate,
+                        total_token_millions=None,
+                        avg_runtime_seconds=(
+                            int(round(selected.total_run_duration_seconds / len(completed_tasks))) if completed_tasks else None
+                        ),
                         submission_count=len(history),
                     )
                 )
@@ -443,13 +486,53 @@ class RequirementCatalogService:
         if not any(item.id == normalized_competition_id for item in self.list_competitions()):
             raise LookupError(f"Competition '{competition_id}' not found")
 
-        snapshots = self.db.scalars(
+        membership = self.db.scalar(select(TeamMembership).where(TeamMembership.user_id == user_id))
+        entry = None
+        if membership:
+            entry = self.db.scalar(
+                select(CompetitionEntry).where(
+                    CompetitionEntry.competition_id == normalized_competition_id,
+                    CompetitionEntry.team_id == membership.team_id,
+                )
+            )
+        if entry is None:
+            entry = self.db.scalar(
+                select(CompetitionEntry).where(
+                    CompetitionEntry.competition_id == normalized_competition_id,
+                    CompetitionEntry.user_id == user_id,
+                )
+            )
+        return self._competition_submission_history(
+            normalized_competition_id,
+            task_entries=task_entries,
+            competition_entry_id=entry.id if entry else None,
+            legacy_user_id=user_id,
+        )
+
+    def _competition_submission_history(
+        self,
+        competition_id: str,
+        *,
+        task_entries: list[CatalogRequirementEntry],
+        competition_entry_id: str | None,
+        legacy_user_id: str | None,
+    ) -> list[CompetitionSubmissionHistoryEntry]:
+        snapshots_query = (
             select(Submission)
-            .where(Submission.user_id == user_id)
             .where(Submission.catalog == "competition")
-            .where(Submission.competition_id == normalized_competition_id)
+            .where(Submission.competition_id == competition_id)
             .order_by(desc(Submission.created_at))
-        ).all()
+        )
+        if competition_entry_id:
+            snapshots_query = snapshots_query.where(Submission.competition_entry_id == competition_entry_id)
+        elif legacy_user_id:
+            snapshots_query = snapshots_query.where(
+                Submission.user_id == legacy_user_id,
+                Submission.competition_entry_id.is_(None),
+            )
+        else:
+            return []
+        snapshots = self.db.scalars(snapshots_query).all()
         if not snapshots:
             return []
 
@@ -457,7 +540,6 @@ class RequirementCatalogService:
         completed_statuses = [SubmissionStatus.PASSED.value, SubmissionStatus.FAILED.value]
         runs = self.db.scalars(
             select(Run)
-            .where(Run.user_id == user_id)
             .where(Run.submission_id.in_(snapshot_ids))
             .where(Run.requirement_id.in_([task.id for task in task_entries]))
             .where(Run.status.in_(completed_statuses))

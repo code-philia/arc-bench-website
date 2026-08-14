@@ -11,12 +11,13 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal, Optional, List
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.enums import AgentSourceType, RuntimeType, SubmissionStatus
 from app.models.requirement import Requirement
+from app.models.competition_account import CompetitionEntry, TeamMembership
 from app.models.run import Run as Submission
 from app.models.submission import Submission as AgentSubmission
 from app.models.user import User
@@ -843,7 +844,12 @@ if __name__ == "__main__":
         return bool(parts & excluded_parts) or relative_path.name in excluded_files or relative_path.suffix == ".pyc"
 
     def list_submissions(self, user_id: str, requirement_id: str | None = None) -> list[RunSummary]:
-        query = select(Submission).where(Submission.user_id == user_id).order_by(desc(Submission.created_at))
+        membership = self.db.scalar(select(TeamMembership).where(TeamMembership.user_id == user_id))
+        access_filter = Submission.user_id == user_id
+        if membership:
+            team_entry_ids = select(CompetitionEntry.id).where(CompetitionEntry.team_id == membership.team_id)
+            access_filter = or_(access_filter, Submission.competition_entry_id.in_(team_entry_ids))
+        query = select(Submission).where(access_filter).order_by(desc(Submission.created_at))
         if requirement_id:
             query = query.where(Submission.requirement_id == requirement_id)
         rows = self.db.scalars(query).all()
@@ -880,8 +886,13 @@ if __name__ == "__main__":
 
     def get_submission(self, submission_id: str, user_id: str | None = None) -> Submission:
         submission = self.db.get(Submission, submission_id)
-        if not submission or (user_id is not None and submission.user_id != user_id):
+        if not submission:
             raise LookupError(f"Submission '{submission_id}' not found")
+        if user_id is not None and submission.user_id != user_id:
+            membership = self.db.scalar(select(TeamMembership).where(TeamMembership.user_id == user_id))
+            entry = self.db.get(CompetitionEntry, submission.competition_entry_id) if submission.competition_entry_id else None
+            if not (membership and entry and entry.owner_kind == "team" and entry.team_id == membership.team_id):
+                raise LookupError(f"Submission '{submission_id}' not found")
         return submission
 
     def delete_submission(self, submission_id: str, user_id: str) -> None:
