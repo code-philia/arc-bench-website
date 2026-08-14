@@ -171,6 +171,19 @@ pip install -r requirements.txt
 ```
 </details>
 
+#### Rebuild the local database
+
+ARC-Bench does not run compatibility migrations during application startup.
+After creating the Python environment above and before starting the backend,
+create a clean local database from the current models (this permanently deletes
+every record in `runtime/app.db`):
+
+```powershell
+cd ..
+backend\.venv\Scripts\python.exe scripts\rebuild_database.py --yes
+cd backend
+```
+
 Then start the backend server:
 
 ```bash
@@ -193,6 +206,8 @@ The converter supports both legacy documents and enhanced fields, including stan
 | --- | --- |
 | Run the frontend locally | `cd frontend && npm run dev` |
 | Build the frontend | `cd frontend && npm run build` |
+| Rebuild the local database | `backend\.venv\Scripts\python.exe scripts\rebuild_database.py --yes` |
+| Generate beta codes | `backend\.venv\Scripts\python.exe scripts\generate_beta_invite_codes.py --count 100` |
 | Run the backend | `cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` |
 | Validate the runner image | `docker run --rm --entrypoint python3 arcbench-runner:local /opt/arcbench/smoke_test.py` |
 
