@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/playwright/python:v1.54.0-noble
 
-ARG ARCBENCH_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-ARG ARCBENCH_PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+ARG ARCBENCH_PIP_INDEX_URL=https://repo.huaweicloud.com/repository/pypi/simple
+ARG ARCBENCH_PIP_TRUSTED_HOST=repo.huaweicloud.com
 
 WORKDIR /opt/arcbench
 
@@ -13,8 +13,7 @@ ENV NPM_CONFIG_REGISTRY=https://repo.huaweicloud.com/repository/npm/ \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources \
-    && apt-get update \
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
@@ -24,18 +23,50 @@ RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.aliyun.com/ubuntu
         libssl-dev \
         git \
         lsof \
-    && curl -fsSL https://nodejs.org/dist/v20.19.3/node-v20.19.3-linux-x64.tar.xz -o /tmp/node.tar.xz \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js
+RUN curl -fsSL \
+        https://nodejs.org/dist/v20.19.3/node-v20.19.3-linux-x64.tar.xz \
+        -o /tmp/node.tar.xz \
     && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
     && rm -f /tmp/node.tar.xz \
-    && npm config set registry "${NPM_CONFIG_REGISTRY}" \
-    && npm config set replace-registry-host "${NPM_CONFIG_REPLACE_REGISTRY_HOST}" \
-    && npm install --prefix /opt/arcbench --no-audit --no-fund --ignore-scripts @playwright/test@1.54.0 \
-    && python3 -m pip install --no-cache-dir playwright==1.54.0 \
     && node --version \
-    && npm --version \
+    && npm --version
+
+# Configure npm mirror and install Playwright JS package
+RUN npm config set registry "${NPM_CONFIG_REGISTRY}" \
+    && npm config set replace-registry-host "${NPM_CONFIG_REPLACE_REGISTRY_HOST}" \
+    && npm install \
+        --prefix /opt/arcbench \
+        --no-audit \
+        --no-fund \
+        --ignore-scripts \
+        @playwright/test@1.54.0
+
+# Preinstall common Python packages
+RUN python3 -m pip install \
+        --no-cache-dir \
+        --prefer-binary \
+        playwright==1.54.0 \
+        openai-codex \
+        openai \
+        anthropic \
+        pydantic \
+        PyYAML \
+        httpx \
+        requests \
+        python-dotenv \
+        tenacity \
+        rich \
+        jsonschema \
+        jinja2 \
+        setuptools \
+        wheel \
+        packaging \
     && python3 --version \
-    && git --version \
-    && rm -rf /var/lib/apt/lists/*
+    && python3 -m pip --version \
+    && git --version
 
 COPY packages/shared/skills /opt/arcbench/skills
 
