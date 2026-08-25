@@ -40,3 +40,5 @@ data/competition/hackathon/*/tests/
 data/playground/web/github/tests/
 data/playground/web/sheet/tests/
 data/beta-invite-codes.yaml
+
+docs
