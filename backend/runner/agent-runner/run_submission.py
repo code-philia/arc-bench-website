@@ -421,22 +421,14 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
         raise RuntimeError(f"unsupported agent runtime: {runtime}")
     requirement_source = str(prepare_agent_requirement_source())
     output_dir = str(spec.get("output_dir") or ".")
-    task = spec.get("task") if isinstance(spec, dict) else {}
-    task_type = str(task.get("category") or "web").strip().lower() if isinstance(task, dict) else "web"
-    if task_type in {"mobile", "mobileapp", "mobile_app"}:
-        task_type = "android"
-    if task_type not in {"web", "cli", "android"}:
-        task_type = "web"
     command.extend(
         [
             requirement_source,
             "--output-dir",
             output_dir,
-            "--type",
-            task_type,
         ]
     )
-    append_debug_log(f"Launching generation agent with requirement, output, and type args: {' '.join(command)}")
+    append_debug_log(f"Launching generation agent with requirement and output args: {' '.join(command)}")
     return command
 
 
