@@ -80,8 +80,6 @@ real configuration file is ignored by Git. Each run receives only the selected
 model's `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL`; the visual provider
 settings are shared by all runs, and `ARC_DEBUG` is always `1`. The same YAML
 also contains `environment.ARCBENCH_RUNNER_DNS_SERVERS` for Docker runner DNS.
-The backend no longer loads `.env`; after migrating these values, it is not
-needed for local backend execution.
 
 ### 2. Build the runner image
 
