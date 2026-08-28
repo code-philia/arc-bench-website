@@ -152,8 +152,9 @@ export default function SubmissionDetailPage() {
       setLogs((current) => current
         ? {
             ...incrementalLogs,
-            console: `${current.console}${incrementalLogs.console}`,
             stdout: `${current.stdout}${incrementalLogs.stdout}`,
+            stderr: incrementalLogs.stderr || current.stderr,
+            console: `${current.stdout}${incrementalLogs.stdout}`,
             runner_events: [...(current.runner_events ?? []), ...(incrementalLogs.runner_events ?? [])],
             runner_event_lines: [...(current.runner_event_lines ?? []), ...(incrementalLogs.runner_event_lines ?? [])],
           }

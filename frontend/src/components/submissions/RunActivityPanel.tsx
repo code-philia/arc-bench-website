@@ -16,12 +16,21 @@ export default function RunActivityPanel({
   onRefresh,
   compact = false,
 }: RunActivityPanelProps) {
+  const output = logs
+    ? [logs.stdout, logs.stderr]
+      .filter((part) => Boolean(part))
+      .join(logs.stdout && logs.stderr ? "\n\n--- stderr ---\n\n" : "")
+    : "";
+  const outputLineCount = output ? output.split(/\r?\n/).length : 0;
   return (
-    <div className={compact ? "stdio-view" : "space-y-5 p-5"}>
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3">
-        <div>
-          <div className="text-sm font-semibold text-[var(--text)]">Run activity</div>
-          {lastRefreshedAt ? <div className="mt-1 text-xs text-[var(--text-muted)]">Last refreshed at {lastRefreshedAt}</div> : null}
+    <div className={`${compact ? "stdio-view" : "space-y-5 p-5"} run-activity-panel`}>
+      <div className="run-activity-header flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3">
+        <div className="run-activity-heading">
+          <span className="run-activity-dot" aria-hidden="true" />
+          <div>
+            <div className="text-sm font-semibold text-[var(--text)]">Run activity</div>
+            {lastRefreshedAt ? <div className="mt-1 text-xs text-[var(--text-muted)]">Last refreshed at {lastRefreshedAt}</div> : null}
+          </div>
         </div>
         <button
           type="button"
@@ -33,7 +42,7 @@ export default function RunActivityPanel({
         </button>
       </div>
 
-      <div>
+      <div className="run-activity-events">
         <div className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Activity</div>
         <div className="space-y-3">
           {(logs?.runner_events ?? []).length > 0 ? (logs?.runner_events ?? []).map((event) => (
@@ -48,9 +57,17 @@ export default function RunActivityPanel({
         </div>
       </div>
 
-      <div>
-        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Complete logs</div>
-        <pre className={compact ? "stdio-code-view" : "log-panel"}>{logs?.console || "No console output yet."}</pre>
+      <div className="run-output-section">
+        <div className="run-output-heading">
+          <div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Stdout / stderr</div>
+            <div className="text-xs text-[var(--text-muted)]">Combined process output</div>
+          </div>
+          {outputLineCount > 0 ? <span className="run-output-count">{outputLineCount} lines</span> : null}
+        </div>
+        <pre className={`${compact ? "stdio-code-view" : "log-panel"} ${output ? "has-output" : "is-empty"}`}>
+          {output || "No process output yet."}
+        </pre>
       </div>
     </div>
   );

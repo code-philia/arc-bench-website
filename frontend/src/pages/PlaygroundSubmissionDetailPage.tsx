@@ -1684,8 +1684,9 @@ export default function PlaygroundSubmissionDetailPage() {
     setLogs((current) => incremental && current
       ? {
           ...latestLogs,
-          console: `${current.console}${latestLogs.console}`,
           stdout: `${current.stdout}${latestLogs.stdout}`,
+          stderr: latestLogs.stderr || current.stderr,
+          console: `${current.stdout}${latestLogs.stdout}`,
           runner_events: [...(current.runner_events ?? []), ...(latestLogs.runner_events ?? [])],
           runner_event_lines: [...(current.runner_event_lines ?? []), ...(latestLogs.runner_event_lines ?? [])],
         }
@@ -2683,7 +2684,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 { key: "file", label: "File" },
                 { key: "diff", label: "Diff" },
                 { key: "results", label: "Test Result" },
-                { key: "stdio", label: "Stdout/Stderror" },
+                { key: "stdio", label: "Stdout / stderr" },
               ].map((tab) => (
                 <button
                   key={tab.key}
