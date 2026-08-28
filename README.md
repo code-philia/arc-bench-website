@@ -72,21 +72,6 @@ git -C reference-implementations/arc submodule update --init --recursive
 git -C reference-implementations/arc/src/arc-template pull --ff-only
 ```
 
-On Windows PowerShell, use the same commands. Do not use `git submodule update
---remote` at the ARC-Bench root: these repositories are not root submodules.
-Newly downloaded ARC agent archives include the
-complete refreshed `reference-implementations/arc/src/arc-template` catalogue;
-the root `arc-template` is used by ARC-Bench when preparing task starter
-projects.
-
-To confirm all three checkouts are available:
-
-```bash
-git -C arc-template status --short
-git -C reference-implementations/arc status --short
-git -C reference-implementations/arc/src/arc-template status --short
-```
-
 ### Model provider configuration
 
 Model credentials are configured only on the backend. Copy
