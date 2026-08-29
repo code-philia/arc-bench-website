@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     worker_soft_time_limit_seconds: int = 1900
     worker_hard_time_limit_seconds: int = 2000
     max_concurrent_runs: int = 4
+    recovery_interval_seconds: int = 30
+    recovery_max_attempts: int = 3
 
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
