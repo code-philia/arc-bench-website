@@ -220,13 +220,91 @@ pip install -r requirements.txt
 
 ### 6. Start the services (same-host deployment)
 
-Start the API in one terminal:
+For local development, start the API in one terminal:
 
 ```bash
 source ./source.sh
 cd backend
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+For production, do not use `--reload`. Run multiple API workers behind Nginx:
+
+```bash
+source ./source.sh
+backend/.venv/bin/gunicorn app.main:app \
+  -k uvicorn.workers.UvicornWorker \
+  --workers 2 \
+  --bind 127.0.0.1:8000 \
+  --timeout 120 \
+  --keep-alive 5 \
+  --access-logfile -
+```
+
+Start with 2 API workers and increase only after load testing. Each worker
+opens its own PostgreSQL connections and serves its own SSE connections.
+
+### Resource controls for concurrent users
+
+These limits are controllable, but they protect different resources:
+
+**PostgreSQL connections.** PostgreSQL controls the hard server ceiling:
+
+```sql
+SHOW max_connections;
+```
+
+Set it in `postgresql.conf` and restart PostgreSQL only after reserving room
+for administration and workers. The application pool is configured in
+`source.sh`:
+
+```bash
+ARCBENCH_DB_POOL_SIZE=10
+ARCBENCH_DB_MAX_OVERFLOW=10
+ARCBENCH_DB_POOL_TIMEOUT_SECONDS=30
+ARCBENCH_DB_POOL_RECYCLE_SECONDS=1800
+```
+
+The approximate upper bound is `API workers * (pool size + overflow)` plus
+Celery, Dispatcher, Recovery, and admin connections. Keep that total below
+PostgreSQL `max_connections`.
+
+**Synchronous interface thread pool.** FastAPI/Starlette runs synchronous
+endpoints in an AnyIO thread pool, whose default limiter is about 40 tokens per
+process. This is not the Docker task concurrency limit. Do not raise it blindly:
+file and Docker operations can consume all threads. Prefer keeping evaluation
+in Celery and use async I/O or bounded executors for new expensive endpoints.
+
+**File reads and uploads.** File reads are bounded by OS page cache and disk
+I/O, not by Celery. Put Nginx in front of Gunicorn and set an upload limit and
+request timeout, for example:
+
+```nginx
+client_max_body_size 100m;
+proxy_read_timeout 120s;
+proxy_send_timeout 120s;
+proxy_buffering off;
+```
+
+Do not load unbounded logs into memory; paginate or stream large artifacts and
+move shared files to object storage before adding more API workers.
+
+**SSE long connections.** Each browser SSE connection is a long-lived HTTP
+connection. The current implementation uses Redis Streams, sends a heartbeat
+every 15 seconds, and supports `Last-Event-ID` replay. Nginx must disable
+buffering for the events location:
+
+```nginx
+location /api/runs/ {
+  proxy_pass http://127.0.0.1:8000;
+  proxy_buffering off;
+  proxy_read_timeout 1h;
+}
+```
+
+Limit SSE connections per user at the reverse proxy/application layer before
+accepting hundreds of tabs. Monitor Redis connections and API worker memory;
+200 SSE clients are feasible only after a real load test.
 
 Start the Outbox Dispatcher in a second terminal:
 

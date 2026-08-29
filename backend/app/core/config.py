@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     max_concurrent_runs: int = 4
     recovery_interval_seconds: int = 30
     recovery_max_attempts: int = 3
+    db_pool_size: int = 10
+    db_max_overflow: int = 10
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800
 
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
