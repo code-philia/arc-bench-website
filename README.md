@@ -43,8 +43,8 @@ Browser -> FastAPI API -> PostgreSQL
 - **Docker runner** executes untrusted agent code with the configured resource
   limits. In the current phase it runs on the same host as the API and Worker.
 
-Runner Host separation, shared storage/object storage, and expired-lease
-recovery are documented as the next deployment phase in
+Runner Host separation and shared storage/object storage are documented as the
+next deployment phase in
 [`docs/deploy/Celery_Redis_Runner_Host.md`](docs/deploy/Celery_Redis_Runner_Host.md).
 
 ## Task data layout
@@ -134,6 +134,13 @@ Initialize the Celery lease and Outbox schema once after backing up PostgreSQL:
 
 ```bash
 backend/.venv/bin/python scripts/migrate_celery_outbox.py
+```
+
+For versioned schema management, use Alembic after installing the updated
+requirements:
+
+```bash
+backend/.venv/bin/alembic -c alembic.ini upgrade head
 ```
 
 ### 3. Build the runner image
@@ -236,6 +243,13 @@ cd backend
   -Q evaluation.default,evaluation.retry
 ```
 
+Start the lease recovery process in a fourth terminal:
+
+```bash
+source ./source.sh
+backend/.venv/bin/python -m app.worker.recovery
+```
+
 For production, run API, Dispatcher, and Worker as separate systemd services;
 the Worker must run as the restricted `arcbench` user with Docker access, while
 the public API process must not expose the Docker socket. See the deployment
@@ -273,8 +287,10 @@ The converter supports both legacy documents and enhanced fields, including stan
 | Check PostgreSQL | `backend/.venv/bin/python scripts/check_postgresql.py` |
 | Check Redis | `backend/.venv/bin/python scripts/check_redis.py` |
 | Initialize Celery Outbox schema | `backend/.venv/bin/python scripts/migrate_celery_outbox.py` |
+| Apply versioned database migrations | `backend/.venv/bin/alembic -c alembic.ini upgrade head` |
 | Start Outbox Dispatcher | `backend/.venv/bin/python -m app.worker.dispatcher` |
 | Start Celery Worker | `cd backend && .venv/bin/celery -A app.worker.celery_app worker --loglevel=INFO --concurrency=4 -Q evaluation.default,evaluation.retry` |
+| Start lease recovery | `backend/.venv/bin/python -m app.worker.recovery` |
 | Generate beta codes | `backend\.venv\Scripts\python.exe scripts\generate_beta_invite_codes.py --count 100` |
 | Run the backend | `cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` |
 | Validate the runner image | `docker run --rm --entrypoint python3 arcbench-runner:local /opt/arcbench/smoke_test.py` |
