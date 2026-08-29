@@ -41,7 +41,7 @@ from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import RunService
 from app.services.agent_submission_service import AgentSubmissionService
-from app.worker.outbox import queue_run
+from app.worker.outbox import RunConcurrencyLimitExceeded, queue_run
 
 
 submission_router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -193,6 +193,9 @@ def start_submission(
     try:
         queue_run(db, submission_id)
         db.commit()
+    except RunConcurrencyLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
     except (LookupError, ValueError) as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -224,6 +227,9 @@ def rerun_submission(
     try:
         queue_run(db, submission.id)
         db.commit()
+    except RunConcurrencyLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
     except (LookupError, ValueError) as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -363,6 +369,9 @@ def resume_submission(
         db.commit()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RunConcurrencyLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -387,6 +396,9 @@ def continue_submission(
         db.commit()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RunConcurrencyLimitExceeded as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return service.to_detail(service.get_submission(submission_id, current_user.id))
