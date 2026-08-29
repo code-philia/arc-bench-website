@@ -1,8 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
+from queue import Empty
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -483,6 +484,7 @@ async def stream_submission_events(
     submission_id: str,
     request: Request,
     since_version: int = 0,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> StreamingResponse:
@@ -492,20 +494,35 @@ async def stream_submission_events(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    try:
+        if last_event_id and last_event_id.isdigit():
+            since_version = max(since_version, int(last_event_id))
+    except ValueError:
+        pass
+
     async def event_generator():
         event_queue = SubmissionEventStream.subscribe(submission_id)
         try:
             yield ": connected\n\n"
-            for event in SubmissionEventStream.snapshot(submission_id):
-                if event.version > since_version:
+            last_version = since_version
+            for event in SubmissionEventStream.snapshot(submission_id, since_version=since_version):
+                if event.version > last_version:
                     yield SubmissionEventStream.encode_sse(event)
+                    last_version = event.version
             while True:
                 if await request.is_disconnected():
                     break
-                event = await asyncio.to_thread(event_queue.get)
+                try:
+                    event = await asyncio.to_thread(event_queue.queue.get, True, 15)
+                except Empty:
+                    yield ": heartbeat\n\n"
+                    continue
                 if event is None:
                     break
+                if event.version <= last_version:
+                    continue
                 yield SubmissionEventStream.encode_sse(event)
+                last_version = event.version
         finally:
             SubmissionEventStream.unsubscribe(submission_id, event_queue)
 

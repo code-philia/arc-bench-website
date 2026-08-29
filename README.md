@@ -43,9 +43,8 @@ Browser -> FastAPI API -> PostgreSQL
 - **Docker runner** executes untrusted agent code with the configured resource
   limits. In the current phase it runs on the same host as the API and Worker.
 
-Runner Host separation, shared storage/object storage, Redis Streams for
-cross-process SSE, and expired-lease recovery are documented as the next
-deployment phase in
+Runner Host separation, shared storage/object storage, and expired-lease
+recovery are documented as the next deployment phase in
 [`docs/deploy/Celery_Redis_Runner_Host.md`](docs/deploy/Celery_Redis_Runner_Host.md).
 
 ## Task data layout
