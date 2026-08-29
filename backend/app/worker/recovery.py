@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from datetime import datetime
 
 from sqlalchemy import select
@@ -12,6 +11,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models.run import Run
+from app.services.docker_manager import DockerManager
 from app.worker.outbox import enqueue_run
 
 LOG = logging.getLogger("arcbench.recovery")
@@ -31,7 +31,13 @@ def recover_once(*, batch_size: int = 100) -> tuple[int, int]:
             .with_for_update(skip_locked=True)
             .limit(batch_size)
         ).all()
+        docker_manager = DockerManager() if runs else None
         for run in runs:
+            # The old Worker may have died after creating a container. Remove
+            # it before requeueing so a replacement Worker cannot run the same
+            # Run alongside the stale container.
+            assert docker_manager is not None
+            docker_manager.remove_submission_container(run.id)
             if run.attempt_count >= settings.recovery_max_attempts:
                 run.status = "FAILED"
                 run.failure_reason = "Worker lease expired too many times"
