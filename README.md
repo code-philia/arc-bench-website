@@ -270,16 +270,6 @@ The expected request behavior is: starting a run returns quickly with
 `STARTING`, executes the Docker evaluation, and PostgreSQL stores the terminal
 result.
 
-## Working with requirement documents
-
-Task requirements are authored in YAML. Generate a sibling Markdown document for task and competition pages with:
-
-```bash
-python scripts/render_competition_requirements.py path/to/requirements.yaml
-```
-
-The converter supports both legacy documents and enhanced fields, including standalone `images`, node-level `reference` links, `roles`, `permissions`, and scenario or step `actor` values. For relative files such as `./reference/example.png` or `./reference/standard-rule.md`, keep them in the bundle and import the task as a ZIP on the Create Task page. Additional safe directories in that ZIP are preserved for task export and execution.
-
 ## Useful commands
 
 | Goal | Command |
