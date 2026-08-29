@@ -1,7 +1,10 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+import yaml
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -10,7 +13,8 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 class Settings(BaseSettings):
     app_name: str = "ArcBench API"
     api_prefix: str = "/api"
-    database_url: str = f"sqlite:///{(ROOT_DIR / 'runtime' / 'app.db').as_posix()}"
+    # Deliberately empty: production must explicitly configure PostgreSQL.
+    database_url: str = ""
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     frontend_dist: Path = ROOT_DIR / "frontend" / "dist"
@@ -49,6 +53,11 @@ class Settings(BaseSettings):
     runtime_config_path: Path = ROOT_DIR / "config.yaml"
     beta_invite_codes_path: Path = ROOT_DIR / "data" / "beta-invite-codes.yaml"
     session_secret: str = "arcbench-dev-session-secret"
+    secure_cookies: bool = False
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    worker_soft_time_limit_seconds: int = 1900
+    worker_hard_time_limit_seconds: int = 2000
+    max_concurrent_runs: int = 4
 
     runner_cpu_limit: int = 2
     runner_memory_limit: str = "4g"
@@ -88,4 +97,46 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    # Environment variables remain the highest-priority production override.
+    # For a single-host deployment, config.yaml can provide the database URL.
+    environment_url = os.environ.get("ARCBENCH_DATABASE_URL", "").strip()
+    if environment_url:
+        return settings.model_copy(update={"database_url": _require_postgresql_url(environment_url)})
+
+    config_path = settings.runtime_config_path
+    if not config_path.is_file():
+        raise RuntimeError(
+            "PostgreSQL configuration is missing. Set ARCBENCH_DATABASE_URL "
+            "or add database_url to config.yaml. SQLite is disabled."
+        )
+    try:
+        payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError(f"Application configuration is invalid: {config_path}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Application configuration must be a YAML mapping: {config_path}")
+    database_url = str(payload.get("database_url") or "").strip()
+    if not database_url:
+        raise RuntimeError(
+            f"PostgreSQL database_url is missing from {config_path}. "
+            "Set ARCBENCH_DATABASE_URL or add database_url to config.yaml. "
+            "SQLite is disabled."
+        )
+    return settings.model_copy(update={"database_url": _require_postgresql_url(database_url)})
+
+
+def _require_postgresql_url(value: str) -> str:
+    """Validate that the configured URL targets PostgreSQL, never SQLite."""
+    try:
+        url = make_url(value)
+    except Exception as exc:  # SQLAlchemy raises multiple URL-specific exceptions.
+        raise RuntimeError("Invalid database URL. Expected a PostgreSQL URL.") from exc
+    if url.get_backend_name() != "postgresql":
+        raise RuntimeError(
+            "ARC-Bench requires PostgreSQL. Configure a postgresql+psycopg:// "
+            "URL via ARCBENCH_DATABASE_URL or config.yaml; SQLite is disabled."
+        )
+    if not url.database:
+        raise RuntimeError("PostgreSQL database URL must include a database name.")
+    return value

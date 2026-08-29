@@ -154,17 +154,16 @@ pip install -r requirements.txt
 ```
 </details>
 
-#### Rebuild the local database
+#### Initialize the PostgreSQL database
 
-ARC-Bench does not run compatibility migrations during application startup.
-After creating the Python environment above and before starting the backend,
-create a clean local database from the current models (this permanently deletes
-every record in `runtime/app.db`):
+ARC-Bench requires PostgreSQL and does not create or migrate the schema during
+application startup. Configure `ARCBENCH_DATABASE_URL` or the root
+`config.yaml` first, then run the documented PostgreSQL migration/initialization
+steps before starting the backend. SQLite is not supported at runtime.
 
 ```powershell
 cd ..
-backend\.venv\Scripts\python.exe scripts\rebuild_database.py --yes
-cd backend
+backend\.venv\Scripts\python.exe scripts\check_postgresql.py
 ```
 
 Then start the backend server:

@@ -129,7 +129,7 @@ def _set_session_cookie(response: Response, service: AuthService, user: User) ->
         value=service.build_session_token(user),
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=service.settings.secure_cookies,
         max_age=AuthService.SESSION_TTL_DAYS * 24 * 60 * 60,
         path="/",
     )

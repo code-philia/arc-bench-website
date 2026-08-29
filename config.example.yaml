@@ -1,4 +1,8 @@
 # Copy this file to config.yaml. The real file is ignored by Git.
+# Required: the application refuses to start without a PostgreSQL URL.
+# Environment variable ARCBENCH_DATABASE_URL takes precedence over this value.
+database_url: postgresql+psycopg://arcbench:URL_ENCODED_PASSWORD@127.0.0.1:5432/arcbench?sslmode=prefer
+
 # Values are injected only into the runner container selected for a submission.
 environment:
   # Docker DNS servers for every runner container. Use a YAML list or a comma-separated string.
