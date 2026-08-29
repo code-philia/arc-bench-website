@@ -13,6 +13,7 @@ from app.models.user import User
 
 ACTIVE_RUN_STATUSES = ("QUEUED", "STARTING", "RUNNING", "PAUSE_REQUESTED", "RESUME_REQUESTED")
 MAX_ACTIVE_RUNS = 2
+MAX_GLOBAL_ACTIVE_RUNS = 4
 
 
 class RunConcurrencyLimitExceeded(ValueError):
@@ -20,6 +21,12 @@ class RunConcurrencyLimitExceeded(ValueError):
         self.scope = scope
         self.active = active
         super().__init__(f"{scope} already has {active} active runs; maximum is {MAX_ACTIVE_RUNS}")
+
+
+class GlobalRunConcurrencyLimitExceeded(ValueError):
+    def __init__(self, active: int) -> None:
+        self.active = active
+        super().__init__(f"The platform already has {active} active runs; maximum is {MAX_GLOBAL_ACTIVE_RUNS}")
 
 
 def enqueue_run(db: Session, run_id: str, *, reuse_workspace: bool = False) -> TaskOutbox:
@@ -47,6 +54,7 @@ def queue_run(db: Session, run_id: str, *, reuse_workspace: bool = False) -> Tas
     if run.status not in {"PENDING", "RUNNING", "RESUME_REQUESTED", "PAUSED"}:
         raise ValueError(f"Run '{run_id}' cannot be queued from status {run.status}")
 
+    _enforce_global_limit(db, exclude_run_id=run.id)
     _enforce_concurrency_limit(db, run.user_id, exclude_run_id=run.id)
     run.status = "QUEUED"
     run.worker_id = None
@@ -87,3 +95,14 @@ def _enforce_concurrency_limit(db: Session, user_id: str | None, *, exclude_run_
     active = db.scalar(query) or 0
     if active >= MAX_ACTIVE_RUNS:
         raise RunConcurrencyLimitExceeded(f"User '{user_id}'", int(active))
+
+
+def _enforce_global_limit(db: Session, *, exclude_run_id: str | None = None) -> None:
+    """Reserve global capacity using a PostgreSQL transaction advisory lock."""
+    db.execute(select(func.pg_advisory_xact_lock(804_271_004)))
+    query = select(func.count()).select_from(Run).where(Run.status.in_(ACTIVE_RUN_STATUSES))
+    if exclude_run_id:
+        query = query.where(Run.id != exclude_run_id)
+    active = db.scalar(query) or 0
+    if active >= MAX_GLOBAL_ACTIVE_RUNS:
+        raise GlobalRunConcurrencyLimitExceeded(int(active))

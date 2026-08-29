@@ -42,6 +42,8 @@ Browser -> FastAPI API -> PostgreSQL
   its pending task message are committed in one PostgreSQL transaction.
 - **Docker runner** executes untrusted agent code with the configured resource
   limits. In the current phase it runs on the same host as the API and Worker.
+- **Concurrency quotas** allow at most 4 active runs platform-wide and at most
+  2 active runs per user without a team, or 2 shared active runs per team.
 
 Runner Host separation and shared storage/object storage are documented as the
 next deployment phase in
