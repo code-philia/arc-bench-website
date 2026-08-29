@@ -22,6 +22,32 @@ arc-bench-website/
 └── data/          Unified task data sources (ARC-Bench, playground, competitions)
 ```
 
+## Current deployment architecture
+
+The current production path uses PostgreSQL, Redis, Celery, and the local
+Docker runner on one host:
+
+```text
+Browser -> FastAPI API -> PostgreSQL
+                    \-> task_outbox -> Dispatcher -> Redis -> Celery Worker -> Docker runner
+```
+
+- **PostgreSQL** is the source of truth for users, submissions, runs, and task
+  state. SQLite is disabled at runtime.
+- **Redis** is the Celery broker and result backend. It is not the source of
+  truth for business data.
+- **Celery Worker** executes the long-running evaluation task outside the API
+  request process.
+- **Dispatcher/Outbox** makes queue delivery durable: a Run state change and
+  its pending task message are committed in one PostgreSQL transaction.
+- **Docker runner** executes untrusted agent code with the configured resource
+  limits. In the current phase it runs on the same host as the API and Worker.
+
+Runner Host separation, shared storage/object storage, Redis Streams for
+cross-process SSE, and expired-lease recovery are documented as the next
+deployment phase in
+[`docs/deploy/Celery_Redis_Runner_Host.md`](docs/deploy/Celery_Redis_Runner_Host.md).
+
 ## Task data layout
 
 All shipped task sources are under [`data/`](data/README.md): `arc-bench`,
@@ -38,6 +64,8 @@ submodule under `templates/<template-id>/files`.
 | Node.js | 20+ — frontend development |
 | Python | 3.11+ — backend development |
 | Docker | Builds and runs the submission runner |
+| PostgreSQL | Required application database |
+| Redis | Celery broker and result backend |
 
 ### 1. Clone and refresh external source repositories
 
@@ -72,7 +100,7 @@ git -C reference-implementations/arc submodule update --init --recursive
 git -C reference-implementations/arc/src/arc-template pull --ff-only
 ```
 
-### Model provider configuration
+### 2. Configure secrets and services
 
 Model credentials are configured only on the backend. Copy
 [`config.example.yaml`](config.example.yaml) to `config.yaml`, then fill in the provider credentials. The
@@ -81,7 +109,35 @@ model's `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL`; the visual provider
 settings are shared by all runs, and `ARC_DEBUG` is always `1`. The same YAML
 also contains `environment.ARCBENCH_RUNNER_DNS_SERVERS` for Docker runner DNS.
 
-### 2. Build the runner image
+Copy [`source.example.sh`](source.example.sh) to `source.sh` (the real file is
+ignored by Git), fill in the PostgreSQL URL, Redis URL, session secret, and
+provider values, then load it in every shell that starts a service:
+
+```bash
+cp config.example.yaml config.yaml
+cp source.example.sh source.sh
+chmod 600 config.yaml source.sh
+${EDITOR:-vi} source.sh
+source ./source.sh
+```
+
+Install and start PostgreSQL and Redis according to
+[`docs/deploy/PostgreSQL.md`](docs/deploy/PostgreSQL.md) and
+[`docs/deploy/Celery_Redis_Runner_Host.md`](docs/deploy/Celery_Redis_Runner_Host.md).
+Verify them before starting the application:
+
+```bash
+backend/.venv/bin/python scripts/check_postgresql.py
+backend/.venv/bin/python scripts/check_redis.py
+```
+
+Initialize the Celery lease and Outbox schema once after backing up PostgreSQL:
+
+```bash
+backend/.venv/bin/python scripts/migrate_celery_outbox.py
+```
+
+### 3. Build the runner image
 
 ARC and Octos submissions share one local runner image. Build it once, then run its smoke test:
 
@@ -103,7 +159,7 @@ $env:ARCBENCH_RUNNER_IMAGE = "arcbench-runner:latest"
 Production deployments should use a validated immutable image tag or digest. See [backend/runner/README.md](backend/runner/README.md) for runner details.
 
 
-### 3. Build the frontend
+### 4. Build the frontend
 
 ```bash
 cd frontend
@@ -112,7 +168,7 @@ npm run build
 
 this will generate a `frontend/dist` folder with static assets for the backend to serve.
 
-### 4. Start the backend
+### 5. Install backend dependencies
 
 Choose one Python environment workflow, install dependencies, and launch the API.
 
@@ -154,23 +210,50 @@ pip install -r requirements.txt
 ```
 </details>
 
-#### Initialize the PostgreSQL database
+### 6. Start the services (same-host deployment)
 
-ARC-Bench requires PostgreSQL and does not create or migrate the schema during
-application startup. Configure `ARCBENCH_DATABASE_URL` or the root
-`config.yaml` first, then run the documented PostgreSQL migration/initialization
-steps before starting the backend. SQLite is not supported at runtime.
-
-```powershell
-cd ..
-backend\.venv\Scripts\python.exe scripts\check_postgresql.py
-```
-
-Then start the backend server:
+Start the API in one terminal:
 
 ```bash
+source ./source.sh
+cd backend
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+Start the Outbox Dispatcher in a second terminal:
+
+```bash
+source ./source.sh
+backend/.venv/bin/python -m app.worker.dispatcher
+```
+
+Start the Celery Worker in a third terminal:
+
+```bash
+source ./source.sh
+cd backend
+.venv/bin/celery -A app.worker.celery_app worker \
+  --loglevel=INFO --concurrency=4 \
+  -Q evaluation.default,evaluation.retry
+```
+
+For production, run API, Dispatcher, and Worker as separate systemd services;
+the Worker must run as the restricted `arcbench` user with Docker access, while
+the public API process must not expose the Docker socket. See the deployment
+guide for unit files and firewall rules.
+
+After startup, check:
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/health
+backend/.venv/bin/celery -A app.worker.celery_app inspect ping
+backend/.venv/bin/celery -A app.worker.celery_app inspect registered
+```
+
+The expected request behavior is: starting a run returns quickly with
+`QUEUED`; the Dispatcher marks its Outbox row as sent; the Worker claims it as
+`STARTING`, executes the Docker evaluation, and PostgreSQL stores the terminal
+result.
 
 ## Working with requirement documents
 
@@ -188,7 +271,11 @@ The converter supports both legacy documents and enhanced fields, including stan
 | --- | --- |
 | Run the frontend locally | `cd frontend && npm run dev` |
 | Build the frontend | `cd frontend && npm run build` |
-| Rebuild the local database | `backend\.venv\Scripts\python.exe scripts\rebuild_database.py --yes` |
+| Check PostgreSQL | `backend/.venv/bin/python scripts/check_postgresql.py` |
+| Check Redis | `backend/.venv/bin/python scripts/check_redis.py` |
+| Initialize Celery Outbox schema | `backend/.venv/bin/python scripts/migrate_celery_outbox.py` |
+| Start Outbox Dispatcher | `backend/.venv/bin/python -m app.worker.dispatcher` |
+| Start Celery Worker | `cd backend && .venv/bin/celery -A app.worker.celery_app worker --loglevel=INFO --concurrency=4 -Q evaluation.default,evaluation.retry` |
 | Generate beta codes | `backend\.venv\Scripts\python.exe scripts\generate_beta_invite_codes.py --count 100` |
 | Run the backend | `cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` |
 | Validate the runner image | `docker run --rm --entrypoint python3 arcbench-runner:local /opt/arcbench/smoke_test.py` |

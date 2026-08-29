@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text
+from sqlalchemy import DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -30,6 +30,11 @@ class Run(Base):
     agent_source: Mapped[str] = mapped_column(String(64), nullable=False, default="upload", index=True)
     agent_archive_path: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    worker_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     test_pass_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     passed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -48,3 +53,5 @@ class Run(Base):
     result_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     steps_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+
+    __table_args__ = (Index("ix_runs_status_lease_until", "status", "lease_until"),)

@@ -17,6 +17,8 @@ class AgentSourceType(str, Enum):
 class SubmissionStatus(str, Enum):
     READY = "READY"
     PENDING = "PENDING"
+    QUEUED = "QUEUED"
+    STARTING = "STARTING"
     RUNNING = "RUNNING"
     PAUSE_REQUESTED = "PAUSE_REQUESTED"
     PAUSED = "PAUSED"

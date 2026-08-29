@@ -22,6 +22,7 @@ requirement/
 
 .env
 config.yaml
+source.sh
 *.whl
 __demo__
 !data/playground/web/__demo__/

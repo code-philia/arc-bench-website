@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -31,7 +31,6 @@ from app.schemas.submission import (
     TestCreatePayload,
     TestCreateResponse,
 )
-from app.services.execution_service import ExecutionService
 from app.services.debug_log_service import DebugLogService
 from app.services.docker_manager import DockerManager
 from app.services.host_demo_preview_service import HostDemoPreviewService
@@ -41,6 +40,7 @@ from app.services.submission_artifact_service import SubmissionArtifactService
 from app.services.submission_event_stream import SubmissionEventStream
 from app.services.submission_service import RunService
 from app.services.agent_submission_service import AgentSubmissionService
+from app.worker.outbox import queue_run
 
 
 submission_router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -179,7 +179,6 @@ def list_runs(
 @run_router.post("/{submission_id}/start", response_model=SubmissionDetail)
 def start_submission(
     submission_id: str,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionDetail:
@@ -190,10 +189,15 @@ def start_submission(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if submission.status != SubmissionStatus.PENDING.value:
         raise HTTPException(status_code=409, detail="Submission is already running or completed")
+    try:
+        queue_run(db, submission_id)
+        db.commit()
+    except (LookupError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     HostDemoPreviewService.stop_backend()
     service.append_step_event(submission_id, step_key="deploy_agent", message="Submission accepted and queued", status="info")
-    background_tasks.add_task(ExecutionService(db).run_submission, submission_id)
-    return service.to_detail(submission)
+    return service.to_detail(service.get_submission(submission_id, current_user.id))
 
 
 @run_router.post("/{submission_id}/rerun", response_model=SubmissionRerunResponse)
@@ -215,6 +219,12 @@ def rerun_submission(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        queue_run(db, submission.id)
+        db.commit()
+    except (LookupError, ValueError) as exc:
+        db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return SubmissionRerunResponse(run=RunService(db).to_summary(submission))
 
@@ -286,6 +296,9 @@ def pause_submission(
         service.request_pause(submission)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return service.to_detail(submission)
 
 
@@ -304,6 +317,8 @@ def cancel_submission(
         service.cancel_submission(submission)
         DockerManager().remove_submission_container(submission_id)
     except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError:
         # The run is already terminal in the database; Docker cleanup can be retried by the runner.
@@ -314,7 +329,6 @@ def cancel_submission(
 @router.post("/{submission_id}/resume", response_model=SubmissionDetail)
 def resume_submission(
     submission_id: str,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionDetail:
@@ -344,16 +358,19 @@ def resume_submission(
             ),
         )
         HostDemoPreviewService.stop_backend()
-        background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
+        queue_run(db, submission_id, reuse_workspace=True)
+        db.commit()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return service.to_detail(submission)
 
 
 @router.post("/{submission_id}/continue", response_model=SubmissionDetail)
 def continue_submission(
     submission_id: str,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_current_user),
 ) -> SubmissionDetail:
@@ -365,7 +382,8 @@ def continue_submission(
     try:
         service.request_continue(submission)
         HostDemoPreviewService.stop_backend()
-        background_tasks.add_task(ExecutionService(db).rerun_submission, submission_id)
+        queue_run(db, submission_id, reuse_workspace=True)
+        db.commit()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
