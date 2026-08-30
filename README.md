@@ -239,6 +239,10 @@ backend/.venv/bin/gunicorn app.main:app \
   --timeout 120 \
   --keep-alive 5 \
   --access-logfile -
+
+# close
+pgrep -af 'gunicorn app.main:app'
+pkill -TERM -f 'gunicorn app.main:app'
 ```
 
 Start with 2 API workers and increase only after load testing. Each worker
