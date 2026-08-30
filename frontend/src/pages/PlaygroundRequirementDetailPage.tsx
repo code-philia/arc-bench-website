@@ -7,7 +7,6 @@ import { useAuth } from "../auth/AuthContext";
 import MarkdownTocDocument from "../components/requirements/MarkdownTocDocument";
 import AgentTemplateDialog from "../components/requirements/AgentTemplateDialog";
 import TestSuiteViewer from "../components/requirements/TestSuiteViewer";
-import SubmissionStepList from "../components/submissions/SubmissionStepList";
 import { api } from "../lib/api";
 import { DEFAULT_MODEL_NAME, MODEL_OPTIONS } from "../lib/models";
 import { parseTaskTreeYaml } from "../lib/taskTree";
@@ -18,14 +17,6 @@ function submissionBadgeClass(status: string) {
   if (status === "PASSED") return "pass";
   if (status === "FAILED") return "fail";
   return "pending";
-}
-
-function resultSummary(submission: SubmissionDetail) {
-  const total = submission.passed_count + submission.failed_count;
-  if (total === 0) {
-    return "No test results yet";
-  }
-  return `${submission.passed_count}/${total} passed`;
 }
 
 function normalizeTaskType(value: string) {
@@ -79,7 +70,6 @@ export default function PlaygroundRequirementDetailPage() {
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<"readme" | "tests">("readme");
   const [runtime, setRuntime] = useState("python");
-  const [agentSource, setAgentSource] = useState<"upload" | "builtin_arc_agent">("upload");
   const [file, setFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL_NAME);
@@ -165,7 +155,6 @@ export default function PlaygroundRequirementDetailPage() {
       return;
     }
     setRuntime(prefill.runtime);
-    setAgentSource("upload");
     setDisplayName(prefill.displayName);
     setModelName(prefill.modelName);
     if (prefill.file) {
@@ -220,7 +209,7 @@ export default function PlaygroundRequirementDetailPage() {
     try {
       setSubmitting(true);
       setUploadError(null);
-      if (agentSource === "upload" && !file) {
+      if (!file) {
         const errorMessage = "Agent package is required.";
         setUploadError(errorMessage);
         message.error(errorMessage);
@@ -229,8 +218,8 @@ export default function PlaygroundRequirementDetailPage() {
       const created = await api.createSubmission({
         requirementId: requirement.id,
         runtime,
-        file: agentSource === "upload" ? file : null,
-        agentSource,
+        file,
+        agentSource: "upload",
         displayName: normalizedDisplayName,
         modelName: normalizedModelName,
         catalog,
@@ -238,11 +227,12 @@ export default function PlaygroundRequirementDetailPage() {
       const createdRun = await api.createRun(created.submission.id, requirement.id);
       const started = await api.startSubmission(createdRun.run.id);
       setActiveSubmission(started);
-      setSubmissionTab("submit");
+      setSubmissions((current) => [started, ...current.filter((item) => item.id !== started.id)]);
+      setSubmissionTab("history");
       beginPolling(createdRun.run.id);
       setDisplayName("");
       setModelName(DEFAULT_MODEL_NAME);
-      if (!active || agentSource !== "upload") {
+      if (!active) {
         setFile(null);
       }
       message.success("Submission created and queued.");
@@ -358,49 +348,8 @@ export default function PlaygroundRequirementDetailPage() {
             {submissionTab === "submit" ? (
               <>
                 <div className="submission-subsection">
-                  <div className="submission-subsection-title">Upload Agent</div>
-                  <div className="agent-source-selector">
-                    <button
-                      type="button"
-                      className={`agent-source-card${agentSource === "upload" ? " active" : ""}`}
-                      onClick={() => {
-                        setAgentSource("upload");
-                        setUploadError(null);
-                      }}
-                    >
-                      <span className="agent-source-title">Upload .zip</span>
-                      <span className="agent-source-copy">Use your own agent package.</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`agent-source-card${agentSource !== "upload" ? " active" : ""}`}
-                      onClick={() => {
-                        setAgentSource("builtin_arc_agent");
-                        setUploadError(null);
-                      }}
-                    >
-                      <span className="agent-source-title">Built-in Agent</span>
-                      <span className="agent-source-copy">Use an integrated ARC or Octos runner.</span>
-                    </button>
-                  </div>
-                  {agentSource !== "upload" ? (
-                    <div className="builtin-agent-selector" role="group" aria-label="Built-in agent type">
-                      <button
-                        type="button"
-                        className={`builtin-agent-option${agentSource === "builtin_arc_agent" ? " active" : ""}`}
-                        onClick={() => {
-                          setAgentSource("builtin_arc_agent");
-                          setUploadError(null);
-                        }}
-                      >
-                        <span>ARC Agent</span>
-                        <small>Agentic Requirement Compiler</small>
-                      </button>
-                    </div>
-                  ) : null}
-                  {agentSource === "upload" ? (
-                    <AgentTemplateDialog href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}`} runtime={runtime} />
-                  ) : null}
+                  <div className="submission-subsection-title">Agent Package</div>
+                  <AgentTemplateDialog href={`/api/requirements/${requirement.id}/starter-agent?catalog=${catalog}`} runtime={runtime} />
                   <div className="env-selector">
                     {agentRuntimeOptions().map((option) => (
                       <button
@@ -413,8 +362,7 @@ export default function PlaygroundRequirementDetailPage() {
                       </button>
                     ))}
                   </div>
-                  {agentSource === "upload" ? (
-                    <label className="upload-zone">
+                  <label className="upload-zone">
                       <input
                         className="visually-hidden"
                         type="file"
@@ -429,15 +377,7 @@ export default function PlaygroundRequirementDetailPage() {
                       </div>
                       <div className="upload-text">Drop your agent code here</div>
                       <div className="upload-hint">{uploadHint(runtime)}</div>
-                    </label>
-                  ) : (
-                    <div className="builtin-agent-panel">
-                      <div className="file-icon">ARC</div>
-                      <div className="file-info">
-                        <div className="file-name">ARC Agent</div>
-                      </div>
-                    </div>
-                  )}
+                  </label>
                   {!user ? (
                     <div className="inline-alert">Login is required before uploading an agent or viewing your submission history.</div>
                   ) : null}
@@ -468,7 +408,7 @@ export default function PlaygroundRequirementDetailPage() {
                       {MODEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                     </select>
                   </div>
-                  {agentSource === "upload" && file ? (
+                  {file ? (
                     <div className="uploaded-file">
                       <div className="file-icon">.zip</div>
                       <div className="file-info">
@@ -484,63 +424,12 @@ export default function PlaygroundRequirementDetailPage() {
                   <button
                     className="btn-primary"
                     type="button"
-                    disabled={(agentSource === "upload" && !file) || !user || submitting}
+                    disabled={!file || !user || submitting}
                     data-quickstart-id="quickstart-submit"
                     onClick={handleUpload}
                   >
                     {submitting ? "Submitting..." : "Submit"}
                   </button>
-                </div>
-                <div className="submission-subsection">
-                  <div className="submission-subsection-title">Progress</div>
-                  {activeSubmission ? (
-                    <div className="submission-summary-card">
-                      <div className="submission-summary-top">
-                        <div>
-                          <div className="submission-summary-name">{activeSubmission.display_name || activeSubmission.id}</div>
-                          <div className="submission-summary-meta">
-                            {activeSubmission.model_name ? <span className="model-chip">{activeSubmission.model_name}</span> : null}
-                          </div>
-                        </div>
-                        <span className={`test-badge ${submissionBadgeClass(activeSubmission.status)}`}>
-                          {activeSubmission.status}
-                        </span>
-                      </div>
-                      <SubmissionStepList
-                        steps={activeSubmission.steps}
-                        submissionStatus={activeSubmission.status}
-                        failureReason={activeSubmission.failure_reason}
-                      />
-                    </div>
-                  ) : (
-                    <div className="empty-state compact">No active submission.</div>
-                  )}
-                </div>
-                <div className="submission-subsection">
-                  <div className="submission-subsection-title">Test Results</div>
-                  {activeSubmission ? (
-                    <div className="submission-result-summary">
-                      {activeSubmission.failure_reason ? (
-                        <div className="inline-alert error">{activeSubmission.failure_reason}</div>
-                      ) : null}
-                      <div className="submission-result-grid">
-                        <div className="submission-result-stat">
-                          <span className="submission-result-label">Score</span>
-                          <strong>{activeSubmission.score == null ? "--" : activeSubmission.score.toFixed(1)}</strong>
-                        </div>
-                        <div className="submission-result-stat">
-                          <span className="submission-result-label">Summary</span>
-                          <strong>{resultSummary(activeSubmission)}</strong>
-                        </div>
-                        <div className="submission-result-stat">
-                          <span className="submission-result-label">Tests</span>
-                          <strong>{activeSubmission.passed_count + activeSubmission.failed_count}</strong>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="empty-state compact">Run a submission to see results.</div>
-                  )}
                 </div>
               </>
             ) : !user ? (

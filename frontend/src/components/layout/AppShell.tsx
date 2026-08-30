@@ -148,7 +148,7 @@ export default function AppShell() {
                 <NavLink to="/login" className="nav-auth-link">
                   Login
                 </NavLink>
-                <NavLink to="/register" className="nav-auth-link nav-auth-link-primary">
+                <NavLink to="/register" className="nav-auth-link">
                   Register
                 </NavLink>
               </div>
