@@ -1540,13 +1540,13 @@ export default function PlaygroundSubmissionDetailPage() {
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [pulseNodeId, setPulseNodeId] = useState<string | null>(null);
   const [sidebarMinimized, setSidebarMinimized] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(340);
-  const [previewMinimized, setPreviewMinimized] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [previewMinimized, setPreviewMinimized] = useState(true);
   const [previewWidth, setPreviewWidth] = useState(() => {
     if (typeof window === "undefined") {
-      return 480;
+      return 360;
     }
-    return Math.round(window.innerWidth * 0.333);
+    return Math.min(360, Math.round(window.innerWidth * 0.28));
   });
   const eventSourceRef = useRef<EventSource | null>(null);
   const sseReconnectRef = useRef<number | null>(null);
@@ -1606,7 +1606,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const previewUrl = previewStatus?.preview_url ?? api.getSubmissionPreviewUrl(submissionId);
   const previewFrameUrl = `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}refresh=${previewFrameVersion}`;
   const previewAvailable = previewStatus?.available ?? false;
-  const previewPanelWidth = previewMinimized ? "80px" : `${previewWidth}px`;
+  const previewPanelWidth = previewMinimized ? "44px" : `${previewWidth}px`;
   const selectedDiffCommit = useMemo(
     () => commitHistory?.commits.find((commit) => commit.oid === selectedCommitOid) ?? null,
     [commitHistory, selectedCommitOid],
@@ -2413,7 +2413,7 @@ export default function PlaygroundSubmissionDetailPage() {
   const clampPreviewWidth = (value: number) => {
     const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
     const maxWidth = Math.min(720, Math.floor(viewportWidth * 0.5));
-    return Math.max(320, Math.min(maxWidth, value));
+    return Math.max(280, Math.min(maxWidth, value));
   };
 
   const onPreviewResizeMouseDown = (event: React.MouseEvent) => {
@@ -2514,11 +2514,11 @@ export default function PlaygroundSubmissionDetailPage() {
     }}>
       <div className="gap-1.5 p-2" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <section
-          className="action-section submission-status-panel playground-submission-sidebar rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]"
+          className={`action-section submission-status-panel playground-submission-sidebar rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]${sidebarMinimized ? " is-minimized" : ""}`}
           style={{
-            width: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
-            minWidth: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
-            maxWidth: sidebarMinimized ? "76px" : `${sidebarWidth}px`,
+            width: sidebarMinimized ? "44px" : `${sidebarWidth}px`,
+            minWidth: sidebarMinimized ? "44px" : `${sidebarWidth}px`,
+            maxWidth: sidebarMinimized ? "44px" : `${sidebarWidth}px`,
             overflow: "hidden",
             transition: "width 0.24s ease, min-width 0.24s ease, max-width 0.24s ease",
           }}
@@ -2653,7 +2653,7 @@ export default function PlaygroundSubmissionDetailPage() {
               aria-label="Expand left sidebar"
               title="Expand left sidebar"
             >
-              <PanelChevronIcon direction="right" size={20} />
+                    <PanelChevronIcon direction="right" size={14} />
             </button>
           )}
         </section>
@@ -2974,7 +2974,7 @@ export default function PlaygroundSubmissionDetailPage() {
           </div>
         ) : null}
 
-        <aside className="preview-panel-shell rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]" style={{
+        <aside className={`preview-panel-shell rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-[0_10px_28px_rgba(15,23,42,0.05)]${previewMinimized ? " is-minimized" : ""}`} style={{
           width: previewPanelWidth,
           overflow: "hidden",
           display: "flex",
@@ -3065,7 +3065,7 @@ export default function PlaygroundSubmissionDetailPage() {
                 aria-label="Expand preview panel"
                 title="Expand preview panel"
               >
-                <PanelChevronIcon direction="left" size={20} />
+                <PanelChevronIcon direction="left" size={14} />
               </button>
             )}
           </div>
@@ -3133,4 +3133,3 @@ export default function PlaygroundSubmissionDetailPage() {
     </div>
   );
 }
-

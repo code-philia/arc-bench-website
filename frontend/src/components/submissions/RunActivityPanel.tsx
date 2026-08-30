@@ -16,12 +16,9 @@ export default function RunActivityPanel({
   onRefresh,
   compact = false,
 }: RunActivityPanelProps) {
-  const output = logs
-    ? [logs.stdout, logs.stderr]
-      .filter((part) => Boolean(part))
-      .join(logs.stdout && logs.stderr ? "\n\n--- stderr ---\n\n" : "")
-    : "";
-  const outputLineCount = output ? output.split(/\r?\n/).length : 0;
+  const stdout = logs?.stdout ?? "";
+  const stderr = logs?.stderr ?? "";
+  const outputLineCount = [stdout, stderr].filter(Boolean).reduce((total, value) => total + value.split(/\r?\n/).length, 0);
   return (
     <div className={`${compact ? "stdio-view" : "space-y-5 p-5"} run-activity-panel`}>
       <div className="run-activity-header flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3">
@@ -60,14 +57,20 @@ export default function RunActivityPanel({
       <div className="run-output-section">
         <div className="run-output-heading">
           <div>
-            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Stdout / stderr</div>
-            <div className="text-xs text-[var(--text-muted)]">Combined process output</div>
+            <div className="run-panel-kicker">Process output</div>
+            <div className="run-panel-caption">Separate streams from the evaluation container</div>
           </div>
           {outputLineCount > 0 ? <span className="run-output-count">{outputLineCount} lines</span> : null}
         </div>
-        <pre className={`${compact ? "stdio-code-view" : "log-panel"} ${output ? "has-output" : "is-empty"}`}>
-          {output || "No process output yet."}
-        </pre>
+        <div className="run-output-streams">
+          {(["stdout", "stderr"] as const).map((stream) => {
+            const value = stream === "stdout" ? stdout : stderr;
+            return <section className={`run-output-stream run-output-stream--${stream}`} key={stream}>
+              <header><span>{stream}</span><small>{value ? `${value.split(/\r?\n/).length} lines` : "empty"}</small></header>
+              <pre className={`${compact ? "stdio-code-view" : "log-panel"} ${value ? "has-output" : "is-empty"}`}>{value || `No ${stream} output.`}</pre>
+            </section>;
+          })}
+        </div>
       </div>
     </div>
   );

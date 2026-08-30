@@ -8651,6 +8651,174 @@ button {
   padding-right: 16px;
 }
 
+/* Submission workbench: both rails collapse to the same quiet icon strip. */
+.playground-submission-page .playground-submission-sidebar.is-minimized,
+.playground-submission-page .preview-panel-shell.is-minimized {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.playground-submission-page .playground-submission-sidebar.is-minimized > button,
+.playground-submission-page .submission-panel-minimized-toggle {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--submission-panel-bg) !important;
+  color: var(--text-muted) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.playground-submission-page .playground-submission-sidebar.is-minimized > button:hover,
+.playground-submission-page .submission-panel-minimized-toggle:hover {
+  background: var(--submission-hover-bg) !important;
+  color: var(--text) !important;
+}
+
+.playground-submission-page .preview-panel-shell.is-minimized .preview-panel-header {
+  height: 100%;
+  min-height: 0;
+  padding: 0 !important;
+  border-bottom: 0 !important;
+  justify-content: center;
+}
+
+.playground-submission-page .preview-panel-shell.is-minimized .submission-panel-minimized-toggle {
+  width: 44px !important;
+}
+
+/* File, diff, results and console use one shared surface language. */
+.playground-submission-page .ide-shell,
+.playground-submission-page .submission-results-workspace,
+.playground-submission-page .stdio-view {
+  background: var(--submission-panel-bg) !important;
+}
+
+.playground-submission-page .ide-editor-topbar,
+.playground-submission-page .run-activity-header,
+.playground-submission-page .run-output-heading {
+  min-height: 40px;
+  border-bottom: 1px solid var(--submission-line);
+  background: color-mix(in srgb, var(--bg-elevated) 46%, var(--bg) 54%);
+}
+
+.playground-submission-page .ide-code-view,
+.playground-submission-page .stdio-code-view,
+.playground-submission-page .submission-results-workspace .results-panel {
+  border: 1px solid var(--submission-line);
+  border-radius: 4px;
+  background: var(--submission-panel-bg);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.playground-submission-page .run-activity-panel.stdio-view {
+  gap: 0;
+  padding: 0;
+}
+
+.playground-submission-page .run-activity-panel.stdio-view .run-activity-header {
+  padding: 0 14px;
+}
+
+.playground-submission-page .run-activity-panel.stdio-view .run-activity-events {
+  max-height: 150px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--submission-line);
+}
+
+.playground-submission-page .run-activity-panel.stdio-view .run-activity-events > div:last-child {
+  display: grid;
+  gap: 6px;
+}
+
+.playground-submission-page .run-output-section {
+  padding: 0 14px 14px;
+}
+
+.playground-submission-page .run-output-heading {
+  padding: 10px 0;
+  border-bottom: 0;
+}
+
+.playground-submission-page .run-panel-kicker,
+.playground-submission-page .run-output-stream header span {
+  color: var(--text-dim);
+  font-size: 0.67rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.playground-submission-page .run-panel-caption {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.playground-submission-page .run-output-streams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-height: 0;
+}
+
+.playground-submission-page .run-output-stream {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--submission-line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--submission-panel-bg);
+}
+
+.playground-submission-page .run-output-stream header {
+  height: 30px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--submission-line);
+  background: color-mix(in srgb, var(--bg-elevated) 56%, var(--bg) 44%);
+}
+
+.playground-submission-page .run-output-stream header small {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.playground-submission-page .run-output-stream .stdio-code-view {
+  flex: 1;
+  min-height: 180px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 0.71rem;
+  line-height: 1.45;
+}
+
+.playground-submission-page .run-output-stream--stderr .stdio-code-view {
+  color: color-mix(in srgb, var(--warn) 72%, var(--text-dim));
+}
+
+@media (max-width: 900px) {
+  .playground-submission-page .run-output-streams {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .playground-submission-page .run-output-stream .stdio-code-view {
+    min-height: 120px;
+  }
+}
+
 .playground-submission-page .preview-panel-header {
   min-height: 40px;
   padding: 0 14px !important;
