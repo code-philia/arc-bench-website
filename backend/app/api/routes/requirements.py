@@ -114,7 +114,7 @@ def get_competition_submission_history(
 def download_competition_starter_agent(
     competition_id: str,
     language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
-    template: str = Query(default="blank", pattern="^(blank|arc|codex|claude_code)$"),
+    template: str = Query(default="blank", pattern="^(blank|arc|octos|codex|claude_code)$"),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ) -> Response:
@@ -270,7 +270,7 @@ def download_starter_agent(
     requirement_id: str,
     catalog: str = Query(default="playground", pattern="^(playground|competition|benchmark)$"),
     language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
-    template: str = Query(default="blank", pattern="^(blank|arc|codex|claude_code)$"),
+    template: str = Query(default="blank", pattern="^(blank|arc|octos|codex|claude_code)$"),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ) -> Response:

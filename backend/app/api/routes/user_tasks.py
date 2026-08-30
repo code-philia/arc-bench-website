@@ -208,12 +208,17 @@ def download_my_task_bundle(
 def download_my_task_starter_agent(
     task_id: str,
     language: str = Query(default="python", pattern="^(python|javascript|typescript|nodejs|js|ts|py)$"),
+    template: str = Query(default="blank", pattern="^(blank|arc|octos|codex|claude_code)$"),
     current_user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
     try:
         task = UserTaskService(db)._get_owned_task(current_user, task_id)  # noqa: SLF001
-        content, filename = AgentStarterService().build_bundle(task_type=task.task_type, language=language)
+        content, filename = AgentStarterService().build_bundle(
+            task_type=task.task_type,
+            language=language,
+            template_kind=template,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (FileNotFoundError, RuntimeError, ValueError) as exc:

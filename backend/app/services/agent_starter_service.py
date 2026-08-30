@@ -27,12 +27,12 @@ class AgentStarterService:
                 self._add_task_template(archive, self._resolve_template_root(task_type))
             else:
                 self._add_reference_agent_template(archive, normalized_kind, task_type)
-        return memory_file.getvalue(), f"arcbench-agent-{normalized_kind}-template-{task_type}-{normalized_language}.zip"
+        return memory_file.getvalue(), f"agent-{normalized_kind.replace('_', '-')}-based.zip"
 
     @staticmethod
     def _normalize_template_kind(template_kind: str) -> str:
         normalized = str(template_kind or "blank").strip().lower()
-        if normalized not in {"blank", "arc", "codex", "claude_code"}:
+        if normalized not in {"blank", "arc", "octos", "codex", "claude_code"}:
             raise ValueError(f"Unsupported agent template: {template_kind}")
         return normalized
 
@@ -48,6 +48,7 @@ class AgentStarterService:
             return
 
         source_roots = {
+            "octos": self.settings.agent_reference_octos_root,
             "codex": self.settings.agent_reference_codex_root,
             "claude_code": self.settings.agent_reference_claude_code_root,
         }
@@ -106,6 +107,8 @@ if __name__ == "__main__":
     ) -> None:
         if not source_root.is_dir():
             raise FileNotFoundError(f"Agent template source directory not found: {source_root}")
+        if not (source_root / "main.py").is_file():
+            raise FileNotFoundError(f"Agent template entrypoint not found: {source_root / 'main.py'}")
         for path in sorted(source_root.rglob("*")):
             if path.is_dir() or self._should_exclude_starter_path(path, source_root):
                 continue

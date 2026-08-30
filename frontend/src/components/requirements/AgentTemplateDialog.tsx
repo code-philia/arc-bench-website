@@ -2,11 +2,12 @@ import { DownloadOutlined } from "@ant-design/icons";
 import { Modal } from "antd";
 import { useState } from "react";
 
-type TemplateKind = "blank" | "arc" | "codex" | "claude_code";
+type TemplateKind = "blank" | "arc" | "octos" | "codex" | "claude_code";
 
-const options: Array<{ kind: TemplateKind; title: string; copy: string }> = [
+const options: Array<{ kind: TemplateKind; title: string; copy: string; available?: boolean }> = [
   { kind: "blank", title: "Blank Template", copy: "A minimal runnable agent starter." },
   { kind: "arc", title: "ARC Template", copy: "A runnable Agentic Requirement Compiler reference agent." },
+  { kind: "octos", title: "Octos Template", copy: "Install the Octos reference source to enable this template.", available: false },
   { kind: "codex", title: "Codex Template", copy: "A runnable Codex-based reference agent." },
   { kind: "claude_code", title: "Claude Code Template", copy: "A runnable Claude Code reference agent." },
 ];
@@ -28,10 +29,10 @@ export default function AgentTemplateDialog({ href, runtime }: { href: string; r
       <p className="agent-template-modal-copy">Choose the agent you want to start from. Every download is directly runnable: its <code>main.py</code> is the selected agent entry point.</p>
       <div className="agent-template-options">
         {options.map((option) => {
-          const unavailable = option.kind !== "blank" && !supportsPythonReferences;
+          const unavailable = option.available === false || (option.kind !== "blank" && !supportsPythonReferences);
           return <button key={option.kind} type="button" disabled={unavailable} onClick={() => setSelected(option.kind)} className={`agent-template-option${selected === option.kind ? " active" : ""}`}>
           <strong>{option.title}</strong><span>{option.copy}</span>
-          {unavailable && <span>Available for Python agents only.</span>}
+          {unavailable && <span>{option.available === false ? "Template source is not installed." : "Available for Python agents only."}</span>}
         </button>;
         })}
       </div>
