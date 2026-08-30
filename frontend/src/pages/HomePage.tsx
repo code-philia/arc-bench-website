@@ -333,7 +333,7 @@ export default function HomePage() {
         </aside>
       </div>
 
-      <section className="mx-auto w-full max-w-[1180px] px-5 pb-10 lg:px-8 lg:pb-12" aria-labelledby="feature-showcase-title">
+      {/* <section className="mx-auto w-full max-w-[1180px] px-5 pb-10 lg:px-8 lg:pb-12" aria-labelledby="feature-showcase-title">
         <div className="mb-4 border-y border-[var(--border)] py-5">
           <div className="max-w-[720px]">
             <div className="flex items-center gap-3 text-xs font-semibold uppercase text-[var(--text-muted)]">
@@ -473,11 +473,10 @@ export default function HomePage() {
               role="tab"
               aria-selected={activeFeatureSlide === index}
               aria-controls={`feature-slide-${slide.key}`}
-              className={`h-2.5 rounded-full transition-all duration-200 ${
-                activeFeatureSlide === index
+              className={`h-2.5 rounded-full transition-all duration-200 ${activeFeatureSlide === index
                   ? "w-9 bg-[var(--text)]"
                   : "w-2.5 bg-[var(--text-muted)] hover:w-6 hover:bg-[var(--text-dim)]"
-              }`}
+                }`}
               onMouseEnter={() => setActiveFeatureSlide(index)}
               onFocus={() => setActiveFeatureSlide(index)}
               onClick={() => setActiveFeatureSlide(index)}
@@ -486,7 +485,8 @@ export default function HomePage() {
             </button>
           ))}
         </div>
-      </section>
+      </section> */}
+
       <footer className="px-5 pb-8 text-center text-xs text-[var(--text-muted)]" aria-label="ICP filing">
         <a href="https://beian.miit.gov.cn" target="_blank" rel="noreferrer">
           &#33945;ICP&#22791;2026006682&#21495;
