@@ -7980,6 +7980,105 @@ button {
   .profile-editor-card { grid-column: 1 / -1; }
 }
 
+.run-output-toolbar {
+  min-height: 42px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.run-output-stream-selector {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.run-output-stream-selector label {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.run-output-stream-selector select {
+  height: 28px;
+  min-width: 112px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.run-output-stream-selector select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.run-output-stream-selector > span,
+.run-output-refreshed {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+}
+
+.run-output-console {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.run-output-console--stderr.has-output {
+  color: color-mix(in srgb, var(--warn) 72%, var(--text-dim));
+}
+
+.run-output-refreshed {
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  text-align: right;
+}
+
+.playground-submission-page .run-output-toolbar {
+  border-color: var(--submission-line);
+  background: color-mix(in srgb, var(--bg-elevated) 46%, var(--bg) 54%);
+}
+
+.playground-submission-page .run-output-section {
+  padding: 0;
+}
+
+.playground-submission-page .run-output-console.stdio-code-view {
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 12px 14px;
+  font-size: 0.72rem;
+}
+
 @media (max-width: 640px) {
   .profile-page { padding: 0 14px 42px; }
   .profile-layout { padding-top: 18px; }

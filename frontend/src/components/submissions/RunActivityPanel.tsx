@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { SubmissionLogs } from "../../lib/types";
 
 type RunActivityPanelProps = {
@@ -8,7 +10,7 @@ type RunActivityPanelProps = {
   compact?: boolean;
 };
 
-/** A deliberately plain, shared view of persistent run events and console output. */
+/** A deliberately plain, shared view of process output. */
 export default function RunActivityPanel({
   logs,
   refreshing,
@@ -18,16 +20,23 @@ export default function RunActivityPanel({
 }: RunActivityPanelProps) {
   const stdout = logs?.stdout ?? "";
   const stderr = logs?.stderr ?? "";
-  const outputLineCount = [stdout, stderr].filter(Boolean).reduce((total, value) => total + value.split(/\r?\n/).length, 0);
+  const [selectedStream, setSelectedStream] = useState<"stdout" | "stderr">("stdout");
+  const output = selectedStream === "stdout" ? stdout : stderr;
+  const outputLineCount = output ? output.split(/\r?\n/).length : 0;
   return (
     <div className={`${compact ? "stdio-view" : "space-y-5 p-5"} run-activity-panel`}>
-      <div className="run-activity-header flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3">
-        <div className="run-activity-heading">
-          <span className="run-activity-dot" aria-hidden="true" />
-          <div>
-            <div className="text-sm font-semibold text-[var(--text)]">Run activity</div>
-            {lastRefreshedAt ? <div className="mt-1 text-xs text-[var(--text-muted)]">Last refreshed at {lastRefreshedAt}</div> : null}
-          </div>
+      <div className="run-output-toolbar">
+        <div className="run-output-stream-selector">
+          <label htmlFor="run-output-stream">Output</label>
+          <select
+            id="run-output-stream"
+            value={selectedStream}
+            onChange={(event) => setSelectedStream(event.target.value as "stdout" | "stderr")}
+          >
+            <option value="stdout">stdout</option>
+            <option value="stderr">stderr</option>
+          </select>
+          <span>{outputLineCount > 0 ? `${outputLineCount} lines` : "empty"}</span>
         </div>
         <button
           type="button"
@@ -38,39 +47,11 @@ export default function RunActivityPanel({
           {refreshing ? "Refreshing…" : "Refresh logs"}
         </button>
       </div>
-
-      <div className="run-activity-events">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Activity</div>
-        <div className="space-y-3">
-          {(logs?.runner_events ?? []).length > 0 ? (logs?.runner_events ?? []).map((event) => (
-            <div key={event.event_id} className="border-l-2 border-[var(--border)] pl-3 text-sm">
-              <div className="font-medium text-[var(--text)]">{event.stage}</div>
-              <div className="mt-1 text-[var(--text-dim)]">{event.summary}</div>
-              <div className="mt-1 text-xs text-[var(--text-muted)]">
-                {event.timestamp}{event.heartbeat ? " · heartbeat" : ""}
-              </div>
-            </div>
-          )) : <div className="text-sm text-[var(--text-muted)]">No structured activity yet.</div>}
-        </div>
-      </div>
-
       <div className="run-output-section">
-        <div className="run-output-heading">
-          <div>
-            <div className="run-panel-kicker">Process output</div>
-            <div className="run-panel-caption">Separate streams from the evaluation container</div>
-          </div>
-          {outputLineCount > 0 ? <span className="run-output-count">{outputLineCount} lines</span> : null}
-        </div>
-        <div className="run-output-streams">
-          {(["stdout", "stderr"] as const).map((stream) => {
-            const value = stream === "stdout" ? stdout : stderr;
-            return <section className={`run-output-stream run-output-stream--${stream}`} key={stream}>
-              <header><span>{stream}</span><small>{value ? `${value.split(/\r?\n/).length} lines` : "empty"}</small></header>
-              <pre className={`${compact ? "stdio-code-view" : "log-panel"} ${value ? "has-output" : "is-empty"}`}>{value || `No ${stream} output.`}</pre>
-            </section>;
-          })}
-        </div>
+        <pre className={`${compact ? "stdio-code-view" : "log-panel"} run-output-console run-output-console--${selectedStream} ${output ? "has-output" : "is-empty"}`}>
+          {output || `No ${selectedStream} output.`}
+        </pre>
+        {lastRefreshedAt ? <div className="run-output-refreshed">Last refreshed at {lastRefreshedAt}</div> : null}
       </div>
     </div>
   );
