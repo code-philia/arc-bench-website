@@ -128,21 +128,23 @@ Install and start PostgreSQL and Redis according to
 Verify them before starting the application:
 
 ```bash
-backend/.venv/bin/python scripts/check_postgresql.py
-backend/.venv/bin/python scripts/check_redis.py
+source backend/.venv/bin/activate
+python scripts/check_postgresql.py
+python scripts/check_redis.py
 ```
 
 Initialize the Celery lease and Outbox schema once after backing up PostgreSQL:
 
 ```bash
-backend/.venv/bin/python scripts/migrate_celery_outbox.py
+python scripts/migrate_celery_outbox.py
 ```
 
 For versioned schema management, use Alembic after installing the updated
 requirements:
 
 ```bash
-backend/.venv/bin/alembic -c alembic.ini upgrade head
+source backend/.venv/bin/activate
+alembic -c alembic.ini upgrade head
 ```
 
 ### 3. Build the runner image
@@ -225,6 +227,7 @@ For local development, start the API in one terminal:
 ```bash
 source ./source.sh
 cd backend
+source .venv/bin/activate
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -232,7 +235,9 @@ For production, do not use `--reload`. Run multiple API workers behind Nginx:
 
 ```bash
 source ./source.sh
-backend/.venv/bin/gunicorn app.main:app \
+cd backend
+source .venv/bin/activate
+gunicorn app.main:app \
   -k uvicorn.workers.UvicornWorker \
   --workers 2 \
   --bind 127.0.0.1:8000 \
@@ -314,7 +319,9 @@ Start the Outbox Dispatcher in a second terminal:
 
 ```bash
 source ./source.sh
-backend/.venv/bin/python -m app.worker.dispatcher
+cd backend
+source .venv/bin/activate
+python -m app.worker.dispatcher
 ```
 
 Start the Celery Worker in a third terminal:
@@ -322,7 +329,8 @@ Start the Celery Worker in a third terminal:
 ```bash
 source ./source.sh
 cd backend
-.venv/bin/celery -A app.worker.celery_app worker \
+source .venv/bin/activate
+celery -A app.worker.celery_app worker \
   --loglevel=INFO --concurrency=4 \
   -Q evaluation.default,evaluation.retry
 ```
@@ -331,7 +339,9 @@ Start the lease recovery process in a fourth terminal:
 
 ```bash
 source ./source.sh
-backend/.venv/bin/python -m app.worker.recovery
+cd backend
+source .venv/bin/activate
+python -m app.worker.recovery
 ```
 
 For production, run API, Dispatcher, and Worker as separate systemd services;
@@ -343,8 +353,8 @@ After startup, check:
 
 ```bash
 curl -fsS http://127.0.0.1:8000/api/health
-backend/.venv/bin/celery -A app.worker.celery_app inspect ping
-backend/.venv/bin/celery -A app.worker.celery_app inspect registered
+celery -A app.worker.celery_app inspect ping
+celery -A app.worker.celery_app inspect registered
 ```
 
 The expected request behavior is: starting a run returns quickly with
