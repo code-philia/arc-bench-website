@@ -1,163 +1,128 @@
 id: ROOT
-name: Small Train Ticket Booking System
+name: Train Ticket Booking Demo
 type: FOLDER
 dependencies: []
 description: >-
-  This product lets a visitor create an account or sign in, search a published timetable, select a train, and create one booking for that selected journey. The public home page contains the shared header plus From, To, Date and Search controls. A successful search opens a result page; a result row can open a protected booking page; a confirmed booking opens its success page. An account is a persistent identity with a unique username and email. A session represents the current signed-in browser and controls access to booking creation and booking records. A train is a published timetable record identified by its train number and internal stable identity; a booking belongs to exactly one account and one selected train/date. All successful registrations and bookings must persist. Reloading, reopening in the same signed-in browser, or opening a related page as the booking owner reads the same saved state. A failed validation, unavailable train, duplicate account, or unauthorized booking access changes neither account nor booking data. Ticket payment, cancellation, refunds, seat inventory allocation, passenger lists, order history, and administrative timetable editing are outside scope.
+  A small website where visitors can register or sign in, search published trains, select a journey, and create a booking. Accounts, sessions, and confirmed bookings persist. Payment, cancellation, refunds, seat inventory, order history, and timetable administration are outside scope.
 children:
   - id: REQ-1
     name: Public home page and account access
     type: FOLDER
     dependencies: []
     description: >-
-      The public home page is the first page for an unauthenticated visitor. Its header exposes Register and Login links and the search form defined by REQ-2. After authentication the same header exposes the current username and Sign out; it must no longer show the anonymous-only action as the active account action. Registration creates an account and the session used by REQ-3; login recreates that session from a previously saved account. The product does not implement email verification, password recovery, profile editing, or multiple roles.
+      The public header provides Register and Login when signed out, and the username and Sign out when signed in. Registration creates an account and session; login restores a session for an existing account.
     children:
       - id: REQ-1.1
         name: Register a traveler account
         type: ATOMIC
         dependencies: []
-        description: >-
-          An unauthenticated visitor opens Register from the public header. The Register page visibly labels Nationality, Name, Passport number, Passport expiration date, Date of birth, Gender, Username, Email address, Password, Confirm password, the Terms of service/Privacy policy checkbox, and Next step. Nationality must be one of the values offered by the control; Name is trimmed and must contain 2–100 non-whitespace characters; passport number is trimmed and must contain 6–30 ASCII letters, digits, or hyphens; expiration date and date of birth must be valid calendar dates, with birth date before the current date and expiration date after the current date; exactly one gender choice is required. Username is trimmed, 3–32 characters, and may contain only ASCII letters, digits, hyphens, or underscores. Email is trimmed, at most 254 characters, contains one @, and has non-empty local and domain parts with a dot in the domain. Password is 12–128 characters and contains at least one uppercase letter, one lowercase letter, one digit, and one non-alphanumeric character; Confirm password must match it exactly. After all fields are valid and terms are accepted, the system atomically saves the account and traveler profile, starts a session, returns to the home page, and displays the username and Sign out. Username and email are globally unique after trimming and email comparison is case-insensitive. Any failed submission stays on Register, displays a field-level reason or conflict message, preserves non-secret fields, never displays the password value, and creates neither account nor session. Optional visual reference: ![image](./reference/register.png)
+        description: |-
+          Function: Register displays Nationality, Name, Passport number, Passport expiration date, Date of birth, Gender, Username, Email address, Password, Confirm password, a Terms of service/Privacy policy checkbox, and Next step. All fields are required. Name must contain 2–100 non-whitespace characters; passport number must contain 6–30 ASCII letters, digits, or hyphens; birth date must be in the past and passport expiration in the future. Username must be 3–32 ASCII letters, digits, hyphens, or underscores. Email must be valid and at most 254 characters. Password must be 12–128 characters and include uppercase, lowercase, digit, and special characters; confirmation must match. Username and email are unique, with email compared case-insensitively. A valid submission saves the account, signs the user in, and returns home. Invalid or duplicate input shows an error and creates no account or session.
+
+          Required system data: The system must allow creation of independent accounts with username `tb-user-<timestamp>-<random>`, an email generated from that username using a valid domain, password `Valid-password-123!`, name `Ticket User <timestamp>-<random>`, nationality `Vietnam`, passport number `P<timestamp-digits>`, passport expiration date `2035-12-31`, date of birth `1995-06-15`, and gender `Male`. Duplicate-account examples reuse the same username or email. Invalid examples include username `bad username!`, email `not-an-email`, password `short`, a mismatched confirmation, a missing passport number, and unchecked terms.
+
+          Optional visual reference: ![image](./reference/register.png)
         scenarios:
-          - name: Register a unique traveler and start a session
+          - name: Register a valid traveler
             steps:
               - keyword: GIVEN
-                content: A visitor is on the public home page without a session; the intended trimmed username and case-insensitive email do not belong to another account.
+                content: A signed-out visitor has unique valid account and traveler details.
               - keyword: WHEN
-                content: The visitor opens Register, supplies every visible profile and credential field with values satisfying the stated constraints, checks the terms box, and clicks Next step.
+                content: The visitor completes Register, accepts the terms, and clicks Next step.
               - keyword: THEN
-                content: The home page shows the new username and Sign out, proving that a session was created; a reload still shows that signed-in state, and the account can later be used by REQ-1.2.
-          - name: Reject invalid or incomplete registration without a partial account
+                content: The home page shows the username and Sign out, including after reload.
+          - name: Reject invalid or duplicate details
             steps:
               - keyword: GIVEN
-                content: A visitor is on Register and has a missing required field, invalid date/profile value, invalid username/email/password, mismatched confirmation, or unchecked terms box.
+                content: Registration contains missing, malformed, mismatched, or already-used values.
               - keyword: WHEN
                 content: The visitor clicks Next step.
               - keyword: THEN
-                content: Register remains visible with the applicable validation feedback and retained non-secret input; the header remains anonymous and reopening Login cannot authenticate the attempted username/email.
-          - name: Reject duplicate username or email
-            steps:
-              - keyword: GIVEN
-                content: A saved account exists and the visitor is signed out; a second otherwise-valid form repeats its username or repeats its email using different letter case.
-              - keyword: WHEN
-                content: The visitor submits the second form.
-              - keyword: THEN
-                content: The page identifies the conflicting field, remains signed out, and does not create a second account or replace the existing account profile.
+                content: Register shows the relevant error and no signed-in session is created.
 
       - id: REQ-1.2
         name: Sign in with an existing account
         type: ATOMIC
         dependencies:
           - REQ-1.1
-        description: >-
-          An unauthenticated visitor opens Login from the public header. The page provides a visibly labelled Username or email input accepting a saved username or email, a visibly labelled Password input, and a Login button. The identifier is trimmed before lookup; an email match is case-insensitive and a username match follows the saved normalized username. The password is compared exactly. A valid match atomically creates a new current-browser session and returns the visitor to the home page, where the saved username and Sign out are visible. The session survives a reload and permits the protected flow in REQ-3. Empty fields, an unknown identifier, and an incorrect password all leave the visitor signed out and show the same generic credential failure message; the message must not reveal whether a particular account exists. Login does not alter account profile data or create an account. Optional visual reference: ![image](./reference/login.png)
+        description: |-
+          Function: Login provides Username or email, Password, and Login controls. The identifier is trimmed; email matching is case-insensitive and the password must match exactly. Valid credentials create a reload-persistent session and return home. Empty, unknown, or incorrect credentials show one generic error and leave the visitor signed out.
+
+          Required system data: The system must contain an account created through REQ-1.1 with username `tb-user-<timestamp>-<random>`, an email generated from that username using a valid domain, and password `Valid-password-123!`. Valid login examples use that username or email, including values with leading and trailing spaces. Invalid examples use password `incorrect-password` or an email that does not belong to any account.
+
+          Optional visual reference: ![image](./reference/login.png)
         scenarios:
-          - name: Sign in by username or email and retain the session
+          - name: Sign in with username or email
             steps:
               - keyword: GIVEN
-                content: A saved account created by REQ-1.1 exists and the visitor is signed out.
+                content: A saved account exists and the visitor is signed out.
               - keyword: WHEN
-                content: The visitor opens Login and submits either its username or email with the correct password.
+                content: The visitor submits its username or email, optionally surrounded by spaces, and the correct password.
               - keyword: THEN
-                content: The home page displays the saved username and Sign out; after reload the same signed-in state remains available.
-          - name: Normalize surrounding identifier whitespace
+                content: The home page shows the saved username and Sign out, including after reload.
+          - name: Reject invalid credentials
             steps:
               - keyword: GIVEN
-                content: A saved account exists and the visitor is on Login.
-              - keyword: WHEN
-                content: The visitor enters the account username or email with leading and trailing spaces and submits the correct password.
-              - keyword: THEN
-                content: The system signs in as the saved account, rather than creating another account or preserving whitespace as a different identity.
-          - name: Reject invalid credentials without exposing account existence
-            steps:
-              - keyword: GIVEN
-                content: The visitor is on Login with an unknown account, wrong password, or one missing credential.
+                content: The identifier or password is missing or incorrect.
               - keyword: WHEN
                 content: The visitor clicks Login.
               - keyword: THEN
-                content: Login remains available with a generic credential failure message, no username/Sign out appears, and refreshing cannot restore an authenticated session.
+                content: Login shows a generic error without revealing whether the account exists.
 
   - id: REQ-2
     name: Search trains and select a journey
     type: FOLDER
     dependencies: []
     description: >-
-      Any visitor may search the published timetable from the home page. A search is a read-only request defined by normalized From, To, and Date values; it does not create an account, session, reservation, or booking. The result page repeats the normalized criteria and shows either matching train cards or the empty state. Each train card represents one concrete selectable journey and exposes its train number, route, timetable, and Book action. Selecting a card hands its stable train identity and date to the protected booking entry defined by REQ-2.3 and REQ-3.
+      Any visitor can search the timetable by origin, destination, and date. Results show matching trains and allow one journey to be opened for booking. Searching does not create an account or booking.
     children:
       - id: REQ-2.1
         name: Search valid criteria and show matching trains
         type: ATOMIC
         dependencies: []
-        description: >-
-          From the home page, a visitor enters From, To, and Date and clicks Search. All three inputs are required; each is trimmed, must contain 1–100 visible characters after trimming, and Date must be a valid published travel-date string. From and To must not be equal after case-insensitive trimming. For valid criteria the result page displays the normalized From, To, Date, a numeric result count, and only train cards whose saved departure city, destination city, and travel date match exactly after the same normalization. Each card shows train number, departure and destination stations/cities, departure time, arrival time, and Book. Search is read-only: reloading or reopening the result URL with the same criteria shows the same criteria and current matching data. Invalid input stays on the home page with a visible reason and does not navigate to a result page. Optional visual reference: ![image](./reference/search-form.png) ![image](./reference/search-results.png)
-        scenarios:
-          - name: Search a published route and inspect matching cards
-            steps:
-              - keyword: GIVEN
-                content: The visitor is on the home page and the timetable contains a published train for a valid From, To, Date combination.
-              - keyword: WHEN
-                content: The visitor fills all three fields and clicks Search.
-              - keyword: THEN
-                content: The result page repeats the normalized criteria, a nonzero count, and the matching train card with its route, times, and Book action; refresh preserves the criteria and still does not create a booking.
-          - name: Trim criteria before matching the timetable
-            steps:
-              - keyword: GIVEN
-                content: The same published route exists and the visitor enters leading or trailing spaces around one or more criteria.
-              - keyword: WHEN
-                content: The visitor clicks Search.
-              - keyword: THEN
-                content: The result page displays normalized values without those spaces and returns the same matching card as the trimmed input.
-          - name: Reject an incomplete, same-city, or invalid-date search
-            steps:
-              - keyword: GIVEN
-                content: The visitor is on the home page with a missing field, From equal to To, or a date outside the published date format/data.
-              - keyword: WHEN
-                content: The visitor clicks Search.
-              - keyword: THEN
-                content: The home page displays the relevant validation message, retains supplied values, and does not show a fabricated result list or booking entry.
+        description: |-
+          Function: The home page provides required From, To, Date, and Search controls. Values are trimmed; From and To must differ case-insensitively, and Date must use a published date value. A valid search opens results showing the normalized criteria, result count, and matching train cards with train number, route, times, and Book. Each Book action has an accessible name identifying its train number. Invalid input stays on the home page with an error.
 
+          Required system data: The system must contain a bookable train `G532` from `Shanghai` to `Beijing` on `Sun, May 31`, with Shanghai/ShanghaiHongqiao as its displayed departure location and Beijing/BeijingNan as its displayed arrival location. It must also contain a bookable train `G561` from `Beijing` to `Tianjin` on the same date. Both records must have stable displayed departure and arrival times. Invalid search examples omit From, To, or Date, or use `Shanghai` and ` shanghai ` as the same-city pair.
+
+          Optional visual reference: ![image](./reference/search-form.png) ![image](./reference/search-results.png)
+        scenarios:
+          - name: Show matching trains
+            steps:
+              - keyword: GIVEN
+                content: The timetable contains a train matching the entered route and date.
+              - keyword: WHEN
+                content: The visitor searches with valid criteria, optionally surrounded by spaces.
+              - keyword: THEN
+                content: Results show normalized criteria and only the matching train cards.
+          - name: Reject invalid criteria
+            steps:
+              - keyword: GIVEN
+                content: A field is missing, the cities are equal, or the date is invalid.
+              - keyword: WHEN
+                content: The visitor clicks Search.
+              - keyword: THEN
+                content: The home page shows an error and no result list.
       - id: REQ-2.2
-        name: Display a real empty search result
-        type: ATOMIC
-        dependencies:
-          - REQ-2.1
-        description: >-
-          When criteria pass REQ-2.1 validation but no published timetable record matches them, the result page is still opened. It repeats the normalized From, To, and Date, displays result count 0 and an explicit No trains/No results message, and displays no train card or Book action. This is a successful read-only search, not a validation or system error. Reloading or reopening the same result URL keeps the same criteria and empty state until the underlying timetable is changed.
-        scenarios:
-          - name: Preserve a valid no-match search as an empty result
-            steps:
-              - keyword: GIVEN
-                content: A visitor has a valid normalized route and date for which no published train exists.
-              - keyword: WHEN
-                content: The visitor submits that search from the home page.
-              - keyword: THEN
-                content: The result page repeats all criteria, shows count 0 and an explicit empty message, and contains neither a train card nor Book action; reload retains that outcome.
-
-      - id: REQ-2.3
         name: Select a train and open its booking entry
         type: ATOMIC
         dependencies:
           - REQ-2.1
-        description: >-
-          On a non-empty result page, a visitor chooses Book on one visible train card. The system carries that card's stable train identity and searched travel date into the booking entry and loads that exact train's train number, stations, times, and date; it must not silently substitute the first or a different search result. Booking entry itself is public, but REQ-3.1 requires authentication before the booking form can be used. A missing, expired, unpublished, or date-incompatible train identity produces an explicit Not found/Not bookable message and no usable booking form. Manually opening an old booking URL follows the same rule and never creates a booking context from incomplete query data. Optional visual reference: ![image](./reference/search-results.png) ![image](./reference/booking-page.png)
-        scenarios:
-          - name: Carry the selected result into the booking entry
-            steps:
-              - keyword: GIVEN
-                content: A result page contains at least two bookable train cards whose train numbers differ.
-              - keyword: WHEN
-                content: The visitor clicks Book on one identified card.
-              - keyword: THEN
-                content: The booking entry displays that card's train number, route, timetable, and searched date, not another card's details.
-          - name: Reject a missing or no-longer-bookable target
-            steps:
-              - keyword: GIVEN
-                content: A visitor opens a booking entry whose train identity is absent, unpublished, expired, or paired with no travel date.
-              - keyword: WHEN
-                content: The page attempts to load the selected journey.
-              - keyword: THEN
-                content: The visitor sees an explicit not-found or not-bookable message and no enabled booking submission action.
+        description: |-
+          Function: Clicking the Book action identified by a train number opens the booking entry for that exact train and searched date, showing its train number, route, and times. The system must not substitute another result.
 
+          Required system data: The system must provide the two bookable records defined in REQ-2.1: `G532` for `Shanghai` to `Beijing` and `G561` for `Beijing` to `Tianjin`, both on `Sun, May 31`.
+
+          Optional visual reference: ![image](./reference/search-results.png) ![image](./reference/booking-page.png)
+        scenarios:
+          - name: Open the selected train
+            steps:
+              - keyword: GIVEN
+                content: Search results contain a bookable train.
+              - keyword: WHEN
+                content: The visitor clicks that train's Book button.
+              - keyword: THEN
+                content: The booking entry shows the same train, route, times, and date.
   - id: REQ-3
     name: Create and view a booking
     type: FOLDER
@@ -165,111 +130,69 @@ children:
       - REQ-1
       - REQ-2
     description: >-
-      Booking begins only from the selected journey context established by REQ-2.3 and requires the authenticated session created by REQ-1.1 or REQ-1.2. The booking page first shows the selected train summary, then lets the owner enter passenger and ticket details. Confirmation is the sole action that creates a booking record. The saved booking is visible only to its owner and is represented by a unique booking number, selected train/date, passenger values, selected seat type, status, creator, and creation time. A validation or authorization failure must not create a partial booking, and a successful booking must remain visible after reload or direct reopen by the owner.
+      A signed-in user can review the selected train, enter passenger and ticket details, and confirm one persistent booking. Invalid or unauthorized actions create no booking.
     children:
       - id: REQ-3.1
         name: Display a selected train on the protected booking page
         type: ATOMIC
         dependencies:
           - REQ-1.2
-          - REQ-2.3
-        description: >-
-          A signed-in visitor who arrives from REQ-2.3 opens the Booking page. The page shows a Selected train/Train information section containing the selected train number, departure station or city, destination station or city, departure time, arrival time, and travel date, followed by Passenger information and the booking controls defined in REQ-3.2. If no session exists, the visitor is redirected to Login or shown a clear sign-in-required message; no passenger controls can submit. If the selected train context is missing or unavailable, the page shows the REQ-2.3 not-bookable message instead of a stale summary. Loading this page is read-only and does not create a booking.
+          - REQ-2.2
+        description: |-
+          Function: For a signed-in user, the Booking page shows the selected train number, route, times, and date above Passenger information and the booking form. Opening the page is read-only. A signed-out visitor must sign in and cannot submit; missing or unavailable train context shows the REQ-2.2 error instead of the form.
+
+          Required system data: The system must allow creation of a unique REQ-1.1 account and provide the bookable `G532` (`Shanghai` to `Beijing`) and `G561` (`Beijing` to `Tianjin`) journeys on `Sun, May 31`. The selected train summary must display the corresponding train number, cities or stations, times, and date. The signed-out case uses the same valid selected journey after the account signs out.
         scenarios:
-          - name: Signed-in traveler sees the exact selected journey before booking
+          - name: Show the selected journey
             steps:
               - keyword: GIVEN
-                content: A signed-in traveler selected a published train through REQ-2.3.
+                content: A signed-in traveler selected a published train.
               - keyword: WHEN
-                content: The traveler opens the Booking page.
+                content: The Booking page opens.
               - keyword: THEN
-                content: The page shows the selected train number, route, times, and date plus Passenger information, while no booking number exists yet.
-          - name: Block an unauthenticated booking form
+                content: It shows the selected train summary and Passenger information without creating a booking.
+          - name: Block a signed-out visitor
             steps:
               - keyword: GIVEN
-                content: A visitor has a valid selected-train booking URL but no active session.
+                content: A visitor has a valid selected journey but no session.
               - keyword: WHEN
-                content: The visitor opens the URL.
+                content: The visitor opens its booking page.
               - keyword: THEN
-                content: The system requests sign-in or shows an authorization message and does not expose a working booking submission action.
+                content: The page requests sign-in and provides no working submission action.
 
       - id: REQ-3.2
         name: Confirm passenger details and create one booking record
         type: ATOMIC
         dependencies:
           - REQ-3.1
-        description: >-
-          A signed-in traveler on a valid Booking page enters Passenger name, ID number, Nationality, Ticket class, Ticket type, checks Terms of service, clicks Place order, reviews the confirmation summary, and clicks Confirm. Passenger name and nationality are trimmed and must contain 2–100 and 2–60 visible characters respectively. ID number is trimmed and must contain 6–30 ASCII letters, digits, or hyphens. Ticket class and Ticket type must be values currently offered by their visible controls; the supported seed combinations are standing ticket/Adult and Business Class/Adult. The confirmation summary repeats the selected journey, passenger values, and choices, and Confirm atomically saves exactly one booking for the current account and selected train/date. The success result then belongs to REQ-3.3. Missing/invalid values, unchecked terms, unavailable selected train, expired session, or confirmation failure leaves the user on the form or confirmation view with a visible cause and creates no booking. Repeating Confirm after the first successful click must not create a second booking; the page remains or redirects to the same saved success record. Optional visual reference: ![image](./reference/booking-page.png)
+        description: |-
+          Function: The booking form requires Passenger name, ID number, Nationality, Ticket class, Ticket type, and Terms of service acceptance. Trimmed name and nationality must contain 2–100 and 2–60 visible characters; ID number must contain 6–30 ASCII letters, digits, or hyphens. Place order opens a summary; Confirm creates exactly one booking and shows its booking number and submitted details. Invalid fields create no booking, and repeated confirmation or reload must keep the same record.
+
+          Required system data: Each booking example uses a unique REQ-1.1 account and an independent selected journey. The system must provide `G532` from `Shanghai` to `Beijing` and `G561` from `Beijing` to `Tianjin` on `Sun, May 31`. Valid booking data is (1) passenger `Nguyen Duc Minh`, ID `C612345677`, nationality `Vietnam`, class `standing ticket`, type `Adult`; and (2) passenger `Chen Li`, ID `D712345678`, nationality `Vietnam`, class `Business Class`, type `Adult`. Invalid examples use name `A`, ID `12345`, an empty nationality, or unchecked terms. Ticket class and type are selected explicitly rather than relying on defaults. Confirmation state and booking IDs must remain independent between accounts.
+
+          Optional visual reference: ![image](./reference/booking-page.png)
         scenarios:
-          - name: Confirm valid passenger details and persist one booking
+          - name: Create one valid booking
             steps:
               - keyword: GIVEN
-                content: A signed-in traveler is on a valid Booking page with a selected published train and no confirmation in progress.
+                content: A signed-in traveler has an isolated account and selected journey.
               - keyword: WHEN
-                content: The traveler enters valid passenger values, chooses a supported ticket class/type, accepts the terms, clicks Place order, verifies the summary, and clicks Confirm once.
+                content: The traveler enters valid details, accepts the terms, reviews the summary, and confirms.
               - keyword: THEN
-                content: A success result opens for one new booking number containing the selected train/date, passenger name/ID/nationality, and selected ticket values; reloading it does not create another booking.
-          - name: Reject invalid passenger data before confirmation
+                content: One booking number and the submitted journey, passenger, and ticket details are shown and persist after reload.
+          - name: Reject invalid passenger details
             steps:
               - keyword: GIVEN
-                content: A signed-in traveler is on Booking with a one-character name, short or illegal ID, missing nationality, no terms acceptance, or an unsupported/missing ticket choice.
+                content: A required field is missing or invalid, or terms are not accepted.
               - keyword: WHEN
                 content: The traveler clicks Place order.
               - keyword: THEN
-                content: The relevant validation feedback is visible, the confirmation summary is not opened, and no booking number or saved booking is created.
-          - name: Prevent duplicate creation from repeated confirmation
+                content: The form shows an error and opens neither the confirmation summary nor a booking.
+          - name: Prevent duplicate confirmation
             steps:
               - keyword: GIVEN
-                content: The traveler is viewing a valid confirmation summary for one selected journey and one passenger input set.
+                content: A valid confirmation has already succeeded.
               - keyword: WHEN
-                content: The traveler clicks Confirm and then attempts to click Confirm again or reloads during the completed transition.
+                content: The traveler repeats Confirm or reloads the completed page.
               - keyword: THEN
-                content: The system exposes only the original success record and booking number; it does not persist a second booking with the same confirmation action.
-
-      - id: REQ-3.3
-        name: View the saved booking success record
-        type: ATOMIC
-        dependencies:
-          - REQ-3.2
-        description: >-
-          After REQ-3.2 saves a booking, its dedicated success page visibly shows Booking number, a success/confirmed status, Train summary, Passenger summary, travel date, selected ticket class/type, and passenger name. The success page reads the persisted booking identified by its URL/context; it is not a static acknowledgement. Reloading or reopening that same success page as the owner shows the same booking number and data. A different signed-in account, a signed-out visitor, or an unknown booking identifier is denied with a sign-in-required, not-found, or no-access message and must not receive passenger or journey details. Viewing a success record is read-only and does not change its status or create another record. Optional visual reference: ![image](./reference/success.png)
-        scenarios:
-          - name: View a newly created booking result
-            steps:
-              - keyword: GIVEN
-                content: The current traveler has confirmed a valid REQ-3.2 booking.
-              - keyword: WHEN
-                content: The success page opens.
-              - keyword: THEN
-                content: The page displays that booking's unique number, confirmed status, train summary, passenger summary, travel date, and ticket values.
-          - name: Reopen the same owner booking without changing it
-            steps:
-              - keyword: GIVEN
-                content: The booking owner is viewing a saved booking success page and records its booking number.
-              - keyword: WHEN
-                content: The owner reloads or reopens that page in the same authenticated browser.
-              - keyword: THEN
-                content: The same booking number and details remain visible, and the viewing action creates no additional booking.
-          - name: Deny another user or visitor access to a booking record
-            steps:
-              - keyword: GIVEN
-                content: A booking exists for one traveler and another traveler or signed-out visitor has its success-page URL.
-              - keyword: WHEN
-                content: The non-owner opens that URL.
-              - keyword: THEN
-                content: The page denies access without displaying the booking's passenger or train details; the owner can still reopen the unchanged record.
-data:
-  - category: Account and session test data
-    items:
-      - Each registration test uses a unique valid traveler profile, username, and email. The test environment resets or isolates account data so a duplicate test can create its own first account without depending on another test.
-      - A valid stored-account fixture, when used, exposes username, case-insensitive email, and password only through the browser form; no test calls an account API or reads persistence directly.
-  - category: Published timetable data
-    items:
-      - A published Shanghai to Beijing journey on Sun, May 31 has train number G532 and is bookable; a published Beijing to Tianjin journey on the same date has train number G561 and is bookable. Their displayed train number, stations/cities, times, and date remain stable for the corresponding test run.
-      - A valid From, To, Date combination supplied through E2E_TICKETBOOKING_EMPTY_FROM, E2E_TICKETBOOKING_EMPTY_TO, and E2E_TICKETBOOKING_EMPTY_DATE has no matching published train; it remains a valid search, not an input error.
-      - A non-bookable target supplied through E2E_TICKETBOOKING_INVALID_BOOKING_PATH resolves to a missing, expired, unpublished, or date-incomplete journey and never exposes an enabled booking form.
-  - category: Booking isolation data
-    items:
-      - Every booking-creation test uses a unique account and must begin with a selected published journey that has not been booked by that test. Confirmation state and resulting booking IDs are isolated per test, so retries and parallel tests cannot share a record.
-      - A saved booking owner, a second valid non-owner account, and a signed-out browser are available to validate REQ-3.3 access control. The owner booking URL is restored to the same persisted record before each access test.
-      - Booking-form tests explicitly select the visible Ticket class and Ticket type controls rather than relying on a browser or application default. The supported combinations used by tests are standing ticket/Adult and Business Class/Adult; each confirmation test captures the browser-visible booking number and verifies that reload returns that same record rather than a second confirmation.
+                content: The original booking number remains and no second booking is created.

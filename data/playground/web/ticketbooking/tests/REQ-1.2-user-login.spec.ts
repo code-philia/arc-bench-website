@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   expectSignedIn,
+  expectVisibleFeedback,
+  readVisibleFeedback,
   registerAccount,
   signIn,
   signOut,
@@ -19,24 +21,33 @@ test('REQ-1.2: sign in with a valid username and password', async ({ page }) => 
   await expectSignedIn(page, account.username);
 });
 
-test('REQ-1.2: sign in with a valid email and password', async ({ page }) => {
+test('REQ-1.2: sign in with a case-insensitive email and password', async ({ page }) => {
   const account = uniqueTicketBookingAccount();
 
   await registerAccount(page, account);
   await signOut(page);
 
-  await signIn(page, account.email, account.password);
+  await signIn(page, account.email.toUpperCase(), account.password);
   await expectSignedIn(page, account.username);
 });
 
-test('REQ-1.2: reject wrong password or incomplete credentials', async ({ page }) => {
+test('REQ-1.2: reject wrong password and incomplete credentials with the same generic error', async ({
+  page,
+}) => {
   const account = uniqueTicketBookingAccount();
 
   await registerAccount(page, account);
   await signOut(page);
 
   await signIn(page, account.username, 'incorrect-password');
-  await expect(page.getByText(/invalid|failed|incorrect|wrong/i)).toBeVisible();
+  const genericCredentialError = /invalid credentials|login failed|sign-in failed|incorrect (?:username|email|credentials|password)|wrong (?:username|email|credentials|password)/i;
+  await expectVisibleFeedback(page, genericCredentialError);
+  const wrongPasswordMessage = await readVisibleFeedback(page, genericCredentialError);
+  await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
+
+  await signIn(page, account.username, '');
+  await expectVisibleFeedback(page, genericCredentialError);
+  await expect.poll(() => readVisibleFeedback(page, genericCredentialError)).toBe(wrongPasswordMessage);
   await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
 });
 
@@ -47,8 +58,15 @@ test('REQ-1.2: reject an unknown account and stay logged out', async ({ page }) 
   await registerAccount(page, account);
   await signOut(page);
 
+  await signIn(page, account.username, 'incorrect-password');
+  const genericCredentialError = /invalid credentials|login failed|sign-in failed|incorrect (?:username|email|credentials|password)|wrong (?:username|email|credentials|password)/i;
+  await expectVisibleFeedback(page, genericCredentialError);
+  const wrongPasswordMessage = await readVisibleFeedback(page, genericCredentialError);
+
   await signIn(page, unknownAccount, account.password);
-  await expect(page.getByText(/not found|invalid|failed|incorrect|wrong/i)).toBeVisible();
+  await expectVisibleFeedback(page, genericCredentialError);
+  await expect.poll(() => readVisibleFeedback(page, genericCredentialError)).toBe(wrongPasswordMessage);
+  await expect(page.getByText(/not found|unknown account|does not exist/i)).toHaveCount(0);
   await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
 });
 

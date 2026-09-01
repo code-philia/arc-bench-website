@@ -1,4 +1,4 @@
-import { expect, Page, TestInfo } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 
 export type TicketBookingAccount = {
   username: string;
@@ -20,12 +20,6 @@ export type SearchCriteria = {
 
 export function baseUrl(): string {
   return process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000';
-}
-
-export function requiredEnv(testInfo: TestInfo, name: string): string {
-  const value = process.env[name];
-  testInfo.skip(!value, `Set ${name} to run this scenario.`);
-  return value!;
 }
 
 export function uniqueTicketBookingAccount(): TicketBookingAccount {
@@ -100,8 +94,52 @@ export async function searchTrains(page: Page, criteria: SearchCriteria): Promis
   await page.getByRole('button', { name: /search/i }).click();
 }
 
-export async function openFirstBookableTrain(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /^book$/i }).first().click();
+export async function openBookableTrain(page: Page, trainNumber: string): Promise<void> {
+  const bookAction = page.getByRole('button', {
+    name: new RegExp(`book\\s+${trainNumber}|${trainNumber}\\s+book`, 'i'),
+  });
+  await expect(bookAction).toBeVisible();
+  await bookAction.click();
+}
+
+export async function expectVisibleFeedback(page: Page, expected: RegExp): Promise<void> {
+  await expect.poll(async () => (await visibleFeedbackTexts(page, expected)).length).toBeGreaterThan(0);
+}
+
+export async function readVisibleFeedback(page: Page, expected: RegExp): Promise<string> {
+  const messages = await visibleFeedbackTexts(page, expected);
+  expect(messages, 'Exactly one matching feedback message must be visible').toHaveLength(1);
+  return messages[0];
+}
+
+async function visibleFeedbackTexts(page: Page, expected: RegExp): Promise<string[]> {
+  const candidates = page.getByText(expected);
+  const messages: string[] = [];
+  for (let index = 0; index < (await candidates.count()); index += 1) {
+    const candidate = candidates.nth(index);
+    if (await candidate.isVisible()) {
+      messages.push((await candidate.innerText()).trim());
+    }
+  }
+  return messages;
+}
+
+export async function expectVisibleJourneyTimes(page: Page): Promise<void> {
+  const timePattern = /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/;
+  await expect
+    .poll(async () => {
+      const timeValues = page.getByText(timePattern);
+      const visibleText: string[] = [];
+      for (let index = 0; index < (await timeValues.count()); index += 1) {
+        const value = timeValues.nth(index);
+        if (await value.isVisible()) {
+          visibleText.push(await value.innerText());
+        }
+      }
+      const allTimes = new RegExp(timePattern.source, 'g');
+      return visibleText.flatMap((value) => value.match(allTimes) ?? []).length;
+    })
+    .toBeGreaterThanOrEqual(2);
 }
 
 export async function expectSearchSummary(

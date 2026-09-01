@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import {
   expectSignedIn,
+  expectVisibleFeedback,
   openRegister,
   registerAccount,
   signOut,
@@ -53,7 +54,7 @@ test('REQ-1.1: successfully register a new account and remain signed in', async 
   await expectSignedIn(page, account.username);
 });
 
-test('REQ-1.1: reject duplicate account data without creating a signed-in session', async ({ page }) => {
+test('REQ-1.1: reject a duplicate username without creating a signed-in session', async ({ page }) => {
   const account = uniqueTicketBookingAccount();
 
   await registerAccount(page, account);
@@ -70,11 +71,14 @@ test('REQ-1.1: reject duplicate account data without creating a signed-in sessio
   await page.getByLabel(/^username$/i).fill(account.username);
   await page.getByLabel(/^password$/i).fill(account.password);
   await page.getByLabel(/confirm password/i).fill(account.password);
-  await page.getByLabel(/email address/i).fill(account.email);
+  await page.getByLabel(/email address/i).fill(`duplicate-${account.email}`);
   await page.getByRole('checkbox', { name: /terms of service|privacy policy|agree/i }).check();
   await page.getByRole('button', { name: /next step/i }).click();
 
-  await expect(page.getByText(/already exists|duplicate|taken|conflict/i)).toBeVisible();
+  await expectVisibleFeedback(
+    page,
+    /username.+(?:already exists|duplicate|taken|conflict)|(?:already exists|duplicate|taken|conflict).+username/i,
+  );
   await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
 });
 
@@ -95,15 +99,18 @@ test('REQ-1.1: reject duplicate email with a different username', async ({ page 
   await page.getByLabel(/^username$/i).fill(`${account.username}-alt`);
   await page.getByLabel(/^password$/i).fill(account.password);
   await page.getByLabel(/confirm password/i).fill(account.password);
-  await page.getByLabel(/email address/i).fill(account.email);
+  await page.getByLabel(/email address/i).fill(account.email.toUpperCase());
   await page.getByRole('checkbox', { name: /terms of service|privacy policy|agree/i }).check();
   await page.getByRole('button', { name: /next step/i }).click();
 
-  await expect(page.getByText(/already exists|duplicate|taken|conflict|email/i)).toBeVisible();
+  await expectVisibleFeedback(
+    page,
+    /email.+(?:already exists|duplicate|taken|conflict)|(?:already exists|duplicate|taken|conflict).+email/i,
+  );
   await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
 });
 
-test('REQ-1.1: reject invalid input such as mismatched passwords or missing required fields', async ({
+test('REQ-1.1: reject mismatched passwords without creating a signed-in session', async ({
   page,
 }) => {
   const account = uniqueTicketBookingAccount();
@@ -122,7 +129,7 @@ test('REQ-1.1: reject invalid input such as mismatched passwords or missing requ
   await page.getByRole('checkbox', { name: /terms of service|privacy policy|agree/i }).check();
   await page.getByRole('button', { name: /next step/i }).click();
 
-  await expect(page.getByText(/match|mismatch|invalid|required|confirm/i)).toBeVisible();
+  await expectVisibleFeedback(page, /passwords?.+(?:do not|does not|must).+match|confirmation.+match/i);
 });
 
 test('REQ-1.1: reject more invalid registration combinations before creating a session', async ({
@@ -133,15 +140,15 @@ test('REQ-1.1: reject more invalid registration combinations before creating a s
     overrides: RegistrationOverrides;
   }> = [
     {
-      expected: /terms|agree|required|missing/i,
+      expected: /(?:accept|agree).+terms|terms.+(?:required|must be accepted)/i,
       overrides: { omitTerms: true },
     },
     {
-      expected: /passport|required|missing|invalid/i,
+      expected: /passport(?: number)?.+(?:required|missing)|(?:enter|provide).+passport/i,
       overrides: { omitPassportNumber: true },
     },
     {
-      expected: /match|mismatch|invalid|required|confirm/i,
+      expected: /passwords?.+(?:do not|does not|must).+match|confirmation.+match/i,
       overrides: { confirmPassword: 'mismatch-password' },
     },
   ];
@@ -151,7 +158,7 @@ test('REQ-1.1: reject more invalid registration combinations before creating a s
     await fillRegistrationForm(page, account, currentCase.overrides);
     await page.getByRole('button', { name: /next step/i }).click();
 
-    await expect(page.getByText(currentCase.expected)).toBeVisible();
+    await expectVisibleFeedback(page, currentCase.expected);
     await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
   }
 });
@@ -159,15 +166,15 @@ test('REQ-1.1: reject more invalid registration combinations before creating a s
 test('REQ-1.1: reject malformed username, email, or password without signing in', async ({ page }) => {
   const cases: Array<{ expected: RegExp; overrides: RegistrationOverrides }> = [
     {
-      expected: /username|required|invalid|format/i,
+      expected: /invalid username|username.+(?:invalid|letters|digits|characters)/i,
       overrides: { username: 'bad username!' },
     },
     {
-      expected: /email|required|invalid|format/i,
+      expected: /invalid email|email.+invalid|enter.+valid email/i,
       overrides: { email: 'not-an-email' },
     },
     {
-      expected: /password|required|invalid|at least|weak/i,
+      expected: /password.+(?:invalid|at least|uppercase|lowercase|digit|special|weak)/i,
       overrides: { password: 'short' },
     },
   ];
@@ -177,7 +184,7 @@ test('REQ-1.1: reject malformed username, email, or password without signing in'
     await fillRegistrationForm(page, account, currentCase.overrides);
     await page.getByRole('button', { name: /next step/i }).click();
 
-    await expect(page.getByText(currentCase.expected)).toBeVisible();
+    await expectVisibleFeedback(page, currentCase.expected);
     await expect(page.getByRole('link', { name: /sign out/i })).not.toBeVisible();
   }
 });
