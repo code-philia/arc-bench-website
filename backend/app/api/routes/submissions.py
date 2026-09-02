@@ -301,12 +301,39 @@ def pause_submission(
         raise HTTPException(status_code=409, detail="Submission is not running")
     try:
         service.request_pause(submission)
+        # Pause is a control-plane operation: stop the bind-mounted runner
+        # immediately instead of waiting for ARC to emit its next checkpoint.
+        # If Docker is temporarily unavailable, the persisted PAUSE_REQUESTED
+        # state remains for the execution worker's immediate-stop fallback.
+        try:
+            DockerManager().remove_submission_container(submission_id)
+            paused_submission = service.get_submission(submission_id, current_user.id)
+            service.set_checkpoint_restart_flag(paused_submission)
+            service.update_status(paused_submission, SubmissionStatus.PAUSED, failure_reason="Execution paused by user request")
+            service.mark_paused_for_manual_edit(
+                service.get_submission(submission_id, current_user.id),
+                reason="Execution paused; workspace is ready for manual edits",
+            )
+            SubmissionEventStream.publish(
+                submission_id,
+                reason="pause_ready_for_manual_edit",
+                submission=True,
+                logs=True,
+                traceability_selected=True,
+                traceability_all=True,
+                preview=True,
+            )
+        except Exception:
+            # The worker will perform the same immediate force-removal when it
+            # observes PAUSE_REQUESTED; do not turn a transient Docker error
+            # into a false successful pause response.
+            pass
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return service.to_detail(submission)
+    return service.to_detail(service.get_submission(submission_id, current_user.id))
 
 
 @router.post("/{submission_id}/cancel", response_model=SubmissionDetail)

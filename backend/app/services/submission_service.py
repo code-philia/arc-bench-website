@@ -159,6 +159,17 @@ class RunService:
     def _is_demo_replay_submission(self, submission: Submission) -> bool:
         return self._get_demo_replay_paths(submission) is not None
 
+    def _is_arc_workspace(self, submission: Submission) -> bool:
+        """Return true for normal ARC runs as well as the deterministic demo."""
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return False
+        project_dir = workspace_path / "template"
+        return (project_dir / ".git").is_dir() and (
+            (project_dir / ".arc" / "processing_queue.json").is_file()
+            or submission.agent_source == AgentSourceType.BUILTIN_ARC_AGENT.value
+        )
+
     def _resolve_manual_edit_context(
         self,
         submission: Submission,
@@ -167,13 +178,26 @@ class RunService:
     ) -> dict[str, object]:
         normalized_checkpoint = dict(checkpoint or self.read_checkpoint(submission))
         if not self._is_demo_replay_submission(submission):
+            last_completed_index = int(normalized_checkpoint.get("last_completed_index", 0) or 0)
+            completed = normalized_checkpoint.get("completed")
+            last_entry = completed[-1] if isinstance(completed, list) and completed else {}
+            workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+            queue_path = workspace_path / "template" / ".arc" / "processing_queue.json" if workspace_path else None
+            queue_task = {}
+            if queue_path and queue_path.is_file():
+                try:
+                    queue = json.loads(queue_path.read_text(encoding="utf-8"))
+                    tasks = queue.get("tasks", []) if isinstance(queue, dict) else []
+                    queue_task = next((task for task in tasks if isinstance(task, dict) and task.get("status") != "COMPLETED"), {})
+                except (OSError, json.JSONDecodeError):
+                    queue_task = {}
             return {
                 "checkpoint": normalized_checkpoint,
                 "steps": [],
-                "last_completed_index": 0,
-                "current_node_id": None,
-                "current_phase": None,
-                "base_source_commit": DEMO_BASE_TREE_SENTINEL,
+                "last_completed_index": max(0, last_completed_index),
+                "current_node_id": str(normalized_checkpoint.get("current_node_id") or queue_task.get("node_id") or last_entry.get("node_id") or "").strip() or None,
+                "current_phase": str(normalized_checkpoint.get("current_phase") or queue_task.get("phase") or last_entry.get("phase") or "").strip().lower() or None,
+                "base_source_commit": str(last_entry.get("source_commit") or DEMO_BASE_TREE_SENTINEL),
             }
 
         _workspace_path, _replay_paths, steps = self._load_demo_replay_steps(submission)
@@ -214,10 +238,10 @@ class RunService:
     def can_manual_edit(self, submission: Submission) -> bool:
         if submission.status != SubmissionStatus.PAUSED.value:
             return False
-        return self._is_demo_replay_submission(submission)
+        return self._is_arc_workspace(submission)
 
     def get_manual_edit_state(self, submission: Submission) -> dict[str, object]:
-        if not self._is_demo_replay_submission(submission):
+        if not self._is_arc_workspace(submission):
             return {
                 "can_manual_edit": False,
                 "manual_edit_node_id": None,
@@ -290,6 +314,43 @@ class RunService:
         self.write_checkpoint(submission, checkpoint)
         return checkpoint
 
+    def _reset_arc_queue_for_node(self, submission: Submission, node_id: str) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            raise FileNotFoundError("Submission workspace is not available")
+        queue_path = workspace_path / "template" / ".arc" / "processing_queue.json"
+        if not queue_path.is_file():
+            return
+        try:
+            queue = json.loads(queue_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("ARC processing queue is unreadable") from exc
+        tasks = queue.get("tasks") if isinstance(queue, dict) else None
+        if not isinstance(tasks, list):
+            return
+        start = next((index for index, task in enumerate(tasks) if isinstance(task, dict) and task.get("node_id") == node_id and str(task.get("phase", "")).upper() == "DESIGN"), None)
+        if start is None:
+            raise ValueError(f"Requirement node {node_id} is not present in the ARC processing queue")
+        node_states = queue.setdefault("node_states", {})
+        affected_node_ids: set[str] = set()
+        for task in tasks[start:]:
+            if not isinstance(task, dict):
+                continue
+            task["status"] = "PENDING"
+            task_node = str(task.get("node_id") or "").strip()
+            if task_node:
+                node_states[task_node] = "UNSEEN"
+                affected_node_ids.add(task_node)
+        queue["last_task_id"] = None
+        queue_path.write_text(json.dumps(queue, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        traceability_path = workspace_path / "template" / ".arc" / "traceability" / "node_states.json"
+        states = self._read_json_table(traceability_path)
+        for key, row in states.items():
+            req_id = str(row.get("req_id") or key).strip()
+            if req_id in affected_node_ids:
+                row["state"] = "UNSEEN"
+        self._write_json_table(traceability_path, states)
+
     def read_submission_task_documents(self, submission: Submission) -> dict[str, str]:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
@@ -312,6 +373,12 @@ class RunService:
         requirements_yaml: str,
         prerequisites_md: str,
     ) -> None:
+        if not self.can_manual_edit(submission):
+            raise ValueError("Requirement documents can only be edited while a real ARC run is paused")
+        # Validate the complete tree before touching any workspace file. This
+        # prevents a malformed YAML edit from leaving markdown and YAML out of sync.
+        from app.services.traceability_seed_builder import TraceabilitySeedBuilder
+        TraceabilitySeedBuilder().build_from_yaml_text(requirements_yaml)
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if workspace_path is None:
             raise FileNotFoundError("Submission workspace is not available")
@@ -320,6 +387,14 @@ class RunService:
         self._write_text_atomic(task_dir / "requirements.md", requirements_md)
         self._write_text_atomic(task_dir / "requirements.yaml", requirements_yaml)
         self._write_text_atomic(task_dir / "prerequisites.md", prerequisites_md)
+        self._write_arc_resume_context(
+            submission,
+            {
+                "mode": "requirements_changed",
+                "node_id": str(self.read_checkpoint(submission).get("current_node_id") or "").strip() or None,
+                "phase": "design",
+            },
+        )
 
     def write_submission_traceability_store(self, submission: Submission, requirements_yaml: str) -> None:
         self.write_submission_task_runtime_artifacts(submission, requirements_yaml)
@@ -327,6 +402,53 @@ class RunService:
     def reset_progress_for_edited_node(self, submission: Submission, node_id: str) -> None:
         normalized_node_id = node_id.strip()
         if not normalized_node_id:
+            return
+        if not self._is_demo_replay_submission(submission):
+            queue_reset = True
+            try:
+                self._reset_arc_queue_for_node(submission, normalized_node_id)
+            except ValueError:
+                # Newly added requirement: ARC will rebuild an incompatible queue.
+                queue_reset = False
+            self._stop_runner_container(submission.id)
+            self._stop_preview_container(submission.id)
+            self._clear_execution_artifacts(submission)
+            checkpoint = self.read_checkpoint(submission)
+            manual_session = checkpoint.get("manual_edit_session")
+            pending_tests = manual_session.get("pending_test_creations", []) if isinstance(manual_session, dict) else []
+            checkpoint.update({
+                "paused": False,
+                "pause_mode": "checkpoint",
+                "resume_requires_restart": True,
+                "runtime_state_restored": True,
+                "current_node_id": normalized_node_id,
+                "current_phase": "design",
+                "manual_edit_session": None,
+                "requirements_changed": not queue_reset,
+            })
+            self._write_arc_resume_context(
+                submission,
+                {
+                    "mode": "manual_test_edit" if pending_tests else "requirements_changed",
+                    "node_id": normalized_node_id,
+                    "phase": "design",
+                    "pending_test_creations": pending_tests,
+                },
+            )
+            self.write_checkpoint(submission, checkpoint)
+            submission.status = SubmissionStatus.PAUSED.value
+            submission.started_at = None
+            submission.finished_at = None
+            submission.score = None
+            submission.test_pass_rate = None
+            submission.passed_count = 0
+            submission.failed_count = 0
+            submission.failure_reason = None
+            self.db.add(submission)
+            self.db.commit()
+            self.db.refresh(submission)
+            self.update_steps(submission, self.build_step_states(active_key="start_agent", completed={"deploy_agent"}, description=f"Paused at edited checkpoint {normalized_node_id} (design)"))
+            self.append_step_event(submission.id, step_key="start_agent", message=f"Edited node {normalized_node_id}; next resume will restart from its design phase", status="info")
             return
         workspace_path, replay_paths, steps = self._load_demo_replay_steps(submission)
         project_root = self.get_template_repo_path(submission)
@@ -442,7 +564,73 @@ class RunService:
         seed_builder = TraceabilitySeedBuilder()
         seed = seed_builder.build_from_yaml_text(requirements_yaml)
         self._write_json_atomic(traceability_seed_path, seed)
-        self._write_traceability_tables_from_seed(traceability_dir, seed)
+        self._merge_traceability_tables(traceability_dir, seed)
+
+    def _merge_traceability_tables(self, traceability_dir: Path, seed: dict[str, list[dict]]) -> None:
+        """Update requirement metadata without destroying completed ARC artifacts."""
+        traceability_dir.mkdir(parents=True, exist_ok=True)
+        new_requirements = {
+            str(row.get("req_id") or "").strip(): row
+            for row in seed.get("requirements", [])
+            if isinstance(row, dict) and str(row.get("req_id") or "").strip()
+        }
+        new_scenarios = {
+            str(row.get("scenario_id") or "").strip(): row
+            for row in seed.get("scenarios", [])
+            if isinstance(row, dict) and str(row.get("scenario_id") or "").strip()
+        }
+        existing = {name: self._read_json_table(traceability_dir / f"{name}.json") for name in (
+            "interfaces", "tests", "call_edges", "node_states", "node_contracts"
+        )}
+        existing["interfaces"] = {
+            key: row for key, row in existing["interfaces"].items()
+            if set(self._parse_json_list(row.get("req_ids"))) & set(new_requirements)
+        }
+        existing["tests"] = {
+            key: row for key, row in existing["tests"].items()
+            if str(row.get("req_id") or "").strip() in new_requirements
+        }
+        existing["node_states"] = {
+            key: row for key, row in existing["node_states"].items()
+            if str(row.get("req_id") or key).strip() in new_requirements
+        }
+        existing["node_contracts"] = {
+            key: row for key, row in existing["node_contracts"].items()
+            if str(row.get("req_id") or key).strip() in new_requirements
+        }
+        existing["call_edges"] = {
+            key: row for key, row in existing["call_edges"].items()
+            if isinstance(row, dict)
+            and str(row.get("source_req_id") or "").strip() in new_requirements
+            and str(row.get("target_req_id") or "").strip() in new_requirements
+        }
+        self._write_json_table(traceability_dir / "requirements.json", new_requirements)
+        self._write_json_table(traceability_dir / "scenarios.json", new_scenarios)
+        for name, rows in existing.items():
+            self._write_json_table(traceability_dir / f"{name}.json", rows)
+
+    @staticmethod
+    def _parse_json_list(value: object) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return [value.strip()] if value.strip() else []
+            return RunService._parse_json_list(parsed)
+        return []
+
+    def _sync_traceability_node_states(self, project_root: Path, queue: dict) -> None:
+        path = project_root / ".arc" / "traceability" / "node_states.json"
+        rows = self._read_json_table(path)
+        queue_states = queue.get("node_states", {}) if isinstance(queue, dict) else {}
+        if not isinstance(queue_states, dict):
+            return
+        for key, state in queue_states.items():
+            row = rows.setdefault(str(key), {"req_id": str(key)})
+            row["state"] = str(state)
+        self._write_json_table(path, rows)
 
     def get_submission_task_asset_path(self, submission: Submission, asset_kind: str, asset_path: str) -> Path:
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
@@ -588,6 +776,57 @@ class RunService:
             raise ValueError("commit_oid is required")
         if not self.can_rewind(submission):
             raise ValueError("Submission must be paused or completed before rewinding")
+
+        if not self._is_demo_replay_submission(submission):
+            project_root = self.get_project_repo_path(submission)
+            if project_root is None or not (project_root / ".git").exists():
+                raise FileNotFoundError("Git history is not available for this submission")
+            history_payload = self.artifact_service.read_commit_history(submission)
+            commits = history_payload.get("commits", [])
+            target_commit = next((item for item in commits if str(item.get("oid", "")).strip() == normalized_commit_oid), None) if isinstance(commits, list) else None
+            if target_commit is None:
+                raise FileNotFoundError(f"Commit not found: {normalized_commit_oid}")
+            node_id = str(target_commit.get("node_id") or "").strip() or None
+            phase = str(target_commit.get("phase") or "").strip().lower() or None
+            self._run_git(project_root, ["reset", "--hard", normalized_commit_oid])
+            self._run_git(project_root, ["clean", "-fd"])
+            queue_path = project_root / ".arc" / "processing_queue.json"
+            if queue_path.is_file() and node_id and phase:
+                queue = json.loads(queue_path.read_text(encoding="utf-8"))
+                tasks = queue.get("tasks", [])
+                target_index = next((index for index, task in enumerate(tasks) if isinstance(task, dict) and task.get("node_id") == node_id and str(task.get("phase", "")).lower() == phase), None)
+                if target_index is not None:
+                    target_task = tasks[target_index]
+                    target_state = "DESIGNED" if phase == "design" else "PASSED"
+                    queue.setdefault("node_states", {})[node_id] = target_state
+                    for task in tasks[target_index + 1:]:
+                        if isinstance(task, dict):
+                            task["status"] = "PENDING"
+                            task_node_id = str(task.get("node_id") or "").strip()
+                            if task_node_id:
+                                queue.setdefault("node_states", {})[task_node_id] = "UNSEEN"
+                    queue["last_task_id"] = target_task.get("task_id")
+                    queue_path.write_text(json.dumps(queue, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                    self._sync_traceability_node_states(project_root, queue)
+            checkpoint = self.read_checkpoint(submission)
+            checkpoint.update({"pause_mode": "checkpoint", "resume_requires_restart": True, "runtime_state_restored": True, "manual_edit_session": None, "rewind_target": {"commit_oid": normalized_commit_oid, "node_id": node_id, "phase": phase}})
+            self.write_checkpoint(submission, checkpoint)
+            self._write_arc_resume_context(
+                submission,
+                {
+                    "mode": "rewind",
+                    "node_id": node_id,
+                    "phase": phase,
+                    "commit_oid": normalized_commit_oid,
+                    "resume_from_task": f"{node_id}:{str(phase).upper()}" if node_id and phase else None,
+                },
+            )
+            self._stop_runner_container(submission.id)
+            self._stop_preview_container(submission.id)
+            self._clear_execution_artifacts(submission)
+            self._mark_rewound_paused(submission, node_id=node_id or "ROOT", phase=phase or "implement", commit_oid=normalized_commit_oid)
+            SubmissionEventStream.publish(submission.id, reason="rewind_completed", submission=True, logs=True, commit_history=True, traceability_selected=True, traceability_all=True, preview=True)
+            return {"commit_oid": normalized_commit_oid, "node_id": node_id, "phase": phase, "commit_index": None}
 
         workspace_path, _replay_paths, steps = self._load_demo_replay_steps(submission)
         project_root = self.get_project_repo_path(submission)
@@ -1437,7 +1676,7 @@ if __name__ == "__main__":
             SubmissionStatus.FAILED.value,
         }:
             return False
-        return self._get_demo_replay_paths(submission) is not None
+        return self._is_arc_workspace(submission)
 
     @staticmethod
     def _read_text(path: Path) -> str:
@@ -1571,6 +1810,29 @@ if __name__ == "__main__":
         if project_dir is None:
             raise FileNotFoundError("Submission workspace is not available")
         dirty_files = list(preview["dirty_files"]) if isinstance(preview.get("dirty_files"), list) else []
+        manual_session = self.read_checkpoint(submission).get("manual_edit_session")
+        pending_tests = manual_session.get("pending_test_creations", []) if isinstance(manual_session, dict) else []
+        node_id = preview.get("node_id")
+        test_edit = bool(pending_tests) or any(str(path).replace("\\", "/").startswith(("tests/", "test/")) for path in dirty_files)
+        if test_edit and node_id:
+            # A completed node must be made runnable again before ARC resumes;
+            # otherwise a test-only edit would be invisible to the queue.
+            try:
+                self._reset_arc_queue_for_node(submission, str(node_id))
+            except (FileNotFoundError, ValueError):
+                # The ARC workflow will reconcile a missing/incompatible queue
+                # on resume (for example after a requirement-tree edit).
+                pass
+        self._write_arc_resume_context(
+            submission,
+            {
+                "mode": "manual_test_edit" if test_edit else "pause",
+                "node_id": node_id,
+                "phase": preview.get("phase"),
+                "dirty_files": dirty_files,
+                "pending_test_creations": pending_tests,
+            },
+        )
         committed = False
         if dirty_files:
             self._run_git(project_dir, ["add", "."])
@@ -1607,6 +1869,14 @@ if __name__ == "__main__":
             **preview,
         }
 
+    def _write_arc_resume_context(self, submission: Submission, payload: dict[str, object]) -> None:
+        workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
+        if workspace_path is None:
+            return
+        arc_dir = workspace_path / "template" / ".arc"
+        arc_dir.mkdir(parents=True, exist_ok=True)
+        self._write_json_atomic(arc_dir / "resume-context.json", payload)
+
     def prepare_resume_from_pause(self, submission: Submission) -> dict[str, object]:
         commit_result = {"committed": False}
         if self.can_manual_edit(submission):
@@ -1627,7 +1897,7 @@ if __name__ == "__main__":
         return commit_result
 
     def mark_paused_for_manual_edit(self, submission: Submission, *, reason: str) -> None:
-        if not self._is_demo_replay_submission(submission):
+        if not self._is_arc_workspace(submission):
             return
         checkpoint = self.prepare_manual_edit_session(submission)
         self.update_steps(
@@ -1651,7 +1921,7 @@ if __name__ == "__main__":
             )
 
     def mark_resume_patch_conflict(self, submission: Submission, *, message: str) -> None:
-        if not self._is_demo_replay_submission(submission):
+        if not self._is_arc_workspace(submission):
             return
         checkpoint = self.prepare_manual_edit_session(submission)
         checkpoint["resume_patch_conflict"] = True
@@ -2188,7 +2458,7 @@ if __name__ == "__main__":
 
     def create_test_file(self, submission: Submission, test_id: str, req_id: str, test_type: str, scenario_id: Optional[str] = None, file_path: Optional[str] = None) -> str:
         if not self.can_manual_edit(submission):
-            raise ValueError("Test creation is only allowed for paused replay submissions")
+            raise ValueError("Test creation is only allowed while a real ARC run is paused")
         workspace_path = self.runtime_paths.resolve_existing_path(submission.workspace_path)
         if not workspace_path:
             raise FileNotFoundError("Submission workspace is not available")

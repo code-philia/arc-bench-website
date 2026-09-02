@@ -428,6 +428,17 @@ def build_generation_agent_command(entrypoint: Path, runtime: str) -> list[str]:
             output_dir,
         ]
     )
+    # ARC owns its durable processing queue. On a paused/manual-edit or
+    # rewind continuation, explicitly select ARC's resume path so it restores
+    # the existing queue and workspace instead of reinitializing the project.
+    is_arc_agent = str(spec.get("agent_source") or "") == "builtin_arc_agent" or (PROJECT_DIR / ".arc" / "processing_queue.json").is_file()
+    if runtime == "python" and is_arc_agent and (CONTINUE_REQUEST_PATH.exists() or CHECKPOINT_PATH.exists()):
+        try:
+            checkpoint = read_checkpoint()
+        except Exception:
+            checkpoint = {}
+        if CONTINUE_REQUEST_PATH.exists() or checkpoint.get("resume_requires_restart") or checkpoint.get("requirements_changed"):
+            command.append("--resume")
     append_debug_log(f"Launching generation agent with requirement and output args: {' '.join(command)}")
     return command
 

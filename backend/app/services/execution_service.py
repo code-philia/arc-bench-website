@@ -344,42 +344,17 @@ class ExecutionService:
                 if current_status == SubmissionStatus.CANCELLED.value:
                     debug_log.append("backend", "Run was cancelled; stopping execution loop")
                     return
-                if current_status == SubmissionStatus.PAUSE_REQUESTED.value:
-                    if not pause_notified:
-                        pause_notified = True
-                        pause_requested_at = time.time()
-                        emit_event("start_agent", "Pause requested; waiting for checkpoint", status="info")
-                        submission_service.update_steps(
-                            submission_service.get_submission(submission_id),
-                            submission_service.build_step_states(
-                                active_key="start_agent",
-                                completed={"deploy_agent"},
-                                description="Pausing current run",
-                            ),
-                        )
-                        debug_log.append("backend", "Pause requested; waiting briefly for checkpoint flush")
-                    checkpoint = submission_service.read_checkpoint(submission_service.get_submission(submission_id))
-                    checkpoint_marked_paused = bool(checkpoint.get("paused"))
-                    if not pause_signal_sent and pause_requested_at is not None and time.time() - pause_requested_at >= PAUSE_GRACE_SECONDS:
+                if current_status in {SubmissionStatus.PAUSE_REQUESTED.value, SubmissionStatus.PAUSED.value}:
+                    # Do not wait for ARC to flush a checkpoint. A task left
+                    # RUNNING is recovered by ARC on the next --resume pass.
+                    if current_status == SubmissionStatus.PAUSE_REQUESTED.value:
+                        emit_event("start_agent", "Pause requested; stopping runner immediately", status="info")
                         try:
-                            exit_code, _ = manager.kill_agent_process(container)
-                            debug_log.append("backend", f"Sent SIGTERM to uploaded agent entrypoint (pkill exit={exit_code})")
-                            pause_signal_sent = True
-                            pause_signal_sent_at = time.time()
-                        except Exception as exc:  # noqa: BLE001
-                            debug_log.append("backend", f"Failed to signal agent process: {exc}")
-                    if checkpoint_marked_paused:
-                        debug_log.append("backend", "Pause checkpoint detected in workspace")
-                    if checkpoint_marked_paused or (
-                        pause_signal_sent_at is not None and time.time() - pause_signal_sent_at >= PAUSE_SIGTERM_GRACE_SECONDS
-                    ):
-                        paused_submission = submission_service.get_submission(submission_id)
-                        submission_service.set_checkpoint_restart_flag(paused_submission)
-                        mark_paused("Execution paused by user request")
-                        try:
-                            restored_submission = submission_service.get_submission(submission_id)
+                            paused_submission = submission_service.get_submission(submission_id)
+                            submission_service.set_checkpoint_restart_flag(paused_submission)
+                            mark_paused("Execution paused by user request")
                             submission_service.mark_paused_for_manual_edit(
-                                restored_submission,
+                                submission_service.get_submission(submission_id),
                                 reason="Execution paused; workspace is ready for manual edits",
                             )
                             SubmissionEventStream.publish(
@@ -392,11 +367,15 @@ class ExecutionService:
                                 preview=True,
                             )
                         except Exception as exc:  # noqa: BLE001
-                            debug_log.append("backend", f"Failed to restore paused checkpoint state: {exc}")
-                        debug_log.append("backend", "Execution paused cleanly; terminating runner session")
-                        return
-                    time.sleep(1)
-                    continue
+                            debug_log.append("backend", f"Failed to persist immediate pause state: {exc}")
+                    try:
+                        if manager is not None:
+                            manager.remove_submission_container(submission_id)
+                            container = None
+                    except Exception as exc:  # noqa: BLE001
+                        debug_log.append("backend", f"Failed to remove paused runner container: {exc}")
+                    debug_log.append("backend", "Execution paused immediately; terminating runner session")
+                    return
                 try:
                     container.reload()
                 except NotFound as exc:
