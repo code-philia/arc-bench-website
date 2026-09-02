@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     agent_health_timeout_seconds: int = 90
     runner_network_mode: str | None = None
     runner_extra_hosts: str | None = None
+    # UID:GID used inside the bind-mounted runner container. Empty means the
+    # UID:GID of the API/Celery process, keeping workspace files writable.
+    runner_user: str = ""
     meter_base_url: str = ""
     meter_bridge_secret: str = ""
     meter_bridge_token_ttl_seconds: int = 120

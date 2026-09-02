@@ -356,7 +356,7 @@ export const api = {
     competitionId?: string;
     runtime: string;
     file?: File | null;
-    agentSource?: "upload" | "builtin_arc_agent";
+    agentSource?: "upload" | "demo_replay" | "builtin_arc_agent";
     taskType?: "web" | "mobile" | "kernel" | "mixed" | "cli";
     displayName?: string;
     modelName?: string;

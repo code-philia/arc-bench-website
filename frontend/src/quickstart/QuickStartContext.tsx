@@ -154,6 +154,7 @@ export function QuickStartProvider({ children }: { children: ReactNode }) {
       const created = await api.createSubmission({
         requirementId: QUICK_START_REQUIREMENT_ID,
         runtime: "python",
+        agentSource: "demo_replay",
         file,
         displayName: QUICK_START_DISPLAY_NAME,
         modelName: QUICK_START_MODEL_NAME,

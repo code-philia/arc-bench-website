@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import time
 
@@ -156,6 +157,8 @@ class DockerManager:
             "working_dir": "/workspace",
             "command": ["python3", "/opt/arcbench/run_submission.py"],
         }
+        configured_runner_user = str(self.settings.runner_user or "").strip()
+        container_kwargs["user"] = configured_runner_user or f"{os.getuid()}:{os.getgid()}"
         network_mode = (self.settings.runner_network_mode or "").strip()
         if network_mode:
             container_kwargs["network_mode"] = network_mode

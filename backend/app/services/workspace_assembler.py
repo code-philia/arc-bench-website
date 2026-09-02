@@ -1,5 +1,6 @@
 import shutil
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from app.models.submission import Submission
 from app.models.user import User
 from app.services.runtime_path_service import RuntimePathService
 from app.services.traceability_seed_builder import TraceabilitySeedBuilder
+from app.core.enums import AgentSourceType
 
 
 class WorkspaceAssembler:
@@ -34,6 +36,8 @@ class WorkspaceAssembler:
         with zipfile.ZipFile(run.agent_archive_path, "r") as archive:
             archive.extractall(submission_dir)
         self._flatten_single_root(submission_dir)
+        if submission.agent_source == AgentSourceType.DEMO_REPLAY.value:
+            self._materialize_demo_source_template(submission_dir)
         requirement_root = Path(requirement.requirements_path).resolve().parent
         # The output workspace intentionally starts empty. An uploaded agent owns
         # any starter-template selection and initialization before it writes to
@@ -77,6 +81,26 @@ class WorkspaceAssembler:
             encoding="utf-8",
         )
         return workspace_root
+
+    @staticmethod
+    def _materialize_demo_source_template(submission_dir: Path) -> None:
+        """Expand the bundled Git repository used by the deterministic demo replay."""
+        bundle_path = submission_dir / "template.git.bundle"
+        if not bundle_path.is_file():
+            raise FileNotFoundError("Quick Start demo bundle is missing template.git.bundle")
+        target_dir = submission_dir / "template"
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        result = subprocess.run(
+            ["git", "clone", "--quiet", str(bundle_path), str(target_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(f"Could not expand Quick Start demo template: {detail}")
+        bundle_path.unlink()
 
     @staticmethod
     def _copy_optional_tree(source: Path, destination: Path) -> None:

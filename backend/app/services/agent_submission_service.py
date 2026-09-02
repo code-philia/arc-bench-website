@@ -23,6 +23,7 @@ from app.services.runtime_path_service import RuntimePathService
 from app.services.submission_service import DEFAULT_STEPS, RunService
 from app.services.user_task_service import UserTaskService
 from app.services.competition_access_service import CompetitionAccessService
+from app.services.demo_agent_service import DemoAgentService
 
 
 class AgentSubmissionService:
@@ -99,6 +100,15 @@ class AgentSubmissionService:
                 raise ValueError("Built-in ARC agent only supports Python runtime")
             RunService._write_builtin_arc_agent_archive(archive_path)
             original_filename = "builtin-arc-agent.zip"
+            RunService._validate_agent_archive(archive_path, runtime)
+        elif agent_source == AgentSourceType.DEMO_REPLAY:
+            if runtime != RuntimeType.PYTHON:
+                raise ValueError("The Quick Start demo only supports Python runtime")
+            try:
+                archive_path.write_bytes(DemoAgentService().build_bundle()[0])
+            except FileNotFoundError as exc:
+                raise RuntimeError(str(exc)) from exc
+            original_filename = "quick-start-demo.zip"
             RunService._validate_agent_archive(archive_path, runtime)
         else:
             if upload is None or not upload.filename or not upload.filename.lower().endswith(".zip"):
