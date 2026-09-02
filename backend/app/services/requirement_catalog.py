@@ -644,7 +644,7 @@ class RequirementCatalogService:
         tasks: list[CatalogRequirementEntry],
     ) -> CompetitionSummary:
         is_hackathon = "hackathon" in competition_id
-        title = "OAIC Harness 2026 Hackathon" if is_hackathon else ("Demo Competition" if competition_id == "demo" else directory_name)
+        title = "Agentic Software Factory Hackathon" if is_hackathon else ("Demo Competition" if competition_id == "demo" else directory_name)
         return CompetitionSummary(
             id=competition_id,
             title=title,
