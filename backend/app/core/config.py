@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     agent_health_timeout_seconds: int = 90
     runner_network_mode: str | None = None
     runner_extra_hosts: str | None = None
+    meter_base_url: str = ""
+    meter_bridge_secret: str = ""
+    meter_bridge_token_ttl_seconds: int = 120
     pip_index_url: str = "https://pypi.tuna.tsinghua.edu.cn/simple"
     pip_trusted_host: str = "pypi.tuna.tsinghua.edu.cn"
     # pip treats index URLs as a combined candidate pool. Keep the regional mirror

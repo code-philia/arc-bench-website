@@ -1,4 +1,4 @@
-import { CheckCircleOutlined, DeleteOutlined, EditOutlined, RightOutlined, TrophyOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, DeleteOutlined, EditOutlined, LinkOutlined, RightOutlined, TrophyOutlined } from "@ant-design/icons";
 import { message, Modal } from "antd";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -221,6 +221,7 @@ export default function ProfilePage() {
             <div className="profile-identity-block"><h1>{user.username}</h1><p>{user.email}</p></div>
             <div className="profile-member-since">Member since {new Date(user.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short" })}</div>
             <button type="button" className="profile-edit-trigger" onClick={() => setEditingProfile((visible) => !visible)}><EditOutlined /> {editingProfile ? "Close editor" : "Edit profile"}</button>
+            <a className="profile-meter-link" href="/api/auth/meter/continue"><LinkOutlined /> 查看模型用量</a>
           </section>
 
           <section className="profile-contact-card">

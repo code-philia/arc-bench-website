@@ -7909,6 +7909,8 @@ button {
 .profile-member-since { color: var(--text-muted); font-size: 12px; }
 .profile-edit-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 34px; border-radius: 6px; background: var(--tag-mint-bg); color: var(--tag-mint-text); font-size: 12px; font-weight: 700; cursor: pointer; transition: filter var(--transition); }
 .profile-edit-trigger:hover { filter: brightness(0.97); }
+.profile-meter-link { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 34px; border-radius: 6px; background: var(--tag-amber-bg); color: var(--tag-amber-text); font-size: 12px; font-weight: 700; text-decoration: none; transition: filter var(--transition); }
+.profile-meter-link:hover { filter: brightness(0.97); }
 .profile-contact-card, .profile-editor-card { padding: 17px 18px; }
 .profile-team-card { display: grid; gap: 10px; padding: 17px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); box-shadow: 0 4px 15px rgba(36, 39, 45, 0.035); }
 .profile-team-card > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

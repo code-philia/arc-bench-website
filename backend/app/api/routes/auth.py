@@ -1,3 +1,10 @@
+import base64
+import hashlib
+import hmac
+import json
+import time
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -10,6 +17,7 @@ from app.services.auth_service import AuthService
 from app.core.config import get_settings
 from app.services.hackathon_config_service import load_hackathon_config
 from app.services.hackathon_sync_service import HackathonSyncService
+from app.services.team_service import TeamService
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -98,6 +106,41 @@ def logout(response: Response) -> dict[str, str]:
     return {"detail": "Logged out"}
 
 
+@router.get("/meter/continue")
+def continue_to_meter(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+) -> RedirectResponse:
+    settings = get_settings()
+    meter_base_url = settings.meter_base_url.strip().rstrip("/")
+    bridge_secret = settings.meter_bridge_secret.strip()
+    if not meter_base_url:
+        raise HTTPException(status_code=503, detail="Meter bridge is not configured")
+    if not bridge_secret:
+        raise HTTPException(status_code=503, detail="Meter bridge secret is not configured")
+
+    team_payload = TeamService(db).get_my_team_payload(current_user.id)
+    team = team_payload.get("team") if isinstance(team_payload, dict) else None
+    subject_type = "team" if team else "user"
+    subject_id = str(team.get("id") if team else current_user.id)
+    display_name = str(team.get("name") if team else (current_user.display_name or current_user.username))
+    payload = {
+        "purpose": "meter-bridge",
+        "subject_type": subject_type,
+        "subject_id": subject_id,
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "team_id": team.get("id") if team else None,
+        "team_name": team.get("name") if team else None,
+        "display_name": display_name,
+        "issued_at": int(time.time()),
+        "expires_at": int(time.time()) + max(30, int(settings.meter_bridge_token_ttl_seconds or 120)),
+    }
+    token = _sign_meter_bridge_token(payload, bridge_secret)
+    target = f"{meter_base_url}/api/user/bridge?token={quote(token, safe='')}"
+    return RedirectResponse(target, status_code=303)
+
+
 @router.get("/me", response_model=AuthResponse)
 def me(current_user: User | None = Depends(get_current_user)) -> AuthResponse:
     if current_user is None:
@@ -133,3 +176,11 @@ def _set_session_cookie(response: Response, service: AuthService, user: User) ->
         max_age=AuthService.SESSION_TTL_DAYS * 24 * 60 * 60,
         path="/",
     )
+
+
+def _sign_meter_bridge_token(payload: dict[str, object], secret: str) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).digest()
+    signed = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+    return f"{body}.{signed}"
