@@ -37,6 +37,9 @@ DEFAULT_TARGET_ENV = "ARCBENCH_POSTGRES_URL"
 # be absent from a historical SQLite backup. They are created empty in the
 # PostgreSQL destination; old queue messages must never be reconstructed.
 OPTIONAL_EMPTY_SOURCE_TABLES = {"task_outbox"}
+OPTIONAL_MISSING_SOURCE_COLUMNS = {
+    "runs": {"worker_id", "celery_task_id", "lease_until", "heartbeat_at", "attempt_count"},
+}
 
 
 def _database_label(url: URL) -> str:
@@ -66,7 +69,7 @@ def _expected_tables() -> list[Table]:
     return list(Base.metadata.sorted_tables)
 
 
-def _validate_source_schema(engine: Engine) -> set[str]:
+def _validate_source_schema(engine: Engine) -> dict[str, set[str]]:
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
     expected_tables = {table.name for table in _expected_tables()}
@@ -75,12 +78,15 @@ def _validate_source_schema(engine: Engine) -> set[str]:
         raise RuntimeError(f"SQLite source is missing tables: {', '.join(missing_tables)}")
 
     problems: list[str] = []
+    source_columns: dict[str, set[str]] = {}
     for table in _expected_tables():
         if table.name not in existing_tables:
             continue
         actual = {column["name"] for column in inspector.get_columns(table.name)}
+        source_columns[table.name] = actual
         expected = {column.name for column in table.columns}
-        missing = sorted(expected - actual)
+        allowed_missing = OPTIONAL_MISSING_SOURCE_COLUMNS.get(table.name, set())
+        missing = sorted(expected - actual - allowed_missing)
         extra = sorted(actual - expected)
         if missing:
             problems.append(f"{table.name}: missing columns {', '.join(missing)}")
@@ -88,7 +94,7 @@ def _validate_source_schema(engine: Engine) -> set[str]:
             problems.append(f"{table.name}: unexpected columns {', '.join(extra)}")
     if problems:
         raise RuntimeError("SQLite schema does not match the current models:\n  " + "\n  ".join(problems))
-    return existing_tables
+    return source_columns
 
 
 def _refuse_nonempty_target(connection: Connection) -> None:
@@ -139,11 +145,16 @@ def _normalize(value: Any) -> Any:
     return {"repr": repr(value)}
 
 
-def _table_digest(connection: Connection, table: Table) -> tuple[int, str]:
+def _table_digest(
+    connection: Connection,
+    table: Table,
+    column_names: set[str] | None = None,
+) -> tuple[int, str]:
     primary_key = list(table.primary_key.columns)
     if not primary_key:
         raise RuntimeError(f"Cannot verify table without a primary key: {table.name}")
-    statement = select(*table.columns).order_by(*primary_key)
+    selected_columns = [column for column in table.columns if column_names is None or column.name in column_names]
+    statement = select(*selected_columns).order_by(*primary_key)
     digest = hashlib.sha256()
     count = 0
     for row in connection.execution_options(stream_results=True).execute(statement):
@@ -154,9 +165,16 @@ def _table_digest(connection: Connection, table: Table) -> tuple[int, str]:
     return count, digest.hexdigest()
 
 
-def _copy_table(source: Connection, target: Connection, table: Table, batch_size: int) -> int:
+def _copy_table(
+    source: Connection,
+    target: Connection,
+    table: Table,
+    batch_size: int,
+    source_column_names: set[str],
+) -> int:
     copied = 0
-    result = source.execution_options(stream_results=True).execute(select(*table.columns))
+    selected_columns = [column for column in table.columns if column.name in source_column_names]
+    result = source.execution_options(stream_results=True).execute(select(*selected_columns))
     while True:
         rows = result.fetchmany(batch_size)
         if not rows:
@@ -171,10 +189,16 @@ def migrate(source_url: URL, target_url: URL, batch_size: int, dry_run: bool) ->
     source_engine = create_engine(source_url, connect_args={"check_same_thread": False})
     target_engine = create_engine(target_url, pool_pre_ping=True)
     try:
-        source_tables = _validate_source_schema(source_engine)
+        source_columns = _validate_source_schema(source_engine)
         initialized_empty = sorted(
-            table.name for table in _expected_tables() if table.name not in source_tables
+            table.name for table in _expected_tables() if table.name not in source_columns
         )
+        initialized_columns = {
+            table.name: sorted({column.name for column in table.columns} - source_columns.get(table.name, set()))
+            for table in _expected_tables()
+            if table.name in source_columns
+            and {column.name for column in table.columns} - source_columns[table.name]
+        }
         with source_engine.connect() as source, target_engine.connect() as target:
             source.exec_driver_sql("PRAGMA query_only = ON")
             source.exec_driver_sql("PRAGMA foreign_keys = ON")
@@ -185,6 +209,11 @@ def migrate(source_url: URL, target_url: URL, batch_size: int, dry_run: bool) ->
             print(
                 "Legacy source does not contain infrastructure tables; "
                 f"they will be created empty in PostgreSQL: {', '.join(initialized_empty)}"
+            )
+        for table_name, columns in initialized_columns.items():
+            print(
+                f"Legacy source does not contain infrastructure columns in {table_name}; "
+                f"PostgreSQL defaults will be used: {', '.join(columns)}"
             )
         print(f"Destination validated: {_database_label(target_url)}")
         if dry_run:
@@ -201,14 +230,14 @@ def migrate(source_url: URL, target_url: URL, batch_size: int, dry_run: bool) ->
             _validate_target_schema(target)
 
             for table in _expected_tables():
-                if table.name not in source_tables:
+                if table.name not in source_columns:
                     print(f"Initialized {table.name}: 0 rows (not present in legacy SQLite source)")
                     continue
-                copied = _copy_table(source, target, table, batch_size)
+                copied = _copy_table(source, target, table, batch_size, source_columns[table.name])
                 print(f"Copied {table.name}: {copied} rows")
 
             for table in _expected_tables():
-                if table.name not in source_tables:
+                if table.name not in source_columns:
                     target_count = int(target.scalar(select(func.count()).select_from(table)) or 0)
                     if target_count != 0:
                         raise RuntimeError(
@@ -217,8 +246,8 @@ def migrate(source_url: URL, target_url: URL, batch_size: int, dry_run: bool) ->
                         )
                     print(f"Verified {table.name}: 0 rows (initialized empty)")
                     continue
-                source_count, source_digest = _table_digest(source, table)
-                target_count, target_digest = _table_digest(target, table)
+                source_count, source_digest = _table_digest(source, table, source_columns[table.name])
+                target_count, target_digest = _table_digest(target, table, source_columns[table.name])
                 if source_count != target_count or source_digest != target_digest:
                     raise RuntimeError(
                         f"Verification failed for {table.name}: "
